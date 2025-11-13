@@ -1,7 +1,6 @@
 import { Check, ExternalLink } from "lucide-react";
 import { VersionLabel } from "./components/components";
 import { Separator } from "./components/ui/separator";
-// import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import Store from "./Store";
 
 const features = [
@@ -48,7 +47,6 @@ export default function App() {
 					<VersionLabel />
 				</div>
 			</div>
-			{/* {Store.isPWA && <PWAInstallPrompt />} */}
 		</>
 	)
 }

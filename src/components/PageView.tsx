@@ -2,7 +2,7 @@
 
 // ============================================================================ PageView
 // autoMount default: false
-// autoUnmount default: true
+// autoUnmount default: false
 //
 export default function PageView(props: any) {
 	const content = props.content				//page content list
@@ -19,7 +19,7 @@ export default function PageView(props: any) {
 				node._init = node._init || node._selected
 
 				return (node._selected ||
-					(node._init && (node.autoUnmount === false || props.autoUnmount === false)) ||
+					(node._init && (node.autoUnmount !== true || props.autoUnmount !== true)) ||
 					(!node._init && (node.autoMount === true || props.autoMount === true))) ?
 					<div key={node.id || index}
 						className={node._selected ? 'block' : 'hidden'}

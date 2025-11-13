@@ -29,10 +29,10 @@ async function createWindow() {
 			nodeIntegrationInSubFrames: true,	//node support in iframes
 			webSecurity				: false,	//disable cors
 			nativeWindowOpen 		: true,		//to use Chrome's built-in window.open() method and not BrowserWindowProxy
-			backgroundThrottling 	: false,	//disabel throttling if minimized
+			backgroundThrottling 	: false,	//disable throttling if minimized
 			enableRemoteModule		: true,
 			contextIsolation		: false,	//disable context isolation to use window.require()
-			sandbox: false,
+			sandbox					: false,	//disable sandboxing for node support in main process
 			// 	preload: join(__dirname, 'preload.cjs'),
 		}
 	})

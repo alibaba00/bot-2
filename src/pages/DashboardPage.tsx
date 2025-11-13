@@ -1,20 +1,17 @@
 import { AppSidebar } from '@/components/app-sidebar'
-import { ModeToggle } from '@/components/mode-toggle'
 import PageView from '@/components/PageView'
-import
-	{
-		Breadcrumb,
-		BreadcrumbItem,
-		BreadcrumbLink,
-		BreadcrumbList,
-		BreadcrumbPage,
-		BreadcrumbSeparator
-	} from '@/components/ui/breadcrumb'
-import { Button } from '@/components/ui/button'
+import {
+	Breadcrumb,
+	BreadcrumbItem,
+	BreadcrumbLink,
+	BreadcrumbList,
+	BreadcrumbPage,
+	BreadcrumbSeparator
+} from '@/components/ui/breadcrumb'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
-import { LogOut } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Bot, SquareTerminal } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import DemoPage from './playground/DemoPage'
 import EditorPage from './playground/EditorPage'
 import HistoryPage from './playground/HistoryPage'
@@ -30,14 +27,60 @@ const pages = [
 	{id:'settings', path:'/playground/settings', page:SettingsPage}
 ]
 
-export default function Page() {
-	const navigate = useNavigate()
-	const location = useLocation();
+const data = {
+	navMain: [
+		{
+			title: 'Playground',
+			url: '/dashboard',
+			icon: SquareTerminal,
+			isActive: true,
+			items: [
+				{
+					title: 'Demo',
+					url: '/dashboard/playground/demo'
+				},
+				{
+					title: 'Editor',
+					url: '/dashboard/playground/editor'
+				},
+				{
+					title: 'History',
+					url: '/dashboard/playground/history'
+				},
+				{
+					title: 'Starred',
+					url: '/dashboard/playground/starred'
+				},
+				{
+					title: 'Settings',
+					url: '/dashboard/playground/settings'
+				}
+			]
+		},
+		{
+			title: 'Models',
+			url: '#',
+			icon: Bot,
+			items: [
+				{
+					title: 'Genesis',
+					url: '#'
+				},
+				{
+					title: 'Explorer',
+					url: '#'
+				},
+				{
+					title: 'Quantum',
+					url: '#'
+				}
+			]
+		},
+	],
+}
 
-	const handleLogout = () => {
-		console.log('Logout')
-		navigate('/login')
-	}
+export default function Page() {
+	const location = useLocation();
 
 	const getCurrentBreadcrumb = () => {
 		const path = location.pathname;
@@ -47,7 +90,7 @@ export default function Page() {
 
 	return (
 		<SidebarProvider>
-			<AppSidebar />
+			<AppSidebar data={data} />
 			<SidebarInset>
 				<header className='flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12'>
 					<div className='flex items-center gap-2 px-4 w-full'>
@@ -69,18 +112,6 @@ export default function Page() {
 								</BreadcrumbItem>
 							</BreadcrumbList>
 						</Breadcrumb>
-						<div className='ml-auto flex items-center gap-2'>
-							<Button 
-								variant="ghost" 
-								size="sm" 
-								onClick={handleLogout}
-								className="flex items-center gap-2"
-							>
-								<LogOut className="h-4 w-4" />
-								<span className="hidden sm:inline">Log Out</span>
-							</Button>
-							<ModeToggle />
-						</div>
 					</div>
 				</header>
 

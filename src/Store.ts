@@ -50,7 +50,6 @@ const isElectron = window?.navigator.userAgent.includes('Electron')
 const isFileProtocol = window?.location.protocol === 'file:'
 const isDevelopment = env.DEV || env.MODE === 'development'
 const isProduction = env.PROD || env.MODE === 'production'
-const isPWA	= !isElectron && !isDevelopment && env.VITE_PWA === 'true'
 const fs = isElectron ? (window as any)?.require?.('fs') : null
 const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 
@@ -98,7 +97,6 @@ const Store = {
 	isElectron,
 	isDevelopment,
 	isProduction,
-	isPWA,
 	
 	set: (state: any, value?: any) => {
 		if (typeof state === 'string') state = {[state]: value}
