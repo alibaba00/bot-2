@@ -1,0 +1,12 @@
+# files and folders to ignore from Prettier formatting
+README.md
+SETUP.md
+.specstory
+.vscode
+.git
+.gitignore
+.prettierrc.yaml
+.prettierignore
+.eslintrc.yaml
+.eslintignore
+.eslintrc.js

@@ -1,0 +1,96 @@
+// db.ts
+import Dexie, { type EntityTable } from 'dexie'
+import { exportDB, importDB, importInto } from 'dexie-export-import'
+
+interface Friend {
+	id: number
+	name: string
+	age: number
+	role?: string // Neues Feld (optional für bestehende Einträge)
+}
+
+const db = new Dexie('FriendsDatabase') as Dexie & {
+	friends: EntityTable<
+		Friend,
+		'id' // primary key "id" (for the typings only)
+	>
+}
+
+// Schema declaration:
+// Version 1: Ursprüngliche Struktur
+db.version(1).stores({
+	friends: '++id, name, age'
+})
+
+// Version 2: Neues Feld 'role' hinzugefügt
+db.version(2).stores({
+	friends: '++id, name, age, role' // Neues Feld 'role' zum Index hinzugefügt
+}).upgrade(tx => {
+	// Optional: Bestehende Einträge mit einem Standardwert aktualisieren
+	return tx.table('friends').toCollection().modify(friend => {
+		if (!friend.role) {
+			friend.role = 'user' // Standardwert für bestehende Einträge
+		}
+	})
+})
+
+// Export-Funktion: Exportiert die gesamte Datenbank als Blob
+export async function exportDatabase(): Promise<Blob> {
+	try {
+		const blob = await exportDB(db)
+		return blob
+	} catch (error) {
+		console.error('Fehler beim Exportieren der Datenbank:', error)
+		throw error
+	}
+}
+
+// Download-Funktion: Lädt die Datenbank als Datei herunter
+export async function downloadDatabase(filename: string = 'database-export.json'): Promise<void> {
+	try {
+		const blob = await exportDatabase()
+		const url = URL.createObjectURL(blob)
+		const a = document.createElement('a')
+		a.href = url
+		a.download = filename
+		document.body.appendChild(a)
+		a.click()
+		document.body.removeChild(a)
+		URL.revokeObjectURL(url)
+		console.log('Datenbank erfolgreich heruntergeladen:', filename)
+	} catch (error) {
+		console.error('Fehler beim Herunterladen der Datenbank:', error)
+		throw error
+	}
+}
+
+// Import-Funktion: Importiert eine Datenbank aus einer Datei (überschreibt die aktuelle DB)
+export async function importDatabase(file: File): Promise<void> {
+	try {
+		await db.delete() // Aktuelle Datenbank löschen
+		await importDB(file)
+		console.log('Datenbank erfolgreich importiert')
+		// DB neu öffnen
+		await db.open()
+	} catch (error) {
+		console.error('Fehler beim Importieren der Datenbank:', error)
+		throw error
+	}
+}
+
+// Import-Into-Funktion: Fügt Daten aus einer Datei zur bestehenden DB hinzu (ohne zu überschreiben)
+export async function importIntoDatabase(file: File): Promise<void> {
+	try {
+		await importInto(db, file, {
+			acceptMissingTables: true,
+			overwriteValues: false
+		})
+		console.log('Daten erfolgreich in die bestehende Datenbank importiert')
+	} catch (error) {
+		console.error('Fehler beim Importieren in die Datenbank:', error)
+		throw error
+	}
+}
+
+export type { Friend }
+export { db }
