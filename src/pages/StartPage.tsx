@@ -18,6 +18,9 @@ import HistoryPage from './playground/HistoryPage'
 import SettingsPage from './playground/SettingsPage'
 import StarredPage from './playground/StarredPage'
 import DashboardPage from './polymarket/DashboardPage'
+import MarketsPage from './polymarket/MarketsPage'
+import OrdersPage from './polymarket/OrdersPage'
+import PolymarketHistoryPage from './polymarket/HistoryPage'
 
 
 const pages = [
@@ -26,7 +29,11 @@ const pages = [
 	{id:'history', path:'/playground/history', page:<HistoryPage />},
 	{id:'starred', path:'/playground/starred', page:<StarredPage />},
 	{id:'settings', path:'/playground/settings', page:SettingsPage},
-	{id:'polymarket', path:'/polymarket', page:<DashboardPage />}
+	{id:'polymarket', path:'/polymarket', page:<DashboardPage />},
+	{id:'polymarket-dashboard', path:'/polymarket/dashboard', page:<DashboardPage />},
+	{id:'polymarket-markets', path:'/polymarket/markets', page:<MarketsPage />},
+	{id:'polymarket-orders', path:'/polymarket/orders', page:<OrdersPage />},
+	{id:'polymarket-history', path:'/polymarket/history', page:<PolymarketHistoryPage />}
 ]
 
 const data = {
@@ -39,6 +46,18 @@ const data = {
 				{
 					title: 'Dashboard',
 					url: '/polymarket/dashboard'
+				},
+				{
+					title: 'Markets',
+					url: '/polymarket/markets'
+				},
+				{
+					title: 'Orders',
+					url: '/polymarket/orders'
+				},
+				{
+					title: 'History',
+					url: '/polymarket/history'
 				},
 			]
 		},
@@ -79,6 +98,7 @@ export default function Page() {
 	const getCurrentBreadcrumb = () => {
 		const path = location.pathname;
 		if (path.includes('/playground/')) return 'Playground';
+		if (path.includes('/polymarket/')) return 'Polymarket';
 		return 'Building Your Application';
 	};
 

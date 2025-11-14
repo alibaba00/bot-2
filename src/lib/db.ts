@@ -1,6 +1,7 @@
 // db.ts
 import Dexie, { type EntityTable } from 'dexie'
 import { exportDB, importDB, importInto } from 'dexie-export-import'
+import type { Market, Order, Transaction } from './polymarket/types'
 
 interface Friend {
 	id: number
@@ -9,29 +10,64 @@ interface Friend {
 	role?: string // Neues Feld (optional für bestehende Einträge)
 }
 
-const db = new Dexie('FriendsDatabase') as Dexie & {
-	friends: EntityTable<
-		Friend,
-		'id' // primary key "id" (for the typings only)
-	>
+// Polymarket database interfaces
+interface MarketRecord extends Market {
+	id: string // Market ID from Polymarket
+	cachedAt: number // Timestamp when cached
+}
+
+interface OrderRecord extends Order {
+	id: string // Order ID from Polymarket
+	syncedAt: number // Timestamp when synced
+}
+
+interface TransactionRecord extends Transaction {
+	id: string // Transaction ID/hash
+	syncedAt: number // Timestamp when synced
+}
+
+interface TradingStrategy {
+	id?: number
+	name: string
+	description?: string
+	config: Record<string, any>
+	active: boolean
+	createdAt: number
+	updatedAt: number
+}
+
+const db = new Dexie('TradingBotDatabase') as Dexie & {
+	friends: EntityTable<Friend, 'id'>
+	markets: EntityTable<MarketRecord, 'id'>
+	orders: EntityTable<OrderRecord, 'id'>
+	transactions: EntityTable<TransactionRecord, 'id'>
+	tradingStrategies: EntityTable<TradingStrategy, 'id'>
 }
 
 // Schema declaration:
-// Version 1: Ursprüngliche Struktur
+// Version 1: Original structure
 db.version(1).stores({
 	friends: '++id, name, age'
 })
 
-// Version 2: Neues Feld 'role' hinzugefügt
+// Version 2: Added 'role' field
 db.version(2).stores({
-	friends: '++id, name, age, role' // Neues Feld 'role' zum Index hinzugefügt
+	friends: '++id, name, age, role'
 }).upgrade(tx => {
-	// Optional: Bestehende Einträge mit einem Standardwert aktualisieren
 	return tx.table('friends').toCollection().modify(friend => {
 		if (!friend.role) {
-			friend.role = 'user' // Standardwert für bestehende Einträge
+			friend.role = 'user'
 		}
 	})
+})
+
+// Version 3: Added Polymarket tables
+db.version(3).stores({
+	friends: '++id, name, age, role',
+	markets: 'id, active, closed, cachedAt',
+	orders: 'id, marketId, status, side, createdAt, syncedAt',
+	transactions: 'id, hash, marketId, type, status, timestamp, syncedAt',
+	tradingStrategies: '++id, name, active, createdAt'
 })
 
 // Export-Funktion: Exportiert die gesamte Datenbank als Blob
@@ -92,5 +128,5 @@ export async function importIntoDatabase(file: File): Promise<void> {
 	}
 }
 
-export type { Friend }
+export type { Friend, MarketRecord, OrderRecord, TransactionRecord, TradingStrategy }
 export { db }
