@@ -164,24 +164,149 @@ export async function getOpenOrders(): Promise<Order[]> {
 		const client = await getOrInitializeClient()
 		const response = await client.getOpenOrders()
 
-		// Handle pagination response
-		const ordersData = response.data || response.results || []
+		console.log('Open orders response:', response)
+		console.log('Open orders response type:', typeof response)
+		console.log('Open orders response keys:', Object.keys(response || {}))
+
+		// Handle pagination response - check different possible response structures
+		const ordersData = response.data || response.results || response.orders || (Array.isArray(response) ? response : [])
+		console.log('Orders data extracted:', ordersData.length, 'orders')
 		
 		// Transform API response to our Order type
-		const orders: Order[] = ordersData.map((o: any) => ({
-			id: o.order_id || o.id,
-			marketId: o.market || o.condition_id,
-			outcome: o.outcome || '',
-			side: o.side === 'BUY' ? 'BUY' : 'SELL',
-			price: parseFloat(o.price || '0'),
-			quantity: parseFloat(o.size || '0'),
-			status: mapOrderStatus(o.status),
-			createdAt: o.created_at || o.timestamp || new Date().toISOString(),
-			updatedAt: o.updated_at,
-			expiresAt: o.expires_at,
-			filledQuantity: parseFloat(o.filled_size || '0'),
-			remainingQuantity: parseFloat(o.remaining_size || o.size || '0'),
-		}))
+		const orders: Order[] = ordersData.map((o: any, index: number) => {
+			console.log(`Parsing order ${index}:`, {
+				raw: o,
+				allKeys: Object.keys(o || {}),
+				price: o.price,
+				size: o.size,
+				filled_size: o.filled_size,
+				remaining_size: o.remaining_size,
+				side: o.side
+			})
+			
+			// Prices and sizes might be strings with decimals, need to parse correctly
+			// Try multiple possible field names for price
+			const price = typeof o.price === 'string' ? parseFloat(o.price) : 
+				(typeof o.price === 'number' ? o.price : 
+				(typeof o.price_raw === 'string' ? parseFloat(o.price_raw) :
+				(typeof o.price_raw === 'number' ? o.price_raw : 0)))
+			
+			// Try multiple possible field names for size/quantity
+			// NOTE: Polymarket API uses 'original_size' for the original order size
+			let size = 0
+			if (typeof o.original_size === 'string') {
+				size = parseFloat(o.original_size)
+			} else if (typeof o.original_size === 'number') {
+				size = o.original_size
+			} else if (typeof o.size === 'string') {
+				size = parseFloat(o.size)
+			} else if (typeof o.size === 'number') {
+				size = o.size
+			} else if (typeof o.quantity === 'string') {
+				size = parseFloat(o.quantity)
+			} else if (typeof o.quantity === 'number') {
+				size = o.quantity
+			} else if (typeof o.amount === 'string') {
+				size = parseFloat(o.amount)
+			} else if (typeof o.amount === 'number') {
+				size = o.amount
+			} else if (typeof o.total_size === 'string') {
+				size = parseFloat(o.total_size)
+			} else if (typeof o.total_size === 'number') {
+				size = o.total_size
+			}
+			
+			// Try multiple possible field names for filled size
+			// NOTE: Polymarket API uses 'size_matched' for the filled/matched size
+			let filledSize = 0
+			if (typeof o.size_matched === 'string') {
+				filledSize = parseFloat(o.size_matched)
+			} else if (typeof o.size_matched === 'number') {
+				filledSize = o.size_matched
+			} else if (typeof o.filled_size === 'string') {
+				filledSize = parseFloat(o.filled_size)
+			} else if (typeof o.filled_size === 'number') {
+				filledSize = o.filled_size
+			} else if (typeof o.filledSize === 'string') {
+				filledSize = parseFloat(o.filledSize)
+			} else if (typeof o.filledSize === 'number') {
+				filledSize = o.filledSize
+			} else if (typeof o.filled === 'string') {
+				filledSize = parseFloat(o.filled)
+			} else if (typeof o.filled === 'number') {
+				filledSize = o.filled
+			}
+			
+			// Calculate remaining size: original_size - size_matched
+			// Try multiple possible field names for remaining size, otherwise calculate it
+			let remainingSize = 0
+			if (typeof o.remaining_size === 'string') {
+				remainingSize = parseFloat(o.remaining_size)
+			} else if (typeof o.remaining_size === 'number') {
+				remainingSize = o.remaining_size
+			} else if (typeof o.remainingSize === 'string') {
+				remainingSize = parseFloat(o.remainingSize)
+			} else if (typeof o.remainingSize === 'number') {
+				remainingSize = o.remainingSize
+			} else if (typeof o.remaining === 'string') {
+				remainingSize = parseFloat(o.remaining)
+			} else if (typeof o.remaining === 'number') {
+				remainingSize = o.remaining
+			} else if (typeof o.open_size === 'string') {
+				remainingSize = parseFloat(o.open_size)
+			} else if (typeof o.open_size === 'number') {
+				remainingSize = o.open_size
+			} else {
+				// Calculate: original_size - size_matched
+				remainingSize = size - filledSize
+			}
+			
+			console.log(`Order ${index} parsed values:`, {
+				price,
+				size,
+				filledSize,
+				remainingSize,
+				calculatedRemaining: size - filledSize
+			})
+
+			// Parse timestamps - might be Unix timestamp (number) or ISO string
+			let createdAt = o.created_at || o.timestamp || o.createdAt
+			if (typeof createdAt === 'number') {
+				// Convert Unix timestamp to ISO string
+				createdAt = new Date(createdAt * 1000).toISOString()
+			} else if (!createdAt) {
+				createdAt = new Date().toISOString()
+			}
+			
+			let updatedAt = o.updated_at || o.updatedAt
+			if (updatedAt && typeof updatedAt === 'number') {
+				updatedAt = new Date(updatedAt * 1000).toISOString()
+			}
+			
+			let expiresAt = o.expires_at || o.expiresAt
+			if (expiresAt && typeof expiresAt === 'number') {
+				expiresAt = new Date(expiresAt * 1000).toISOString()
+			} else if (expiresAt === '0' || expiresAt === 0) {
+				expiresAt = undefined // '0' means no expiration
+			}
+
+			return {
+				id: o.order_id || o.id || o.hash,
+				marketId: o.market || o.condition_id || o.conditionId,
+				outcome: o.outcome || o.outcomeTitle || '',
+				side: (o.side === 'BUY' || o.side === 'buy' || o.side === 0) ? 'BUY' : 'SELL',
+				price: price,
+				quantity: size,
+				status: mapOrderStatus(o.status),
+				createdAt: createdAt,
+				updatedAt: updatedAt,
+				expiresAt: expiresAt,
+				filledQuantity: filledSize,
+				remainingQuantity: remainingSize,
+			}
+		})
+
+		console.log('Parsed orders:', orders)
 
 		// Sync with database
 		await syncOrders(orders)
@@ -283,10 +408,15 @@ async function syncOrders(orders: Order[]): Promise<void> {
 /**
  * Map API order status to our OrderStatus type
  */
-function mapOrderStatus(status: string): Order['status'] {
+function mapOrderStatus(status: string | number): Order['status'] {
+	if (typeof status === 'number') {
+		// Handle numeric status codes if needed
+		return 'PENDING'
+	}
+	
 	const upper = status.toUpperCase()
-	if (upper.includes('OPEN') || upper.includes('PENDING')) return 'OPEN'
-	if (upper.includes('FILLED') || upper.includes('EXECUTED')) return 'FILLED'
+	if (upper.includes('LIVE') || upper.includes('OPEN') || upper.includes('PENDING')) return 'OPEN'
+	if (upper.includes('FILLED') || upper.includes('EXECUTED') || upper.includes('COMPLETE')) return 'FILLED'
 	if (upper.includes('CANCELLED') || upper.includes('CANCELED')) return 'CANCELLED'
 	if (upper.includes('EXPIRED')) return 'EXPIRED'
 	if (upper.includes('REJECTED')) return 'REJECTED'

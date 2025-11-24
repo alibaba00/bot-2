@@ -24,29 +24,38 @@ export async function fetchMarkets(limit = 100): Promise<Market[]> {
 		const marketsData = response.data || response.results || []
 		
 		// Transform API response to our Market type
-		const markets: Market[] = marketsData.map((m: any) => ({
-			id: m.condition_id || m.id,
-			question: m.question || m.title || '',
-			slug: m.slug || '',
-			description: m.description,
-			image: m.image,
-			active: m.active !== false,
-			closed: m.closed === true,
-			volume: parseFloat(m.volume || '0'),
-			liquidity: parseFloat(m.liquidity || '0'),
-			endDate: m.end_date_iso || m.endDate,
-			startDate: m.start_date_iso || m.startDate,
-			conditionId: m.condition_id || m.id,
-			marketMakerAddress: m.market_maker_address,
-			outcomes: (m.outcomes || []).map((o: any) => ({
-				id: o.outcome_id || o.id,
-				title: o.title || o.outcome || '',
-				price: parseFloat(o.price || '0'),
-				volume: parseFloat(o.volume || '0'),
-			})),
-			createdAt: m.created_at,
-			updatedAt: m.updated_at,
-		}))
+		const markets: Market[] = marketsData
+			.filter((m: any) => {
+				// Filter out markets without a valid ID
+				const id = m.condition_id || m.id || m.conditionId
+				return id && typeof id === 'string' && id.trim() !== ''
+			})
+			.map((m: any) => {
+				const id = m.condition_id || m.id || m.conditionId || String(Date.now() + Math.random())
+				return {
+					id: id,
+					question: m.question || m.title || '',
+					slug: m.slug || '',
+					description: m.description,
+					image: m.image,
+					active: m.active !== false,
+					closed: m.closed === true,
+					volume: parseFloat(m.volume || '0'),
+					liquidity: parseFloat(m.liquidity || '0'),
+					endDate: m.end_date_iso || m.endDate,
+					startDate: m.start_date_iso || m.startDate,
+					conditionId: id,
+					marketMakerAddress: m.market_maker_address,
+					outcomes: (m.outcomes || []).map((o: any) => ({
+						id: o.outcome_id || o.id || String(Math.random()),
+						title: o.title || o.outcome || '',
+						price: parseFloat(o.price || '0'),
+						volume: parseFloat(o.volume || '0'),
+					})),
+					createdAt: m.created_at,
+					updatedAt: m.updated_at,
+				}
+			})
 
 		// Cache markets
 		await cacheMarkets(markets)
@@ -68,8 +77,13 @@ export async function fetchMarket(conditionId: string): Promise<Market | null> {
 		
 		if (!marketData) return null
 
+		const id = marketData.condition_id || marketData.id || conditionId
+		if (!id || typeof id !== 'string' || id.trim() === '') {
+			throw new Error(`Invalid market ID for condition: ${conditionId}`)
+		}
+
 		const market: Market = {
-			id: marketData.condition_id || marketData.id,
+			id: id,
 			question: marketData.question || marketData.title || '',
 			slug: marketData.slug || '',
 			description: marketData.description,
@@ -80,10 +94,10 @@ export async function fetchMarket(conditionId: string): Promise<Market | null> {
 			liquidity: parseFloat(marketData.liquidity || '0'),
 			endDate: marketData.end_date_iso || marketData.endDate,
 			startDate: marketData.start_date_iso || marketData.startDate,
-			conditionId: marketData.condition_id || marketData.id,
+			conditionId: id,
 			marketMakerAddress: marketData.market_maker_address,
 			outcomes: (marketData.outcomes || []).map((o: any) => ({
-				id: o.outcome_id || o.id,
+				id: o.outcome_id || o.id || String(Math.random()),
 				title: o.title || o.outcome || '',
 				price: parseFloat(o.price || '0'),
 				volume: parseFloat(o.volume || '0'),
@@ -108,7 +122,20 @@ export async function fetchMarket(conditionId: string): Promise<Market | null> {
 async function cacheMarkets(markets: Market[]): Promise<void> {
 	try {
 		const now = Date.now()
-		const records: MarketRecord[] = markets.map(market => ({
+		// Filter out markets with invalid IDs before caching
+		const validMarkets = markets.filter(market => {
+			if (!market.id || typeof market.id !== 'string' || market.id.trim() === '') {
+				console.warn('Skipping market with invalid ID:', market)
+				return false
+			}
+			return true
+		})
+
+		if (validMarkets.length === 0) {
+			return
+		}
+
+		const records: MarketRecord[] = validMarkets.map(market => ({
 			...market,
 			cachedAt: now,
 		}))
@@ -116,6 +143,7 @@ async function cacheMarkets(markets: Market[]): Promise<void> {
 		await db.markets.bulkPut(records)
 	} catch (error) {
 		console.error('Error caching markets:', error)
+		// Don't throw - caching is optional
 	}
 }
 

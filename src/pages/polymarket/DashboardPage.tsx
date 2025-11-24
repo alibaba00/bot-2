@@ -5,6 +5,7 @@ import { WalletStatus } from '@/components/polymarket/WalletStatus'
 import { MarketList } from '@/components/polymarket/MarketList'
 import { OrderList } from '@/components/polymarket/OrderList'
 import { PolymarketErrorBoundary } from '@/components/polymarket/ErrorBoundary'
+import { WalletSetupGuide } from '@/components/polymarket/WalletSetupGuide'
 import { Button } from '@/components/ui/button'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 
@@ -99,6 +100,11 @@ export default function DashboardPage() {
 
 			{isConnected && (
 				<>
+					{/* Show wallet setup guide if no private key is configured */}
+					{!import.meta.env.VITE_PRIVATE_KEY && (
+						<WalletSetupGuide />
+					)}
+
 					{/* Wallet Status */}
 					<WalletStatus balance={balance} loading={walletLoading} />
 

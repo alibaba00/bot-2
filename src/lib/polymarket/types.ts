@@ -59,10 +59,11 @@ export interface Transaction {
 }
 
 export interface WalletBalance {
-	available: number // Available USDC balance
+	available: number // Available USDC balance on CLOB exchange
 	locked: number // Locked in open orders
-	total: number // Total balance
+	total: number // Total balance on CLOB exchange
 	currency: string // Usually 'USDC'
+	onChainBalance?: number // On-chain wallet balance (if available)
 }
 
 export interface AccountInfo {

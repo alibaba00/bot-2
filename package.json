@@ -45,6 +45,9 @@
 		}
 	},
 	"dependencies": {
+		"@ethersproject/contracts": "^5.8.0",
+		"@ethersproject/providers": "^5.8.0",
+		"@ethersproject/wallet": "^5.8.0",
 		"@monaco-editor/react": "^4.7.0",
 		"@polymarket/clob-client": "^4.22.8",
 		"@radix-ui/react-avatar": "^1.1.10",

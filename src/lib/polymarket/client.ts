@@ -30,14 +30,14 @@ async function loadClobClient() {
 		ClobClientModule = nodeRequire('@polymarket/clob-client')
 		ChainEnum = ClobClientModule.Chain
 		
-		// For ethers, try require first, fallback to import
+		// Use @ethersproject/wallet (ethers v5) which is compatible with CLOB client
 		try {
-			const ethers = nodeRequire('ethers')
-			WalletClass = ethers.Wallet
+			const ethersWallet = nodeRequire('@ethersproject/wallet')
+			WalletClass = ethersWallet.Wallet
 		} catch {
 			// Fallback to dynamic import if require doesn't work
-			const ethers = await import('ethers')
-			WalletClass = ethers.Wallet
+			const ethersWallet = await import('@ethersproject/wallet')
+			WalletClass = ethersWallet.Wallet
 		}
 	} catch (error) {
 		console.error('Failed to load Polymarket client:', error)
@@ -82,8 +82,61 @@ export async function initializeClient(): Promise<any> {
 		// Use proxy address from config or default to Polymarket CLOB API
 		const host = config.proxyAddress || 'https://clob.polymarket.com'
 		
-		// Initialize CLOB client
+		// Initialize CLOB client first (without credentials)
 		clobClient = new ClobClientModule.ClobClient(host, chainId, wallet)
+		console.log('Initial CLOB client created')
+
+		// Create or derive API credentials (required for authenticated endpoints)
+		let apiCreds: any = null
+		try {
+			console.log('Attempting to create/derive API key...')
+			console.log('Wallet address:', wallet.address)
+			console.log('Config userId:', config.userId)
+			
+			apiCreds = await clobClient.createOrDeriveApiKey()
+			
+			// Validate that we got proper credentials
+			if (!apiCreds || !apiCreds.key || !apiCreds.secret || !apiCreds.passphrase) {
+				throw new Error('API credentials are incomplete. Received: ' + JSON.stringify(apiCreds))
+			}
+			
+			console.log('API credentials created/derived successfully:', {
+				hasKey: !!apiCreds?.key,
+				hasSecret: !!apiCreds?.secret,
+				hasPassphrase: !!apiCreds?.passphrase,
+				keyPrefix: apiCreds?.key?.substring(0, 10) + '...'
+			})
+		} catch (apiKeyError: any) {
+			console.error('Failed to create/derive API key:', apiKeyError)
+			console.error('Error details:', {
+				message: apiKeyError?.message,
+				status: apiKeyError?.status,
+				statusText: apiKeyError?.statusText,
+				data: apiKeyError?.data,
+				response: apiKeyError?.response
+			})
+			
+			// If it's a 400 error, it might mean the account doesn't exist or isn't properly set up
+			if (apiKeyError?.status === 400 || apiKeyError?.response?.status === 400) {
+				throw new Error(`API key creation failed (400 Bad Request). This usually means:
+1. The wallet address doesn't have a Polymarket account linked
+2. The account needs to be activated on Polymarket first
+3. You may need to deposit funds to the CLOB exchange first
+Original error: ${apiKeyError?.data?.error || apiKeyError?.message || String(apiKeyError)}`)
+			}
+			
+			// Don't continue without credentials - authenticated endpoints won't work
+			throw new Error(`Failed to create API credentials: ${apiKeyError instanceof Error ? apiKeyError.message : String(apiKeyError)}`)
+		}
+
+		// Reinitialize the client with credentials (required for authenticated endpoints)
+		if (!apiCreds || !apiCreds.key || !apiCreds.secret || !apiCreds.passphrase) {
+			throw new Error('API credentials were not created or are incomplete')
+		}
+
+		console.log('Reinitializing client with API credentials...')
+		clobClient = new ClobClientModule.ClobClient(host, chainId, wallet, apiCreds)
+		console.log('CLOB client initialized with credentials')
 
 		// Test connection by checking server status
 		await clobClient.getOk()

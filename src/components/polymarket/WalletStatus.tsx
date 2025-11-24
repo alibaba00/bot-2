@@ -54,25 +54,50 @@ export function WalletStatus({ balance, loading }: WalletStatusProps) {
 				<CardDescription>Your current trading balance</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<div className="grid gap-4 md:grid-cols-3">
-					<div>
-						<p className="text-sm text-muted-foreground">Total Balance</p>
-						<p className="text-2xl font-bold">
-							{balance.total.toFixed(2)} {balance.currency}
-						</p>
+				<div className="space-y-4">
+					<div className="grid gap-4 md:grid-cols-3">
+						<div>
+							<p className="text-sm text-muted-foreground">CLOB Exchange Balance</p>
+							<p className="text-2xl font-bold">
+								{balance.total.toFixed(2)} {balance.currency}
+							</p>
+							<p className="text-xs text-muted-foreground mt-1">
+								Available for API trading
+							</p>
+						</div>
+						<div>
+							<p className="text-sm text-muted-foreground">Available</p>
+							<p className="text-2xl font-semibold text-green-600">
+								{balance.available.toFixed(2)} {balance.currency}
+							</p>
+						</div>
+						<div>
+							<p className="text-sm text-muted-foreground">Locked in Orders</p>
+							<p className="text-2xl font-semibold text-orange-600">
+								{balance.locked.toFixed(2)} {balance.currency}
+							</p>
+						</div>
 					</div>
-					<div>
-						<p className="text-sm text-muted-foreground">Available</p>
-						<p className="text-2xl font-semibold text-green-600">
-							{balance.available.toFixed(2)} {balance.currency}
-						</p>
-					</div>
-					<div>
-						<p className="text-sm text-muted-foreground">Locked in Orders</p>
-						<p className="text-2xl font-semibold text-orange-600">
-							{balance.locked.toFixed(2)} {balance.currency}
-						</p>
-					</div>
+					{balance.onChainBalance !== undefined && balance.onChainBalance > 0 && (
+						<div className="pt-4 border-t">
+							<div className="flex items-center justify-between">
+								<div>
+									<p className="text-sm text-muted-foreground">On-Chain Wallet Balance</p>
+									<p className="text-xl font-semibold">
+										{balance.onChainBalance.toFixed(2)} {balance.currency}
+									</p>
+									<p className="text-xs text-muted-foreground mt-1">
+										On Polygon network (not deposited to CLOB)
+									</p>
+								</div>
+								{balance.onChainBalance > 0 && balance.total === 0 && (
+									<div className="text-xs text-orange-600 bg-orange-50 dark:bg-orange-950 px-3 py-2 rounded-md">
+										⚠️ Deposit funds to CLOB exchange to trade via API
+									</div>
+								)}
+							</div>
+						</div>
+					)}
 				</div>
 			</CardContent>
 		</Card>
