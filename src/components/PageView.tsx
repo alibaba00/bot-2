@@ -10,6 +10,8 @@ export default function PageView(props: any) {
 
 	if (!content) return null
 
+console.log('PageView selectedNode', selectedNode)
+
 	return (
 		<div className='flex flex-col gap-4'>
 			{content.map((node: any, index: number) => {

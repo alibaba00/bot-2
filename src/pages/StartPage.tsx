@@ -21,6 +21,8 @@ import DashboardPage from './polymarket/DashboardPage'
 import MarketsPage from './polymarket/MarketsPage'
 import OrdersPage from './polymarket/OrdersPage'
 import PolymarketHistoryPage from './polymarket/HistoryPage'
+import TickerPage from './polymarket/TickerPage'
+import TickerPage2 from './polymarket/TickerPage2'
 
 
 const pages = [
@@ -33,7 +35,9 @@ const pages = [
 	{id:'polymarket-dashboard', path:'/polymarket/dashboard', page:<DashboardPage />},
 	{id:'polymarket-markets', path:'/polymarket/markets', page:<MarketsPage />},
 	{id:'polymarket-orders', path:'/polymarket/orders', page:<OrdersPage />},
-	{id:'polymarket-history', path:'/polymarket/history', page:<PolymarketHistoryPage />}
+	{id:'polymarket-history', path:'/polymarket/history', page:<PolymarketHistoryPage />},
+	{id:'polymarket-ticker', path:'/polymarket/ticker', page:<TickerPage />},
+	{id:'polymarket-ticker2', path:'/polymarket/ticker2', page:<TickerPage2 />}
 ]
 
 const data = {
@@ -58,6 +62,14 @@ const data = {
 				{
 					title: 'History',
 					url: '/polymarket/history'
+				},
+				{
+					title: 'Ticker',
+					url: '/polymarket/ticker'
+				},
+				{
+					title: 'Ticker 2',
+					url: '/polymarket/ticker2'
 				},
 			]
 		},
@@ -131,7 +143,7 @@ export default function Page() {
 
 				<PageView
 					content={pages}
-					selectedNode={pages.find(node => location.pathname.includes(node.path))}
+					selectedNode={pages.find(node => location.pathname === node.path)}
 					autoUnmount={false}
 					cache='playground-page'		
 				/>
