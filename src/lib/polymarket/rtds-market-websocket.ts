@@ -332,7 +332,7 @@ console.log('price:', price, payload)
 				this.callbacks.onActivityUpdate?.(payload)
 			} else {
 				// Log full payload for debugging
-				console.log('RTDS Market: 📨 Activity message (orders_matched):', payload)
+				// console.log('RTDS Market: 📨 Activity message (orders_matched):', payload)
 				this.callbacks.onActivityUpdate?.(payload)
 			}
 			return

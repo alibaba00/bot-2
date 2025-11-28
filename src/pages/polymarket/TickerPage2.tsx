@@ -25,8 +25,21 @@ const BINANCE_SYMBOLS = ['btcusdt', 'ethusdt', 'solusdt', 'xrpusdt', 'adausdt', 
 // Popular crypto symbols for Chainlink (slash-separated)
 const CHAINLINK_SYMBOLS = ['btc/usd', 'eth/usd', 'sol/usd', 'xrp/usd', 'ada/usd', 'doge/usd']
 
-// Default Bitcoin market slug
-const DEFAULT_BTC_MARKET_SLUG = 'btc-updown-15m-1764285300'
+// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
+function getCurrent15MinuteUTCTimestamp(): number {
+	const now = Date.now() // Current time in milliseconds
+	const nowSeconds = Math.floor(now / 1000) // Convert to seconds
+	const fifteenMinutes = 15 * 60 // 15 minutes in seconds (900)
+	// Round down to the nearest 15-minute interval
+	return Math.floor(nowSeconds / fifteenMinutes) * fifteenMinutes
+}
+
+// Default Bitcoin market slug - dynamically generated based on current 15-minute UTC timestamp
+function getDefaultBTCMarketSlug(): string {
+	const timestamp = getCurrent15MinuteUTCTimestamp()
+	console.log('Default Bitcoin market slug:', `btc-updown-15m-${timestamp}`)
+	return `btc-updown-15m-${timestamp}`
+}
 
 export default function TickerPage2() {
 	// Crypto prices state (RTDS)
@@ -43,6 +56,12 @@ export default function TickerPage2() {
 	const [assetIds, setAssetIds] = useState<string[]>([])
 	const [useMarketPolling, setUseMarketPolling] = useState(false) // Don't start polling automatically
 	const [pollingInterval, setPollingInterval] = useState(1000) // Default: 1 second for real-time updates
+	
+	// Activity update prices from orders_matched events
+	const [activityPrices, setActivityPrices] = useState<{
+		up?: { price: number; timestamp: number }
+		down?: { price: number; timestamp: number }
+	}>({})
 
 	// RTDS WebSocket for crypto prices
 	const cryptoWs = useRTDSWebSocket({
@@ -92,7 +111,44 @@ export default function TickerPage2() {
 		},
 		onActivityUpdate: (update) => {
 			// Log activity updates for debugging
-			console.log('RTDS Market: 📊 Activity update (orders_matched):', update)
+			// console.log('RTDS Market: 📊 Activity update (orders_matched):', update)
+			
+			// Extract price and outcome from activity update
+			if (update && typeof update === 'object') {
+				const price = update.price
+				const outcome = update.outcome
+				// Timestamp from payload is in seconds (Unix timestamp), convert to milliseconds for consistency
+				const timestamp = update.timestamp 
+					? (update.timestamp < 10000000000 ? update.timestamp * 1000 : update.timestamp) // Convert seconds to ms if needed
+					: Date.now()
+				
+				if (price !== undefined && typeof price === 'number') {
+					// Determine if this is Up or Down based on outcome field
+					const isUp = outcome && (outcome.toString().toUpperCase().includes('UP') || outcome.toString().toUpperCase().includes('YES'))
+					const isDown = outcome && outcome.toString().toUpperCase().includes('DOWN')
+					
+					setActivityPrices((prev) => {
+						const updated = { ...prev }
+						if (isUp) {
+							updated.up = { price, timestamp }
+						} else if (isDown) {
+							updated.down = { price, timestamp }
+						}
+						return updated
+					})
+					
+					// Also update marketPrices with the asset ID if available
+					if (update.asset) {
+						setMarketPrices((prev) => ({
+							...prev,
+							[update.asset]: {
+								price,
+								timestamp,
+							},
+						}))
+					}
+				}
+			}
 		},
 		onError: (err) => {
 			setMarketError(err.message || 'RTDS Market WebSocket connection error')
@@ -127,7 +183,8 @@ export default function TickerPage2() {
 				setMarketLoading(true)
 				setMarketError(null)
 
-				const marketData = await fetchMarketBySlugFromGamma(DEFAULT_BTC_MARKET_SLUG)
+				const defaultSlug = getDefaultBTCMarketSlug()
+				const marketData = await fetchMarketBySlugFromGamma(defaultSlug)
 				if (marketData && marketData.id && marketData.question) {
 					setMarket(marketData)
 					// Extract asset IDs from outcomes
@@ -469,6 +526,46 @@ export default function TickerPage2() {
 													<div className="text-sm text-muted-foreground uppercase">{symbol}</div>
 												</div>
 											))}
+									</CardContent>
+								</Card>
+							)}
+							{/* Display Activity Prices from orders_matched events */}
+							{(activityPrices.up || activityPrices.down) && (
+								<Card className="bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+									<CardContent className="pt-6">
+										<div className="text-sm font-semibold text-muted-foreground mb-3">
+											Activity Prices (from orders_matched)
+										</div>
+										<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+											{activityPrices.up && (
+												<div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+													<div>
+														<div className="text-xs text-muted-foreground mb-1">UP</div>
+														<div className="text-2xl font-bold text-green-600 dark:text-green-400">
+															{formatMarketPrice(activityPrices.up.price)}
+														</div>
+														<div className="text-xs text-muted-foreground mt-1">
+															{new Date(activityPrices.up.timestamp).toLocaleTimeString()}
+														</div>
+													</div>
+													<TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
+												</div>
+											)}
+											{activityPrices.down && (
+												<div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+													<div>
+														<div className="text-xs text-muted-foreground mb-1">DOWN</div>
+														<div className="text-2xl font-bold text-red-600 dark:text-red-400">
+															{formatMarketPrice(activityPrices.down.price)}
+														</div>
+														<div className="text-xs text-muted-foreground mt-1">
+															{new Date(activityPrices.down.timestamp).toLocaleTimeString()}
+														</div>
+													</div>
+													<TrendingDown className="h-8 w-8 text-red-600 dark:text-red-400" />
+												</div>
+											)}
+										</div>
 									</CardContent>
 								</Card>
 							)}
