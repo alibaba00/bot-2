@@ -29,9 +29,13 @@ export interface WebSocketCallbacks {
 }
 
 // Alternative WebSocket URLs - try both in case one doesn't work
+// According to CLOB docs: wss://ws-subscriptions-clob.polymarket.com/ws/
 export const WS_URLS = [
-	'wss://ws-subscriptions-clob.polymarket.com',
-	'wss://clob.polymarket.com',
+	'wss://ws-subscriptions-clob.polymarket.com/ws/', // Official URL with trailing slash
+	'wss://ws-subscriptions-clob.polymarket.com/ws', // Without trailing slash
+	'wss://ws-subscriptions-clob.polymarket.com', // Base URL
+	'wss://clob.polymarket.com/ws', // Alternative
+	'wss://clob.polymarket.com', // Alternative base
 ]
 const PING_INTERVAL = 10000 // 10 seconds
 
@@ -47,12 +51,23 @@ export class PolymarketWebSocket {
 	private isConnected = false
 	private shouldReconnect = true // Flag to control auto-reconnect
 	private wsUrl: string // The specific URL for this instance
+	private currentUrlIndex: number = 0 // Track which URL we're trying
 
 	constructor(assetIds: string[], callbacks: WebSocketCallbacks = {}, wsUrl?: string) {
 		this.assetIds = assetIds
 		this.callbacks = callbacks
 		// Use provided URL or default to first URL
-		this.wsUrl = wsUrl || WS_URLS[0]
+		if (wsUrl) {
+			this.wsUrl = wsUrl
+			// Find the index of the provided URL
+			this.currentUrlIndex = WS_URLS.indexOf(wsUrl)
+			if (this.currentUrlIndex === -1) {
+				this.currentUrlIndex = 0
+			}
+		} else {
+			this.wsUrl = WS_URLS[0]
+			this.currentUrlIndex = 0
+		}
 	}
 
 	/**
@@ -99,10 +114,10 @@ export class PolymarketWebSocket {
 		
 		this.isConnecting = true
 		
-		// Use the specific URL for this instance
-		const url = `${this.wsUrl}/ws/market`
-		console.log(`🔌 Using WebSocket URL: ${this.wsUrl}`)
-		console.log(`Full URL: ${url}`)
+		// Use the base URL directly (no /ws/market path needed)
+		// The subscription message determines the channel
+		const url = this.wsUrl
+		console.log(`🔌 Using WebSocket URL: ${url}`)
 
 		try {
 			console.log(`Connecting to WebSocket: ${url}`)
@@ -126,27 +141,33 @@ export class PolymarketWebSocket {
 						}
 						
 						// Try multiple subscription formats sequentially
+						// According to CLOB WebSocket docs: type should be "MARKET" (uppercase) and assets_ids (with 's')
 						const formats = [
-							// Format 1: New format with markets array
+							// Format 1: Official CLOB format (from docs)
 							{
-								type: 'subscribe',
-								channel: 'market',
-								markets: this.assetIds,
+								type: 'MARKET',
+								assets_ids: this.assetIds,
 							},
-							// Format 2: With asset_ids instead of markets
+							// Format 2: With asset_ids (without 's')
 							{
-								type: 'subscribe',
-								channel: 'market',
+								type: 'MARKET',
 								asset_ids: this.assetIds,
 							},
-							// Format 3: Old format
+							// Format 3: Lowercase type
 							{
-								assets_ids: this.assetIds,
 								type: 'market',
+								assets_ids: this.assetIds,
 							},
-							// Format 4: Simple subscribe without channel
+							// Format 4: Subscribe format
 							{
 								type: 'subscribe',
+								channel: 'market',
+								assets_ids: this.assetIds,
+							},
+							// Format 5: With markets array
+							{
+								type: 'subscribe',
+								channel: 'market',
 								markets: this.assetIds,
 							},
 						]
@@ -172,18 +193,22 @@ export class PolymarketWebSocket {
 								this.ws.send(subscriptionMessage)
 								console.log(`✅ Subscription format ${index + 1} sent successfully`)
 								
-								// Wait a bit to see if connection stays open
+								// Wait longer to see if connection stays open and we receive data
 								setTimeout(() => {
 									if (this.ws && this.ws.readyState === WebSocket.OPEN) {
 										console.log(`✅ Format ${index + 1} appears to be working (connection still open)`)
+										// Stop trying other formats if this one works
+										return
 									} else {
-										console.warn(`⚠️ Format ${index + 1} may have failed (connection closed), trying next format...`)
+										console.warn(`⚠️ Format ${index + 1} failed (connection closed), trying next format...`)
 										// Try next format if this one didn't work
 										if (index + 1 < formats.length) {
+											// Only try next format if connection was closed due to this subscription
+											// Don't try if connection is already closed for other reasons
 											tryFormat(index + 1)
 										}
 									}
-								}, 300)
+								}, 1000) // Wait longer (1 second) to see if connection stays open
 							} catch (sendError) {
 								console.error(`❌ Failed to send subscription format ${index + 1}:`, sendError)
 								// Try next format
@@ -226,6 +251,18 @@ export class PolymarketWebSocket {
 						try {
 							const data = JSON.parse(event.data)
 							console.log('📦 Parsed message data:', data)
+							
+							// Check if it's an error response from server
+							if (data.error || data.message) {
+								console.error('❌ Server error response:', data)
+								this.callbacks.onError?.(new Error(data.error || data.message || 'Server error'))
+								// Don't reconnect on server errors - likely format issue
+								if (data.error && (data.error.includes('invalid') || data.error.includes('format'))) {
+									this.shouldReconnect = false
+								}
+								return
+							}
+							
 							this.handleMessage(data)
 						} catch (parseError) {
 							// If it's not JSON, it might be a plain text message
@@ -234,6 +271,10 @@ export class PolymarketWebSocket {
 							if (event.data.toLowerCase().includes('error') || event.data.toLowerCase().includes('invalid')) {
 								console.error('❌ Server error message:', event.data)
 								this.callbacks.onError?.(new Error(`Server error: ${event.data}`))
+								// Stop reconnecting on format errors
+								if (event.data.toLowerCase().includes('invalid') || event.data.toLowerCase().includes('format')) {
+									this.shouldReconnect = false
+								}
 							}
 						}
 					} else {
@@ -256,10 +297,47 @@ export class PolymarketWebSocket {
 				this.isConnecting = false
 				this.isConnected = false
 				
-				// Get more error details if available
+				// Check if it's a 404 error (handshake failure)
+				// This usually means the URL is wrong
 				const errorMessage = error instanceof Error 
 					? error.message 
 					: 'WebSocket connection error. Check console for details.'
+				
+				if (errorMessage.includes('404') || errorMessage.includes('Unexpected response code: 404')) {
+					console.error('❌ 404 Error - WebSocket endpoint not found.')
+					
+					// Check if we should try next URL (only if reconnect is enabled)
+					if (!this.shouldReconnect) {
+						console.log('⏸️ Reconnect disabled, not trying next URL')
+						return
+					}
+					
+					// Try next URL if available
+					if (this.currentUrlIndex < WS_URLS.length - 1) {
+						this.currentUrlIndex++
+						this.wsUrl = WS_URLS[this.currentUrlIndex]
+						console.log(`🔄 Switching to URL ${this.currentUrlIndex + 1}/${WS_URLS.length}: ${this.wsUrl}`)
+						
+						// Try connecting with new URL after a short delay
+						const reconnectTimeout = setTimeout(() => {
+							// Double-check shouldReconnect before connecting
+							if (this.shouldReconnect) {
+								this.reconnectAttempts = 0 // Reset attempts for new URL
+								this.connect(true)
+							} else {
+								console.log('⏸️ Reconnect cancelled before URL switch')
+							}
+						}, 1000)
+						// Store timeout to allow cancellation
+						;(this as any).urlSwitchTimeout = reconnectTimeout
+					} else {
+						// All URLs tried, stop reconnecting
+						console.error('⛔ All WebSocket URLs failed with 404. Stopping reconnect.')
+						this.shouldReconnect = false
+						this.callbacks.onError?.(new Error('All WebSocket endpoints returned 404. Check URL configuration.'))
+					}
+					return
+				}
 				
 				// Add more context to error message
 				const detailedError = new Error(
@@ -302,11 +380,19 @@ export class PolymarketWebSocket {
 				// Log specific error codes
 				if (event.code === 1006) {
 					console.error('❌ Abnormal closure (1006). Possible causes:')
-					console.error('  - Network connectivity issues')
+					console.error('  - Invalid subscription format')
 					console.error('  - Server rejected the connection')
+					console.error('  - Network connectivity issues')
 					console.error('  - CORS or firewall blocking')
-					console.error('  - Invalid WebSocket URL')
-					console.error('  - Server not accepting connections')
+					console.error('  - Invalid WebSocket URL (404 during handshake)')
+					
+					// If we get 1006 immediately after connection, it's likely a URL or format issue
+					// Don't reconnect endlessly - stop after a few attempts
+					if (this.reconnectAttempts >= 2) {
+						console.error('⛔ Too many 1006 errors - likely URL or subscription format issue. Stopping reconnect.')
+						this.shouldReconnect = false
+						this.callbacks.onError?.(new Error('Connection closed with 1006 error - check WebSocket URL and subscription format'))
+					}
 				} else if (event.code === 1000) {
 					console.log('✅ Normal closure')
 				} else {
@@ -316,9 +402,13 @@ export class PolymarketWebSocket {
 				this.callbacks.onDisconnect?.()
 
 				// Double-check shouldReconnect before attempting reconnect
-				// (it might have been disabled by disconnect() call)
+				// (it might have been disabled by disconnect() call or too many 1006 errors)
 				if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
 					this.reconnectAttempts++
+					
+					// Increase delay for repeated failures
+					const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 3)
+					
 					const reconnectTimeout = setTimeout(() => {
 						// Triple-check shouldReconnect before actually reconnecting
 						if (this.shouldReconnect) {
@@ -327,7 +417,7 @@ export class PolymarketWebSocket {
 						} else {
 							console.log('⏸️ Reconnect cancelled (shouldReconnect = false)')
 						}
-					}, this.reconnectDelay)
+					}, delay)
 					// Store timeout to allow cancellation
 					;(this as any).reconnectTimeout = reconnectTimeout
 				} else if (!this.shouldReconnect) {
@@ -358,6 +448,13 @@ export class PolymarketWebSocket {
 			clearTimeout((this as any).reconnectTimeout)
 			;(this as any).reconnectTimeout = null
 			console.log('✅ Cancelled pending reconnect')
+		}
+		
+		// Cancel any pending URL switch attempts
+		if ((this as any).urlSwitchTimeout) {
+			clearTimeout((this as any).urlSwitchTimeout)
+			;(this as any).urlSwitchTimeout = null
+			console.log('✅ Cancelled pending URL switch')
 		}
 		
 		// Stop ping interval
