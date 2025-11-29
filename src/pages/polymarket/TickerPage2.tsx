@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { useRTDSMarketWebSocket } from '@/hooks/use-rtds-market-websocket'
 import { usePolymarketWebSocket } from '@/hooks/use-polymarket-websocket'
+import { useCLOBMarketWebSocket } from '@/hooks/use-clob-market-websocket'
 import { fetchMarketBySlugFromGamma, fetchMarketPricesFromClob } from '@/lib/polymarket/markets'
 import type { Market } from '@/lib/polymarket/types'
 import type { CryptoPriceSource } from '@/lib/polymarket/rtds-websocket'
@@ -176,6 +177,33 @@ export default function TickerPage2() {
 		autoConnect: false,
 	})
 
+	// CLOB Market WebSocket (wss://ws-subscriptions-clob.polymarket.com/ws/market)
+	// Uses asset IDs (from market outcomes), not market addresses
+	const clobMarketWs = useCLOBMarketWebSocket({
+		assetIds: assetIds.length > 0 ? assetIds : [],
+		onPriceUpdate: (update) => {
+			// console.log('CLOB Market: 💰 Price update received:', {
+			// 	asset_id: update.asset_id,
+			// 	price: update.price,
+			// 	side: update.side,
+			// 	best_bid: update.best_bid,
+			// 	best_ask: update.best_ask,
+			// })
+			setMarketPrices((prev) => ({
+				...prev,
+				[update.asset_id]: {
+					price: update.price,
+					timestamp: update.timestamp,
+				},
+			}))
+			setMarketError(null)
+		},
+		onError: (err) => {
+			setMarketError(err.message || 'CLOB Market WebSocket connection error')
+		},
+		autoConnect: false,
+	})
+
 	// Load market on mount
 	useEffect(() => {
 		async function loadMarket() {
@@ -337,7 +365,23 @@ export default function TickerPage2() {
 		console.log('🛑 User requested disconnect - stopping WebSocket')
 		rtdsMarketWs.disconnect()
 		marketWs.disconnect() // Also disconnect CLOB WS if connected
+		clobMarketWs.disconnect() // Disconnect CLOB Market WS
 		// Don't automatically enable polling - let user choose
+	}
+
+	const handleCLOBMarketConnect = () => {
+		setMarketError(null)
+		setUseMarketPolling(false) // Disable polling when using WebSocket
+		if (assetIds.length > 0) {
+			clobMarketWs.connect()
+		} else {
+			setMarketError('No asset IDs available. Please wait for market to load.')
+		}
+	}
+
+	const handleCLOBMarketDisconnect = () => {
+		console.log('🛑 User requested disconnect - stopping CLOB Market WebSocket')
+		clobMarketWs.disconnect()
 	}
 
 	const handleStartPolling = () => {
@@ -418,11 +462,13 @@ export default function TickerPage2() {
 				<CardHeader>
 					<div className="flex items-center justify-between">
 						<div>
-							<CardTitle>Market Ticker (RTDS WebSocket)</CardTitle>
+							<CardTitle>Market Ticker (RTDS & CLOB WebSocket)</CardTitle>
 							<CardDescription>
 								{market ? market.question : 'Loading market...'}
 								<br />
-								<span className="text-xs">Using wss://ws-live-data.polymarket.com (same as crypto prices)</span>
+								<span className="text-xs">
+									RTDS: wss://ws-live-data.polymarket.com | CLOB: wss://ws-subscriptions-clob.polymarket.com/ws/market
+								</span>
 							</CardDescription>
 						</div>
 						<div className="flex items-center gap-4">
@@ -432,7 +478,13 @@ export default function TickerPage2() {
 								<span className="text-sm capitalize">RTDS WS: {rtdsMarketWs.status}</span>
 							</div>
 
-							{/* WebSocket Controls */}
+							{/* CLOB Market WebSocket Status */}
+							<div className={cn('flex items-center gap-2', getStatusColor(clobMarketWs.status))}>
+								{getStatusIcon(clobMarketWs.status)}
+								<span className="text-sm capitalize">CLOB WS: {clobMarketWs.status}</span>
+							</div>
+
+							{/* RTDS WebSocket Controls */}
 							{rtdsMarketWs.status === 'disconnected' ? (
 								<Button
 									onClick={handleMarketConnect}
@@ -446,7 +498,25 @@ export default function TickerPage2() {
 							) : (
 								<Button onClick={handleMarketDisconnect} variant="destructive" size="sm">
 									<Square className="h-4 w-4 mr-2" />
-									Stop WS
+									Stop RTDS WS
+								</Button>
+							)}
+
+							{/* CLOB Market WebSocket Controls */}
+							{clobMarketWs.status === 'disconnected' ? (
+								<Button
+									onClick={handleCLOBMarketConnect}
+									variant="default"
+									size="sm"
+									disabled={assetIds.length === 0 || marketLoading || useMarketPolling}
+								>
+									<Play className="h-4 w-4 mr-2" />
+									Use CLOB WS
+								</Button>
+							) : (
+								<Button onClick={handleCLOBMarketDisconnect} variant="destructive" size="sm">
+									<Square className="h-4 w-4 mr-2" />
+									Stop CLOB WS
 								</Button>
 							)}
 
@@ -801,6 +871,33 @@ export default function TickerPage2() {
 										<span className="text-muted-foreground">Last Update:</span>
 										<span className="font-medium">
 											{new Date(rtdsMarketWs.lastPriceUpdate.timestamp).toLocaleTimeString()}
+										</span>
+									</div>
+								)}
+							</div>
+
+							{/* CLOB Market Info */}
+							<div className="space-y-2 text-sm">
+								<h3 className="font-semibold mb-2">Market Ticker (CLOB)</h3>
+								<div className="flex items-center justify-between">
+									<span className="text-muted-foreground">Market:</span>
+									<span className="font-medium">{market ? 'Loaded' : 'Loading...'}</span>
+								</div>
+								<div className="flex items-center justify-between">
+									<span className="text-muted-foreground">Status:</span>
+									<span className={cn('font-medium capitalize', getStatusColor(clobMarketWs.status))}>
+										{clobMarketWs.status}
+									</span>
+								</div>
+								<div className="flex items-center justify-between">
+									<span className="text-muted-foreground">Asset IDs:</span>
+									<span className="font-medium">{assetIds.length}</span>
+								</div>
+								{clobMarketWs.lastPriceUpdate && (
+									<div className="flex items-center justify-between">
+										<span className="text-muted-foreground">Last Update:</span>
+										<span className="font-medium">
+											{new Date(clobMarketWs.lastPriceUpdate.timestamp).toLocaleTimeString()}
 										</span>
 									</div>
 								)}
