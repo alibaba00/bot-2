@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -63,6 +63,15 @@ export default function TickerPage2() {
 		up?: { price: number; timestamp: number }
 		down?: { price: number; timestamp: number }
 	}>({})
+
+	// Last trade prices from last_trade_price events
+	const [lastTradePrices, setLastTradePrices] = useState<Record<string, {
+		price: number
+		size: number
+		side: 'BUY' | 'SELL'
+		timestamp: number
+		transaction_hash?: string
+	}>>({})
 
 	// RTDS WebSocket for crypto prices
 	const cryptoWs = useRTDSWebSocket({
@@ -179,9 +188,23 @@ export default function TickerPage2() {
 
 	// CLOB Market WebSocket (wss://ws-subscriptions-clob.polymarket.com/ws/market)
 	// Uses asset IDs (from market outcomes), not market addresses
+	// Use useRef to store current assetIds to avoid closure issues
+	const assetIdsRef = useRef<string[]>([])
+	useEffect(() => {
+		assetIdsRef.current = assetIds
+	}, [assetIds])
+
 	const clobMarketWs = useCLOBMarketWebSocket({
 		assetIds: assetIds.length > 0 ? assetIds : [],
 		onPriceUpdate: (update) => {
+			// Use ref to get current assetIds (avoids closure issue)
+			const currentAssetIds = assetIdsRef.current
+
+			// Nur aktualisieren, wenn die Asset-ID zu unserem aktuellen Markt gehört
+			if (!currentAssetIds.includes(update.asset_id)) {
+				return // Ignoriere Updates für andere Assets
+			}
+
 			// console.log('CLOB Market: 💰 Price update received:', {
 			// 	asset_id: update.asset_id,
 			// 	price: update.price,
@@ -189,6 +212,7 @@ export default function TickerPage2() {
 			// 	best_bid: update.best_bid,
 			// 	best_ask: update.best_ask,
 			// })
+
 			setMarketPrices((prev) => ({
 				...prev,
 				[update.asset_id]: {
@@ -197,6 +221,26 @@ export default function TickerPage2() {
 				},
 			}))
 			setMarketError(null)
+		},
+		onLastTradePriceUpdate: (update) => {
+			// Use ref to get current assetIds (avoids closure issue)
+			const currentAssetIds = assetIdsRef.current
+
+			// Nur aktualisieren, wenn die Asset-ID zu unserem aktuellen Markt gehört
+			if (!currentAssetIds.includes(update.asset_id)) {
+				return // Ignoriere Updates für andere Assets
+			}
+
+			setLastTradePrices((prev) => ({
+				...prev,
+				[update.asset_id]: {
+					price: update.price,
+					size: update.size,
+					side: update.side,
+					timestamp: update.timestamp,
+					transaction_hash: update.transaction_hash,
+				},
+			}))
 		},
 		onError: (err) => {
 			setMarketError(err.message || 'CLOB Market WebSocket connection error')
@@ -635,6 +679,60 @@ export default function TickerPage2() {
 													<TrendingDown className="h-8 w-8 text-red-600 dark:text-red-400" />
 												</div>
 											)}
+										</div>
+									</CardContent>
+								</Card>
+							)}
+							{/* Display Last Trade Prices from last_trade_price events */}
+							{Object.keys(lastTradePrices).length > 0 && (
+								<Card className="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
+									<CardContent className="pt-6">
+										<div className="text-sm font-semibold text-muted-foreground mb-3">
+											Last Trade Prices (from last_trade_price)
+										</div>
+										<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+											{market.outcomes.map((outcome) => {
+												const lastTrade = lastTradePrices[outcome.id]
+												if (!lastTrade) return null
+
+												const isBuy = lastTrade.side === 'BUY'
+
+												return (
+													<div
+														key={outcome.id}
+														className={cn(
+															'flex items-center justify-between p-3 rounded-lg',
+															isBuy
+																? 'bg-green-50 dark:bg-green-900/20'
+																: 'bg-red-50 dark:bg-red-900/20'
+														)}
+													>
+														<div>
+															<div className="text-xs text-muted-foreground mb-1">
+																{outcome.title} ({lastTrade.side})
+															</div>
+															<div
+																className={cn(
+																	'text-2xl font-bold',
+																	isBuy
+																		? 'text-green-600 dark:text-green-400'
+																		: 'text-red-600 dark:text-red-400'
+																)}
+															>
+																{formatMarketPrice(lastTrade.price)}
+															</div>
+															<div className="text-xs text-muted-foreground mt-1">
+																Size: {lastTrade.size.toFixed(2)} | {new Date(lastTrade.timestamp).toLocaleTimeString()}
+															</div>
+														</div>
+														{isBuy ? (
+															<TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
+														) : (
+															<TrendingDown className="h-8 w-8 text-red-600 dark:text-red-400" />
+														)}
+													</div>
+												)
+											})}
 										</div>
 									</CardContent>
 								</Card>

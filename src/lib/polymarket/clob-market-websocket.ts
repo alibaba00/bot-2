@@ -16,9 +16,16 @@ export interface CLOBMarketPriceChange {
 
 export interface CLOBMarketMessage {
 	market: string // Market address (0x...)
-	price_changes: CLOBMarketPriceChange[]
+	price_changes?: CLOBMarketPriceChange[]
 	timestamp: string
 	event_type: string
+	// For last_trade_price events
+	asset_id?: string
+	price?: string
+	size?: string
+	fee_rate_bps?: string
+	side?: 'BUY' | 'SELL'
+	transaction_hash?: string
 }
 
 export interface CLOBMarketPriceUpdate {
@@ -32,8 +39,20 @@ export interface CLOBMarketPriceUpdate {
 	hash?: string
 }
 
+export interface CLOBLastTradePriceUpdate {
+	asset_id: string
+	price: number
+	size: number
+	side: 'BUY' | 'SELL'
+	timestamp: number
+	transaction_hash?: string
+	fee_rate_bps?: number
+	market: string
+}
+
 export interface CLOBMarketCallbacks {
 	onPriceUpdate?: (update: CLOBMarketPriceUpdate) => void
+	onLastTradePriceUpdate?: (update: CLOBLastTradePriceUpdate) => void
 	onError?: (error: Error) => void
 	onConnect?: () => void
 	onDisconnect?: () => void
@@ -149,6 +168,11 @@ export class CLOBMarketWebSocket {
 							// Handle price_change events
 							if (data.event_type === 'price_change' && data.price_changes) {
 								this.handlePriceChanges(data)
+							}
+
+							// Handle last_trade_price events
+							if (data.event_type === 'last_trade_price' && data.asset_id && data.price) {
+								this.handleLastTradePrice(data)
 							}
 						} catch (parseError) {
 							console.warn('⚠️ CLOB Market: Failed to parse message:', event.data, parseError)
@@ -280,6 +304,34 @@ export class CLOBMarketWebSocket {
 
 			this.callbacks.onPriceUpdate?.(update)
 		})
+	}
+
+	/**
+	 * Handle last_trade_price events from WebSocket message
+	 */
+	private handleLastTradePrice(message: CLOBMarketMessage): void {
+		if (!message.asset_id || !message.price) {
+			return
+		}
+
+		const timestamp = message.timestamp
+			? parseInt(message.timestamp, 10) < 10000000000
+				? parseInt(message.timestamp, 10) * 1000
+				: parseInt(message.timestamp, 10)
+			: Date.now()
+
+		const update: CLOBLastTradePriceUpdate = {
+			asset_id: message.asset_id,
+			price: parseFloat(message.price),
+			size: parseFloat(message.size || '0'),
+			side: message.side || 'BUY',
+			timestamp,
+			transaction_hash: message.transaction_hash,
+			fee_rate_bps: message.fee_rate_bps ? parseFloat(message.fee_rate_bps) : undefined,
+			market: message.market,
+		}
+
+		this.callbacks.onLastTradePriceUpdate?.(update)
 	}
 
 	/**

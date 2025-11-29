@@ -3,14 +3,13 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import {
-	CLOBMarketWebSocket,
-	CLOBMarketPriceUpdate,
-} from '@/lib/polymarket/clob-market-websocket'
+import { CLOBMarketWebSocket } from '@/lib/polymarket/clob-market-websocket'
+import type { CLOBMarketPriceUpdate, CLOBLastTradePriceUpdate } from '@/lib/polymarket/clob-market-websocket'
 
 export interface UseCLOBMarketWebSocketOptions {
 	assetIds: string[] // Asset IDs (not market addresses!)
 	onPriceUpdate?: (update: CLOBMarketPriceUpdate) => void
+	onLastTradePriceUpdate?: (update: CLOBLastTradePriceUpdate) => void
 	onError?: (error: Error) => void
 	autoConnect?: boolean
 }
@@ -26,7 +25,7 @@ export interface UseCLOBMarketWebSocketReturn {
 export function useCLOBMarketWebSocket(
 	options: UseCLOBMarketWebSocketOptions
 ): UseCLOBMarketWebSocketReturn {
-	const { assetIds, onPriceUpdate, onError, autoConnect = false } = options
+	const { assetIds, onPriceUpdate, onLastTradePriceUpdate, onError, autoConnect = false } = options
 
 	const wsRef = useRef<CLOBMarketWebSocket | null>(null)
 	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
@@ -38,6 +37,9 @@ export function useCLOBMarketWebSocket(
 			onPriceUpdate: (update) => {
 				setLastPriceUpdate(update)
 				onPriceUpdate?.(update)
+			},
+			onLastTradePriceUpdate: (update) => {
+				onLastTradePriceUpdate?.(update)
 			},
 			onConnect: () => {
 				setStatus('connected')
