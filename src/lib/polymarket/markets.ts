@@ -10,6 +10,7 @@ import type { MarketRecord } from '../db'
 
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
+const POLYMARKET_API_BASE = 'https://polymarket.com/api'
 
 /**
  * Fetch markets from Polymarket API
@@ -513,5 +514,86 @@ export async function searchMarkets(query: string): Promise<Market[]> {
 export async function getActiveMarkets(): Promise<Market[]> {
 	const markets = await getMarkets()
 	return markets.filter(m => m.active && !m.closed)
+}
+
+/**
+ * Fetch crypto price to beat from Polymarket API
+ * This is the reference price used for crypto up/down markets
+ * 
+ * @param symbol - Crypto symbol (e.g., 'BTC', 'ETH', 'SOL')
+ * @param eventStartTime - ISO timestamp of event start (e.g., '2025-11-30T13:30:00Z')
+ * @param endDate - ISO timestamp of event end (e.g., '2025-11-30T13:45:00Z')
+ * @param variant - Time variant (e.g., 'fifteen' for 15-minute intervals)
+ * @returns The price to beat value, or null if not found
+ */
+export async function fetchCryptoPriceToBeat(
+	symbol: string,
+	eventStartTime: string,
+	endDate: string,
+	variant: string = 'fifteen'
+): Promise<number | null> {
+	try {
+		const url = `${POLYMARKET_API_BASE}/crypto/crypto-price`
+		const params = new URLSearchParams({
+			symbol: symbol.toUpperCase(),
+			eventStartTime,
+			variant,
+			endDate,
+		})
+
+		const fullUrl = `${url}?${params.toString()}`
+		console.log('🌐 Fetching price to beat from:', fullUrl)
+
+		const response = await fetch(fullUrl, {
+			method: 'GET',
+			headers: {
+				'Accept': 'application/json',
+			},
+		})
+
+		if (!response.ok) {
+			const errorText = await response.text().catch(() => '')
+			console.warn(`❌ Failed to fetch price to beat: ${response.status} ${response.statusText}`, errorText)
+			return null
+		}
+
+		const data = await response.json()
+		console.log('📦 Price to beat API response:', data)
+		
+		// The API returns openPrice (price at start of time window) and closePrice (price at end)
+		// The "price to beat" is the openPrice - the reference price at the start of the event
+		const price = 
+			data.openPrice ||  // Primary: price at start of time window (this is the "price to beat")
+			data.price || 
+			data.priceToBeat || 
+			data.initialPrice || 
+			data.startPrice || 
+			data.value ||
+			data.data?.openPrice ||
+			data.data?.price ||
+			data.data?.priceToBeat ||
+			data.result?.openPrice ||
+			data.result?.price ||
+			data.result?.priceToBeat
+		
+		if (typeof price === 'number') {
+			console.log('✅ Price to beat found (openPrice):', price)
+			return price
+		}
+		
+		if (typeof price === 'string') {
+			const parsed = parseFloat(price)
+			if (!isNaN(parsed)) {
+				console.log('✅ Price to beat parsed from string:', parsed)
+				return parsed
+			}
+		}
+
+		console.warn('⚠️ Price to beat data format unexpected. Full response:', JSON.stringify(data, null, 2))
+		return null
+	} catch (error) {
+		console.error('❌ Error fetching crypto price to beat:', error)
+		return null
+	}
 }
 

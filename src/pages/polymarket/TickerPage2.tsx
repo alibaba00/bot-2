@@ -6,7 +6,7 @@ import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { useRTDSMarketWebSocket } from '@/hooks/use-rtds-market-websocket'
 import { usePolymarketWebSocket } from '@/hooks/use-polymarket-websocket'
 import { useCLOBMarketWebSocket } from '@/hooks/use-clob-market-websocket'
-import { fetchMarketBySlugFromGamma, fetchMarketPricesFromClob } from '@/lib/polymarket/markets'
+import { fetchMarketBySlugFromGamma, fetchMarketPricesFromClob, fetchCryptoPriceToBeat } from '@/lib/polymarket/markets'
 import type { Market } from '@/lib/polymarket/types'
 import type { CryptoPriceSource } from '@/lib/polymarket/rtds-websocket'
 import { WS_URLS } from '@/lib/polymarket/websocket'
@@ -72,6 +72,10 @@ export default function TickerPage2() {
 		timestamp: number
 		transaction_hash?: string
 	}>>({})
+
+	// Price to beat (reference price for crypto up/down markets)
+	const [priceToBeat, setPriceToBeat] = useState<number | null>(null)
+	const [priceToBeatLoading, setPriceToBeatLoading] = useState(false)
 
 	// RTDS WebSocket for crypto prices
 	const cryptoWs = useRTDSWebSocket({
@@ -228,7 +232,7 @@ export default function TickerPage2() {
 
 			// Nur aktualisieren, wenn die Asset-ID zu unserem aktuellen Markt gehört
 			if (!currentAssetIds.includes(update.asset_id)) {
-				return // Ignoriere Updates für andere Assets
+					return // Ignoriere Updates für andere Assets
 			}
 
 			setLastTradePrices((prev) => ({
@@ -274,6 +278,58 @@ export default function TickerPage2() {
 						}
 					})
 					setMarketPrices(initialPrices)
+
+					// Fetch price to beat for crypto up/down markets
+					// Extract symbol and timestamps from slug (e.g., "btc-updown-15m-1764509400")
+					// IMPORTANT: Use timestamps from slug, not from market data!
+					// The slug timestamp represents the start of the 15-minute window
+					const slugMatch = defaultSlug.match(/^([a-z]+)-updown-15m-(\d+)$/i)
+					console.log('🔍 Price to Beat Debug:', {
+						slug: defaultSlug,
+						slugMatch: slugMatch ? 'matched' : 'no match',
+						slugTimestamp: slugMatch ? slugMatch[2] : null,
+					})
+					
+					if (slugMatch) {
+						const symbol = slugMatch[1].toUpperCase() // e.g., "BTC"
+						
+						// Calculate timestamps directly from slug (like the website does)
+						// The slug timestamp is in seconds (Unix timestamp)
+						const slugTimestamp = parseInt(slugMatch[2], 10)
+						const startTimestamp = slugTimestamp * 1000 // Convert to milliseconds
+						const endTimestamp = startTimestamp + (15 * 60 * 1000) // Add 15 minutes
+						
+						// Format as ISO strings (UTC)
+						const eventStartTime = new Date(startTimestamp).toISOString()
+						const endDate = new Date(endTimestamp).toISOString()
+						
+						console.log('📊 Fetching price to beat (using slug timestamps):', {
+							symbol,
+							slugTimestamp,
+							eventStartTime,
+							endDate,
+							variant: 'fifteen',
+						})
+						
+						setPriceToBeatLoading(true)
+						try {
+							const priceToBeatValue = await fetchCryptoPriceToBeat(
+								symbol,
+								eventStartTime,
+								endDate,
+								'fifteen'
+							)
+							console.log('✅ Price to beat received:', priceToBeatValue)
+							setPriceToBeat(priceToBeatValue)
+						} catch (error) {
+							console.warn('❌ Failed to fetch price to beat:', error)
+							setPriceToBeat(null)
+						} finally {
+							setPriceToBeatLoading(false)
+						}
+					} else {
+						console.log('⚠️ Slug does not match crypto up/down pattern, skipping price to beat fetch')
+					}
 				} else {
 					setMarketError('Market not found. Please check if the market is active.')
 				}
@@ -622,6 +678,37 @@ export default function TickerPage2() {
 						</div>
 					) : market ? (
 						<div className="space-y-4">
+							{/* Display Price to Beat - Show for crypto up/down markets */}
+							{market.slug.match(/^([a-z]+)-updown-15m-(\d+)$/i) && (
+								<Card className="bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800">
+									<CardContent className="pt-6">
+										<div className="flex items-center justify-between">
+											<div>
+												<div className="text-sm font-semibold text-muted-foreground mb-2">
+													Price to Beat
+												</div>
+												{priceToBeatLoading ? (
+													<Skeleton className="h-8 w-32" />
+												) : priceToBeat !== null ? (
+													<div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+														${priceToBeat.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+													</div>
+												) : (
+													<div className="text-sm text-muted-foreground">
+														Not available
+														{priceToBeat === null && !priceToBeatLoading && (
+															<span className="text-xs ml-2">(Check console for details)</span>
+														)}
+													</div>
+												)}
+											</div>
+											<div className="text-xs text-muted-foreground">
+												Reference price for market resolution
+											</div>
+										</div>
+									</CardContent>
+								</Card>
+							)}
 							{/* Display crypto price from crypto_prices_chainlink if available */}
 							{Object.entries(marketPrices).some(([key]) => key.includes('/')) && (
 								<Card className="bg-blue-50 dark:bg-blue-900/20">
