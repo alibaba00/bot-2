@@ -99,4 +99,3 @@ export interface PlaceOrderResponse {
 	status: OrderStatus
 	message?: string
 }
-

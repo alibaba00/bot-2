@@ -35,11 +35,13 @@ export function useRTDSMarketWebSocket(
 		onPriceUpdate,
 		onActivityUpdate,
 		onError,
-		autoConnect = false,
+		autoConnect = false
 	} = options
 
 	const wsRef = useRef<RTDSMarketWebSocket | null>(null)
-	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
+	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>(
+		'disconnected'
+	)
 	const [lastPriceUpdate, setLastPriceUpdate] = useState<MarketPriceUpdate | null>(null)
 
 	useEffect(() => {
@@ -62,11 +64,14 @@ export function useRTDSMarketWebSocket(
 				console.error('RTDS Market WebSocket error:', error)
 				setStatus('disconnected')
 				onError?.(error)
-			},
+			}
 		})
 
 		// Auto-connect if enabled
-		if (autoConnect && (conditionIds.length > 0 || assetIds.length > 0 || eventSlugs.length > 0)) {
+		if (
+			autoConnect &&
+			(conditionIds.length > 0 || assetIds.length > 0 || eventSlugs.length > 0)
+		) {
 			setStatus('connecting')
 			wsRef.current.connect()
 		}
@@ -155,7 +160,6 @@ export function useRTDSMarketWebSocket(
 		updateAssetIds,
 		updateEventSlugs,
 		status,
-		lastPriceUpdate,
+		lastPriceUpdate
 	}
 }
-

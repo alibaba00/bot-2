@@ -34,7 +34,7 @@ export function loadPolymarketConfig(): PolymarketConfig | null {
 		userId: userId as string,
 		proxyAddress: proxyAddress as string,
 		publicKey: publicKey as string,
-		privateKey: privateKey as string,
+		privateKey: privateKey as string
 	}
 }
 
@@ -45,11 +45,16 @@ export function validateConfig(config: PolymarketConfig | null): ConfigValidatio
 	const result: ConfigValidationResult = {
 		valid: false,
 		missing: [],
-		errors: [],
+		errors: []
 	}
 
 	if (!config) {
-		result.missing = ['VITE_USER_ID', 'VITE_POLYMARKET_PROXY_ADDRESS', 'VITE_PUBLIC_KEY', 'VITE_PRIVATE_KEY']
+		result.missing = [
+			'VITE_USER_ID',
+			'VITE_POLYMARKET_PROXY_ADDRESS',
+			'VITE_PUBLIC_KEY',
+			'VITE_PRIVATE_KEY'
+		]
 		result.errors.push('Configuration is missing. Please check your .env file.')
 		return result
 	}
@@ -94,11 +99,10 @@ export function getValidatedConfig(): PolymarketConfig {
 		const errorMessage = [
 			'Polymarket configuration is invalid:',
 			...validation.missing.map((key) => `- Missing: ${key}`),
-			...validation.errors,
+			...validation.errors
 		].join('\n')
 		throw new Error(errorMessage)
 	}
 
 	return config!
 }
-

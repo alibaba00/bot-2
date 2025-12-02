@@ -14,31 +14,29 @@ import {
 	SidebarRail
 } from '@/components/ui/sidebar'
 
-
-export function AppSidebar({ data, ...props }: { data: any } & React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+	data,
+	...props
+}: { data: any } & React.ComponentProps<typeof Sidebar>) {
 	return (
 		<Sidebar collapsible='icon' {...props}>
 			{data.teams && (
-			<SidebarHeader>
-				<TeamSwitcher teams={data.teams} />
-			</SidebarHeader>
+				<SidebarHeader>
+					<TeamSwitcher teams={data.teams} />
+				</SidebarHeader>
 			)}
 
 			<SidebarContent>
-				{data.navMain && (
-					<NavMain items={data.navMain} />
-				)}
-				{data.projects && (
-					<NavProjects projects={data.projects} />
-				)}
+				{data.navMain && <NavMain items={data.navMain} />}
+				{data.projects && <NavProjects projects={data.projects} />}
 			</SidebarContent>
 
 			{data.user && (
-			<SidebarFooter>
-				<NavUser user={data.user} />
-			</SidebarFooter>
+				<SidebarFooter>
+					<NavUser user={data.user} />
+				</SidebarFooter>
 			)}
-			
+
 			<SidebarRail />
 		</Sidebar>
 	)

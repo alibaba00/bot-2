@@ -72,7 +72,10 @@ export class RTDSMarketWebSocket {
 				this.ws.onmessage = null
 				this.ws.onerror = null
 				this.ws.onclose = null
-				if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+				if (
+					this.ws.readyState === WebSocket.OPEN ||
+					this.ws.readyState === WebSocket.CONNECTING
+				) {
 					this.ws.close(1000, 'Force reconnect')
 				}
 				this.ws = null
@@ -117,7 +120,10 @@ export class RTDSMarketWebSocket {
 			this.ws.onmessage = (event) => {
 				try {
 					// Handle empty or whitespace-only messages
-					if (!event.data || (typeof event.data === 'string' && event.data.trim() === '')) {
+					if (
+						!event.data ||
+						(typeof event.data === 'string' && event.data.trim() === '')
+					) {
 						return
 					}
 
@@ -161,9 +167,10 @@ export class RTDSMarketWebSocket {
 				this.isConnecting = false
 				this.isConnected = false
 
-				const errorMessage = error instanceof Error
-					? error.message
-					: 'RTDS Market WebSocket connection error'
+				const errorMessage =
+					error instanceof Error
+						? error.message
+						: 'RTDS Market WebSocket connection error'
 
 				this.callbacks.onError?.(new Error(errorMessage))
 			}
@@ -172,7 +179,7 @@ export class RTDSMarketWebSocket {
 				console.log('RTDS Market: 🔌 WebSocket closed:', {
 					code: event.code,
 					reason: event.reason,
-					wasClean: event.wasClean,
+					wasClean: event.wasClean
 				})
 
 				this.isConnecting = false
@@ -186,7 +193,9 @@ export class RTDSMarketWebSocket {
 					this.reconnectAttempts++
 					setTimeout(() => {
 						if (this.shouldReconnect) {
-							console.log(`RTDS Market: 🔄 Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+							console.log(
+								`RTDS Market: 🔄 Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+							)
 							this.connect()
 						}
 					}, this.reconnectDelay)
@@ -219,7 +228,7 @@ export class RTDSMarketWebSocket {
 				subscriptions.push({
 					topic: 'activity',
 					type: 'orders_matched',
-					filters: JSON.stringify({ event_slug: slug }),
+					filters: JSON.stringify({ event_slug: slug })
 				})
 			})
 		}
@@ -246,7 +255,7 @@ export class RTDSMarketWebSocket {
 			subscriptions.push({
 				topic: 'crypto_prices_chainlink',
 				type: 'update',
-				filters: '{"symbol":"btc/usd"}',
+				filters: '{"symbol":"btc/usd"}'
 			})
 		}
 
@@ -254,7 +263,7 @@ export class RTDSMarketWebSocket {
 		if (subscriptions.length > 0) {
 			const subscription = {
 				action: 'subscribe',
-				subscriptions: subscriptions,
+				subscriptions: subscriptions
 			}
 
 			try {
@@ -267,7 +276,9 @@ export class RTDSMarketWebSocket {
 				this.callbacks.onError?.(new Error('Failed to subscribe to market data'))
 			}
 		} else {
-			console.warn('RTDS Market: ⚠️ No subscriptions to send (no event slugs, condition IDs, or asset IDs)')
+			console.warn(
+				'RTDS Market: ⚠️ No subscriptions to send (no event slugs, condition IDs, or asset IDs)'
+			)
 		}
 	}
 
@@ -283,19 +294,19 @@ export class RTDSMarketWebSocket {
 		// Handle crypto_prices_chainlink topic - real-time crypto price updates
 		if (data.topic === 'crypto_prices_chainlink' && data.type === 'update' && data.payload) {
 			const payload = data.payload
-			
+
 			// Extract price from Chainlink crypto price payload
 			// Common fields: price, value, lastPrice, price_usd
 			const price = payload.price || payload.value || payload.lastPrice || payload.price_usd
-console.log('price:', price, payload)
+			console.log('price:', price, payload)
 			const symbol = payload.symbol || payload.pair || payload.asset
-			
+
 			if (price !== undefined) {
 				const update: MarketPriceUpdate = {
 					asset_id: symbol,
 					price: typeof price === 'number' ? price : parseFloat(String(price)),
 					timestamp: payload.timestamp || data.timestamp || Date.now(),
-					outcome: symbol,
+					outcome: symbol
 				}
 
 				// console.log('RTDS Market: 📊 Crypto price update (Chainlink):', update)
@@ -310,13 +321,13 @@ console.log('price:', price, payload)
 		// Handle activity topic - orders_matched (primary source for real-time prices)
 		if (data.topic === 'activity' && data.type === 'orders_matched' && data.payload) {
 			const payload = data.payload
-			
+
 			// Extract price from matched order
 			// The payload structure may vary, try different fields
 			const price = payload.price || payload.matched_price || payload.execution_price
 			const assetId = payload.asset_id || payload.token_id || payload.outcome_id
 			const conditionId = payload.condition_id || payload.market_id
-			
+
 			if (price !== undefined && assetId) {
 				const update: MarketPriceUpdate = {
 					condition_id: conditionId,
@@ -324,7 +335,7 @@ console.log('price:', price, payload)
 					token_id: assetId,
 					price: typeof price === 'number' ? price : parseFloat(price),
 					timestamp: payload.timestamp || data.timestamp || Date.now(),
-					outcome: payload.outcome || payload.side,
+					outcome: payload.outcome || payload.side
 				}
 
 				console.log('RTDS Market: 📊 Order matched (price update):', update)
@@ -340,7 +351,9 @@ console.log('price:', price, payload)
 
 		// Check for market price updates from other topics
 		if (
-			(data.topic === 'market_prices' || data.topic === 'markets' || data.topic === 'ticker') &&
+			(data.topic === 'market_prices' ||
+				data.topic === 'markets' ||
+				data.topic === 'ticker') &&
 			data.payload &&
 			typeof data.payload === 'object'
 		) {
@@ -351,11 +364,12 @@ console.log('price:', price, payload)
 				const update: MarketPriceUpdate = {
 					market_id: payload.market_id || payload.marketId,
 					condition_id: payload.condition_id || payload.conditionId,
-					asset_id: payload.asset_id || payload.assetId || payload.token_id || payload.tokenId,
+					asset_id:
+						payload.asset_id || payload.assetId || payload.token_id || payload.tokenId,
 					token_id: payload.token_id || payload.tokenId,
 					price: payload.price || payload.value,
 					timestamp: payload.timestamp || data.timestamp || Date.now(),
-					outcome: payload.outcome,
+					outcome: payload.outcome
 				}
 
 				console.log('RTDS Market: 📊 Price update:', update)
@@ -368,7 +382,7 @@ console.log('price:', price, payload)
 			console.log('RTDS Market: 📨 Received message:', {
 				topic: data.topic,
 				type: data.type,
-				hasPayload: !!data.payload,
+				hasPayload: !!data.payload
 			})
 		}
 	}
@@ -394,7 +408,10 @@ console.log('price:', price, payload)
 			this.ws.onerror = null
 			this.ws.onclose = null
 
-			if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+			if (
+				this.ws.readyState === WebSocket.OPEN ||
+				this.ws.readyState === WebSocket.CONNECTING
+			) {
 				this.ws.close(1000, 'Manual disconnect')
 			}
 			this.ws = null
@@ -436,10 +453,10 @@ console.log('price:', price, payload)
 	 */
 	updateConditionIds(conditionIds: string[]): void {
 		// Check if values actually changed
-		const changed = 
+		const changed =
 			conditionIds.length !== this.conditionIds.length ||
 			conditionIds.some((id, i) => id !== this.conditionIds[i])
-		
+
 		if (!changed) {
 			return // No change, skip update
 		}
@@ -455,10 +472,10 @@ console.log('price:', price, payload)
 	 */
 	updateAssetIds(assetIds: string[]): void {
 		// Check if values actually changed
-		const changed = 
+		const changed =
 			assetIds.length !== this.assetIds.length ||
 			assetIds.some((id, i) => id !== this.assetIds[i])
-		
+
 		if (!changed) {
 			return // No change, skip update
 		}
@@ -474,10 +491,10 @@ console.log('price:', price, payload)
 	 */
 	updateEventSlugs(eventSlugs: string[]): void {
 		// Check if values actually changed
-		const changed = 
+		const changed =
 			eventSlugs.length !== this.eventSlugs.length ||
 			eventSlugs.some((slug, i) => slug !== this.eventSlugs[i])
-		
+
 		if (!changed) {
 			return // No change, skip update
 		}
@@ -504,7 +521,7 @@ console.log('price:', price, payload)
 				subscriptions.push({
 					topic: 'activity',
 					type: 'orders_matched',
-					filters: JSON.stringify({ event_slug: slug }),
+					filters: JSON.stringify({ event_slug: slug })
 				})
 			})
 		}
@@ -519,7 +536,7 @@ console.log('price:', price, payload)
 		try {
 			const unsubscription = {
 				action: 'unsubscribe',
-				subscriptions: subscriptions,
+				subscriptions: subscriptions
 			}
 			this.ws.send(JSON.stringify(unsubscription))
 			console.log('RTDS Market: ✅ Unsubscribed')
@@ -559,4 +576,3 @@ console.log('price:', price, payload)
 		return 'disconnected'
 	}
 }
-

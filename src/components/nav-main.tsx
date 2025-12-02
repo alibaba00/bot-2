@@ -29,7 +29,7 @@ export function NavMain({
 		}[]
 	}[]
 }) {
-	const location = useLocation();
+	const location = useLocation()
 	return (
 		<SidebarGroup>
 			<SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -51,7 +51,7 @@ export function NavMain({
 							<CollapsibleContent>
 								<SidebarMenuSub>
 									{item.items?.map((subItem) => {
-										const isActive = location.pathname === subItem.url;
+										const isActive = location.pathname === subItem.url
 										return (
 											<SidebarMenuSubItem key={subItem.title}>
 												<SidebarMenuSubButton asChild isActive={isActive}>
@@ -60,7 +60,7 @@ export function NavMain({
 													</Link>
 												</SidebarMenuSubButton>
 											</SidebarMenuSubItem>
-										);
+										)
 									})}
 								</SidebarMenuSub>
 							</CollapsibleContent>

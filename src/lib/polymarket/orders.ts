@@ -14,11 +14,12 @@ let OrderTypeEnum: any = null
 
 async function loadEnums() {
 	if (SideEnum && OrderTypeEnum) return
-	
-	const isElectron = typeof window !== 'undefined' && 
+
+	const isElectron =
+		typeof window !== 'undefined' &&
 		(window as any).navigator?.userAgent?.includes('Electron') &&
 		(window as any).require
-	
+
 	if (isElectron) {
 		// Use require() in Electron for CommonJS modules
 		const nodeRequire = (window as any).require
@@ -43,14 +44,14 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 		// Get market to find token ID
 		const markets = await import('./markets')
 		const market = await markets.fetchMarket(params.marketId)
-		
+
 		if (!market) {
 			throw new Error(`Market not found: ${params.marketId}`)
 		}
 
 		// Find the outcome token ID
 		const outcome = market.outcomes.find(
-			o => o.title.toUpperCase() === params.outcome.toUpperCase()
+			(o) => o.title.toUpperCase() === params.outcome.toUpperCase()
 		)
 
 		if (!outcome) {
@@ -59,22 +60,17 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 
 		// Load enums if needed
 		await loadEnums()
-		
+
 		// Create order using CLOB client
 		const userOrder = {
 			tokenID: outcome.id,
 			price: params.price,
 			size: params.quantity,
-			side: params.side === 'BUY' ? SideEnum.BUY : SideEnum.SELL,
+			side: params.side === 'BUY' ? SideEnum.BUY : SideEnum.SELL
 		}
 
 		// Create and post the order
-		const result = await client.createAndPostOrder(
-			userOrder,
-			{},
-			OrderTypeEnum.GTC,
-			false
-		)
+		const result = await client.createAndPostOrder(userOrder, {}, OrderTypeEnum.GTC, false)
 
 		// Store order in database
 		const order: Order = {
@@ -86,7 +82,7 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 			quantity: params.quantity,
 			status: 'PENDING',
 			createdAt: new Date().toISOString(),
-			remainingQuantity: params.quantity,
+			remainingQuantity: params.quantity
 		}
 
 		await saveOrder(order)
@@ -94,7 +90,7 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 		return {
 			orderId: order.id,
 			status: 'PENDING',
-			message: 'Order placed successfully',
+			message: 'Order placed successfully'
 		}
 	} catch (error) {
 		console.error('Error placing order:', error)
@@ -108,10 +104,10 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 export async function cancelOrder(orderId: string): Promise<void> {
 	try {
 		const client = await getOrInitializeClient()
-		
+
 		// Get order from database to find order hash
 		const orderRecord = await db.orders.get(orderId)
-		
+
 		if (!orderRecord) {
 			throw new Error(`Order not found: ${orderId}`)
 		}
@@ -120,13 +116,13 @@ export async function cancelOrder(orderId: string): Promise<void> {
 		// Note: The actual implementation depends on how orders are stored
 		// For now, we'll use cancelOrder with order payload
 		await client.cancelOrder({
-			order_id: orderId,
+			order_id: orderId
 		})
 
 		// Update order status in database
 		await db.orders.update(orderId, {
 			status: 'CANCELLED',
-			updatedAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString()
 		})
 	} catch (error) {
 		console.error('Error cancelling order:', error)
@@ -143,13 +139,10 @@ export async function cancelAllOrders(): Promise<void> {
 		await client.cancelAll()
 
 		// Update all open orders in database
-		await db.orders
-			.where('status')
-			.anyOf(['PENDING', 'OPEN'])
-			.modify({
-				status: 'CANCELLED',
-				updatedAt: new Date().toISOString(),
-			})
+		await db.orders.where('status').anyOf(['PENDING', 'OPEN']).modify({
+			status: 'CANCELLED',
+			updatedAt: new Date().toISOString()
+		})
 	} catch (error) {
 		console.error('Error cancelling all orders:', error)
 		throw error
@@ -169,9 +162,13 @@ export async function getOpenOrders(): Promise<Order[]> {
 		console.log('Open orders response keys:', Object.keys(response || {}))
 
 		// Handle pagination response - check different possible response structures
-		const ordersData = response.data || response.results || response.orders || (Array.isArray(response) ? response : [])
+		const ordersData =
+			response.data ||
+			response.results ||
+			response.orders ||
+			(Array.isArray(response) ? response : [])
 		console.log('Orders data extracted:', ordersData.length, 'orders')
-		
+
 		// Transform API response to our Order type
 		const orders: Order[] = ordersData.map((o: any, index: number) => {
 			console.log(`Parsing order ${index}:`, {
@@ -183,14 +180,20 @@ export async function getOpenOrders(): Promise<Order[]> {
 				remaining_size: o.remaining_size,
 				side: o.side
 			})
-			
+
 			// Prices and sizes might be strings with decimals, need to parse correctly
 			// Try multiple possible field names for price
-			const price = typeof o.price === 'string' ? parseFloat(o.price) : 
-				(typeof o.price === 'number' ? o.price : 
-				(typeof o.price_raw === 'string' ? parseFloat(o.price_raw) :
-				(typeof o.price_raw === 'number' ? o.price_raw : 0)))
-			
+			const price =
+				typeof o.price === 'string'
+					? parseFloat(o.price)
+					: typeof o.price === 'number'
+						? o.price
+						: typeof o.price_raw === 'string'
+							? parseFloat(o.price_raw)
+							: typeof o.price_raw === 'number'
+								? o.price_raw
+								: 0
+
 			// Try multiple possible field names for size/quantity
 			// NOTE: Polymarket API uses 'original_size' for the original order size
 			let size = 0
@@ -215,7 +218,7 @@ export async function getOpenOrders(): Promise<Order[]> {
 			} else if (typeof o.total_size === 'number') {
 				size = o.total_size
 			}
-			
+
 			// Try multiple possible field names for filled size
 			// NOTE: Polymarket API uses 'size_matched' for the filled/matched size
 			let filledSize = 0
@@ -236,7 +239,7 @@ export async function getOpenOrders(): Promise<Order[]> {
 			} else if (typeof o.filled === 'number') {
 				filledSize = o.filled
 			}
-			
+
 			// Calculate remaining size: original_size - size_matched
 			// Try multiple possible field names for remaining size, otherwise calculate it
 			let remainingSize = 0
@@ -260,7 +263,7 @@ export async function getOpenOrders(): Promise<Order[]> {
 				// Calculate: original_size - size_matched
 				remainingSize = size - filledSize
 			}
-			
+
 			console.log(`Order ${index} parsed values:`, {
 				price,
 				size,
@@ -277,12 +280,12 @@ export async function getOpenOrders(): Promise<Order[]> {
 			} else if (!createdAt) {
 				createdAt = new Date().toISOString()
 			}
-			
+
 			let updatedAt = o.updated_at || o.updatedAt
 			if (updatedAt && typeof updatedAt === 'number') {
 				updatedAt = new Date(updatedAt * 1000).toISOString()
 			}
-			
+
 			let expiresAt = o.expires_at || o.expiresAt
 			if (expiresAt && typeof expiresAt === 'number') {
 				expiresAt = new Date(expiresAt * 1000).toISOString()
@@ -294,7 +297,7 @@ export async function getOpenOrders(): Promise<Order[]> {
 				id: o.order_id || o.id || o.hash,
 				marketId: o.market || o.condition_id || o.conditionId,
 				outcome: o.outcome || o.outcomeTitle || '',
-				side: (o.side === 'BUY' || o.side === 'buy' || o.side === 0) ? 'BUY' : 'SELL',
+				side: o.side === 'BUY' || o.side === 'buy' || o.side === 0 ? 'BUY' : 'SELL',
 				price: price,
 				quantity: size,
 				status: mapOrderStatus(o.status),
@@ -302,7 +305,7 @@ export async function getOpenOrders(): Promise<Order[]> {
 				updatedAt: updatedAt,
 				expiresAt: expiresAt,
 				filledQuantity: filledSize,
-				remainingQuantity: remainingSize,
+				remainingQuantity: remainingSize
 			}
 		})
 
@@ -348,7 +351,7 @@ export async function getOrder(orderId: string): Promise<Order | null> {
 			updatedAt: orderData.updated_at,
 			expiresAt: orderData.expires_at,
 			filledQuantity: parseFloat(orderData.filled_size || '0'),
-			remainingQuantity: parseFloat(orderData.remaining_size || orderData.size || '0'),
+			remainingQuantity: parseFloat(orderData.remaining_size || orderData.size || '0')
 		}
 
 		await saveOrder(order)
@@ -365,7 +368,7 @@ export async function getOrder(orderId: string): Promise<Order | null> {
 export async function getCachedOrders(): Promise<Order[]> {
 	try {
 		const records = await db.orders.orderBy('createdAt').reverse().toArray()
-		return records.map(r => {
+		return records.map((r) => {
 			const { syncedAt, ...order } = r
 			return order
 		})
@@ -382,7 +385,7 @@ async function saveOrder(order: Order): Promise<void> {
 	try {
 		const record: OrderRecord = {
 			...order,
-			syncedAt: Date.now(),
+			syncedAt: Date.now()
 		}
 		await db.orders.put(record)
 	} catch (error) {
@@ -395,9 +398,9 @@ async function saveOrder(order: Order): Promise<void> {
  */
 async function syncOrders(orders: Order[]): Promise<void> {
 	try {
-		const records: OrderRecord[] = orders.map(order => ({
+		const records: OrderRecord[] = orders.map((order) => ({
 			...order,
-			syncedAt: Date.now(),
+			syncedAt: Date.now()
 		}))
 		await db.orders.bulkPut(records)
 	} catch (error) {
@@ -413,13 +416,13 @@ function mapOrderStatus(status: string | number): Order['status'] {
 		// Handle numeric status codes if needed
 		return 'PENDING'
 	}
-	
+
 	const upper = status.toUpperCase()
 	if (upper.includes('LIVE') || upper.includes('OPEN') || upper.includes('PENDING')) return 'OPEN'
-	if (upper.includes('FILLED') || upper.includes('EXECUTED') || upper.includes('COMPLETE')) return 'FILLED'
+	if (upper.includes('FILLED') || upper.includes('EXECUTED') || upper.includes('COMPLETE'))
+		return 'FILLED'
 	if (upper.includes('CANCELLED') || upper.includes('CANCELED')) return 'CANCELLED'
 	if (upper.includes('EXPIRED')) return 'EXPIRED'
 	if (upper.includes('REJECTED')) return 'REJECTED'
 	return 'PENDING'
 }
-

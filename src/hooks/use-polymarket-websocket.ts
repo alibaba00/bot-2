@@ -3,7 +3,12 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { PolymarketWebSocket, WebSocketPriceUpdate, WebSocketOrderBookUpdate, WS_URLS } from '@/lib/polymarket/websocket'
+import {
+	PolymarketWebSocket,
+	WebSocketPriceUpdate,
+	WebSocketOrderBookUpdate,
+	WS_URLS
+} from '@/lib/polymarket/websocket'
 
 export interface UsePolymarketWebSocketOptions {
 	assetIds: string[]
@@ -26,36 +31,51 @@ export interface UsePolymarketWebSocketReturn {
 export function usePolymarketWebSocket(
 	options: UsePolymarketWebSocketOptions
 ): UsePolymarketWebSocketReturn {
-	const { assetIds, onPriceUpdate, onOrderBookUpdate, onError, autoConnect = true, wsUrl } = options
+	const {
+		assetIds,
+		onPriceUpdate,
+		onOrderBookUpdate,
+		onError,
+		autoConnect = true,
+		wsUrl
+	} = options
 
 	const wsRef = useRef<PolymarketWebSocket | null>(null)
-	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
+	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>(
+		'disconnected'
+	)
 	const [lastPriceUpdate, setLastPriceUpdate] = useState<WebSocketPriceUpdate | null>(null)
-	const [lastOrderBookUpdate, setLastOrderBookUpdate] = useState<WebSocketOrderBookUpdate | null>(null)
+	const [lastOrderBookUpdate, setLastOrderBookUpdate] = useState<WebSocketOrderBookUpdate | null>(
+		null
+	)
 
 	useEffect(() => {
 		// Create WebSocket instance with specific URL
-		wsRef.current = new PolymarketWebSocket(assetIds, {
-			onPriceUpdate: (update) => {
-				setLastPriceUpdate(update)
-				onPriceUpdate?.(update)
+		wsRef.current = new PolymarketWebSocket(
+			assetIds,
+			{
+				onPriceUpdate: (update) => {
+					setLastPriceUpdate(update)
+					onPriceUpdate?.(update)
+				},
+				onOrderBookUpdate: (update) => {
+					setLastOrderBookUpdate(update)
+					onOrderBookUpdate?.(update)
+				},
+				onConnect: () => {
+					setStatus('connected')
+				},
+				onDisconnect: () => {
+					setStatus('disconnected')
+				},
+				onError: (error) => {
+					console.error('WebSocket error:', error)
+					setStatus('disconnected')
+					onError?.(error)
+				}
 			},
-			onOrderBookUpdate: (update) => {
-				setLastOrderBookUpdate(update)
-				onOrderBookUpdate?.(update)
-			},
-			onConnect: () => {
-				setStatus('connected')
-			},
-			onDisconnect: () => {
-				setStatus('disconnected')
-			},
-			onError: (error) => {
-				console.error('WebSocket error:', error)
-				setStatus('disconnected')
-				onError?.(error)
-			},
-		}, wsUrl) // Pass the specific URL to the constructor
+			wsUrl
+		) // Pass the specific URL to the constructor
 
 		// Auto-connect if enabled
 		if (autoConnect && assetIds.length > 0) {
@@ -122,7 +142,6 @@ export function usePolymarketWebSocket(
 		updateAssetIds,
 		status,
 		lastPriceUpdate,
-		lastOrderBookUpdate,
+		lastOrderBookUpdate
 	}
 }
-

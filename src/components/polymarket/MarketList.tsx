@@ -11,9 +11,9 @@ interface MarketListProps {
 export function MarketList({ markets, loading, onMarketSelect }: MarketListProps) {
 	if (loading) {
 		return (
-			<div className="space-y-4">
+			<div className='space-y-4'>
 				{[1, 2, 3].map((i) => (
-					<Skeleton key={i} className="h-24 w-full" />
+					<Skeleton key={i} className='h-24 w-full' />
 				))}
 			</div>
 		)
@@ -21,14 +21,14 @@ export function MarketList({ markets, loading, onMarketSelect }: MarketListProps
 
 	if (markets.length === 0) {
 		return (
-			<div className="text-center py-8 text-muted-foreground">
+			<div className='text-center py-8 text-muted-foreground'>
 				<p>No markets available</p>
 			</div>
 		)
 	}
 
 	return (
-		<div className="space-y-4">
+		<div className='space-y-4'>
 			{markets.map((market) => (
 				<MarketCard
 					key={market.id}
@@ -39,4 +39,3 @@ export function MarketList({ markets, loading, onMarketSelect }: MarketListProps
 		</div>
 	)
 }
-

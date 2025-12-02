@@ -26,9 +26,9 @@ export function OrderList({ orders, loading, showCancel = true }: OrderListProps
 
 	if (loading) {
 		return (
-			<div className="space-y-2">
+			<div className='space-y-2'>
 				{[1, 2, 3].map((i) => (
-					<Skeleton key={i} className="h-16 w-full" />
+					<Skeleton key={i} className='h-16 w-full' />
 				))}
 			</div>
 		)
@@ -36,52 +36,49 @@ export function OrderList({ orders, loading, showCancel = true }: OrderListProps
 
 	if (orders.length === 0) {
 		return (
-			<div className="text-center py-8 text-muted-foreground">
+			<div className='text-center py-8 text-muted-foreground'>
 				<p>No orders found</p>
 			</div>
 		)
 	}
 
 	return (
-		<div className="space-y-2">
+		<div className='space-y-2'>
 			{orders.map((order) => (
 				<div
 					key={order.id}
-					className="flex items-center justify-between p-3 border rounded-lg"
-				>
-					<div className="flex-1">
-						<div className="flex items-center gap-2">
+					className='flex items-center justify-between p-3 border rounded-lg'>
+					<div className='flex-1'>
+						<div className='flex items-center gap-2'>
 							<span
 								className={`font-semibold ${
 									order.side === 'BUY' ? 'text-green-600' : 'text-red-600'
-								}`}
-							>
+								}`}>
 								{order.side}
 							</span>
-							<span className="text-sm text-muted-foreground">
-								{order.outcome}
-							</span>
+							<span className='text-sm text-muted-foreground'>{order.outcome}</span>
 						</div>
-						<div className="text-sm text-muted-foreground mt-1">
-							Price: {(order.price * 100).toFixed(1)}% | Qty: {order.quantity.toFixed(2)}
-							{order.remainingQuantity !== undefined && order.remainingQuantity !== order.quantity && (
-								<span className="ml-2">
-									(Remaining: {order.remainingQuantity.toFixed(2)})
-								</span>
-							)}
+						<div className='text-sm text-muted-foreground mt-1'>
+							Price: {(order.price * 100).toFixed(1)}% | Qty:{' '}
+							{order.quantity.toFixed(2)}
+							{order.remainingQuantity !== undefined &&
+								order.remainingQuantity !== order.quantity && (
+									<span className='ml-2'>
+										(Remaining: {order.remainingQuantity.toFixed(2)})
+									</span>
+								)}
 						</div>
-						<div className="text-xs text-muted-foreground mt-1">
+						<div className='text-xs text-muted-foreground mt-1'>
 							Status: {order.status} | {new Date(order.createdAt).toLocaleString()}
 						</div>
 					</div>
 					{showCancel && (order.status === 'OPEN' || order.status === 'PENDING') && (
 						<Button
-							variant="ghost"
-							size="sm"
+							variant='ghost'
+							size='sm'
 							onClick={() => handleCancel(order.id)}
-							className="ml-2"
-						>
-							<X className="h-4 w-4" />
+							className='ml-2'>
+							<X className='h-4 w-4' />
 						</Button>
 					)}
 				</div>
@@ -89,4 +86,3 @@ export function OrderList({ orders, loading, showCancel = true }: OrderListProps
 		</div>
 	)
 }
-

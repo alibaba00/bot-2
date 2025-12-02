@@ -76,7 +76,7 @@ const initialState = {
 	walletError: null,
 	transactions: [],
 	transactionsLoading: false,
-	transactionsError: null,
+	transactionsError: null
 }
 
 export const usePolymarketStore = create<PolymarketState>((set, get) => ({
@@ -89,12 +89,12 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 			const status = getConnectionStatus()
 			set({
 				connectionStatus: status.isConnected ? 'connected' : 'error',
-				connectionError: status.error?.message || null,
+				connectionError: status.error?.message || null
 			})
 		} catch (error) {
 			set({
 				connectionStatus: 'error',
-				connectionError: error instanceof Error ? error.message : String(error),
+				connectionError: error instanceof Error ? error.message : String(error)
 			})
 		}
 	},
@@ -108,7 +108,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		const status = getConnectionStatus()
 		set({
 			connectionStatus: connected ? 'connected' : 'error',
-			connectionError: status.error?.message || null,
+			connectionError: status.error?.message || null
 		})
 	},
 
@@ -120,7 +120,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		} catch (error) {
 			set({
 				marketsError: error instanceof Error ? error.message : String(error),
-				marketsLoading: false,
+				marketsLoading: false
 			})
 		}
 	},
@@ -146,7 +146,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		} catch (error) {
 			set({
 				ordersError: error instanceof Error ? error.message : String(error),
-				ordersLoading: false,
+				ordersLoading: false
 			})
 		}
 	},
@@ -160,7 +160,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		} catch (error) {
 			set({
 				ordersError: error instanceof Error ? error.message : String(error),
-				ordersLoading: false,
+				ordersLoading: false
 			})
 			throw error
 		}
@@ -175,7 +175,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		} catch (error) {
 			set({
 				ordersError: error instanceof Error ? error.message : String(error),
-				ordersLoading: false,
+				ordersLoading: false
 			})
 			throw error
 		}
@@ -190,7 +190,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		} catch (error) {
 			set({
 				ordersError: error instanceof Error ? error.message : String(error),
-				ordersLoading: false,
+				ordersLoading: false
 			})
 			throw error
 		}
@@ -204,7 +204,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		} catch (error) {
 			set({
 				walletError: error instanceof Error ? error.message : String(error),
-				walletLoading: false,
+				walletLoading: false
 			})
 		}
 	},
@@ -217,7 +217,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		} catch (error) {
 			set({
 				walletError: error instanceof Error ? error.message : String(error),
-				walletLoading: false,
+				walletLoading: false
 			})
 		}
 	},
@@ -230,14 +230,14 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		} catch (error) {
 			set({
 				transactionsError: error instanceof Error ? error.message : String(error),
-				transactionsLoading: false,
+				transactionsLoading: false
 			})
 		}
 	},
 
 	reset: () => {
 		set({ ...initialState })
-	},
+	}
 }))
 
 // Helper hooks for common use cases
@@ -249,7 +249,7 @@ export function usePolymarketConnection() {
 			isConnected: state.connectionStatus === 'connected',
 			connect: state.connect,
 			disconnect: state.disconnect,
-			refresh: state.refreshConnection,
+			refresh: state.refreshConnection
 		}))
 	)
 }
@@ -263,7 +263,7 @@ export function usePolymarketMarkets() {
 			selectedMarket: state.selectedMarket,
 			fetchMarkets: state.fetchMarkets,
 			selectMarket: state.selectMarket,
-			searchMarkets: state.searchMarkets,
+			searchMarkets: state.searchMarkets
 		}))
 	)
 }
@@ -277,7 +277,7 @@ export function usePolymarketOrders() {
 			fetchOrders: state.fetchOrders,
 			placeOrder: state.placeOrder,
 			cancelOrder: state.cancelOrder,
-			cancelAllOrders: state.cancelAllOrders,
+			cancelAllOrders: state.cancelAllOrders
 		}))
 	)
 }
@@ -290,7 +290,7 @@ export function usePolymarketWallet() {
 			loading: state.walletLoading,
 			error: state.walletError,
 			fetchWallet: state.fetchWallet,
-			fetchAccountInfo: state.fetchAccountInfo,
+			fetchAccountInfo: state.fetchAccountInfo
 		}))
 	)
 }
@@ -301,8 +301,7 @@ export function usePolymarketTransactions() {
 			transactions: state.transactions,
 			loading: state.transactionsLoading,
 			error: state.transactionsError,
-			fetchTransactions: state.fetchTransactions,
+			fetchTransactions: state.fetchTransactions
 		}))
 	)
 }
-

@@ -3,7 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue
+} from '@/components/ui/select'
 import type { PlaceOrderParams } from '@/lib/polymarket/types'
 import { usePolymarketOrders, usePolymarketMarkets } from '@/lib/polymarket/store'
 
@@ -16,7 +22,7 @@ interface OrderFormProps {
 export function OrderForm({ marketId, onSuccess, onCancel }: OrderFormProps) {
 	const { placeOrder } = usePolymarketOrders()
 	const { markets, selectedMarket } = usePolymarketMarkets()
-	
+
 	const [side, setSide] = useState<'BUY' | 'SELL'>('BUY')
 	const [outcome, setOutcome] = useState<'YES' | 'NO'>('YES')
 	const [price, setPrice] = useState<string>('')
@@ -24,7 +30,7 @@ export function OrderForm({ marketId, onSuccess, onCancel }: OrderFormProps) {
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 
-	const market = selectedMarket || markets.find(m => m.id === marketId)
+	const market = selectedMarket || markets.find((m) => m.id === marketId)
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault()
@@ -55,12 +61,12 @@ export function OrderForm({ marketId, onSuccess, onCancel }: OrderFormProps) {
 				outcome,
 				side,
 				price: priceNum,
-				quantity: quantityNum,
+				quantity: quantityNum
 			}
 
 			await placeOrder(params)
 			onSuccess?.()
-			
+
 			// Reset form
 			setPrice('')
 			setQuantity('')
@@ -82,8 +88,8 @@ export function OrderForm({ marketId, onSuccess, onCancel }: OrderFormProps) {
 		)
 	}
 
-	const yesOutcome = market.outcomes.find(o => o.title.toUpperCase().includes('YES'))
-	const noOutcome = market.outcomes.find(o => o.title.toUpperCase().includes('NO'))
+	const yesOutcome = market.outcomes.find((o) => o.title.toUpperCase().includes('YES'))
+	const noOutcome = market.outcomes.find((o) => o.title.toUpperCase().includes('NO'))
 
 	return (
 		<Card>
@@ -92,77 +98,91 @@ export function OrderForm({ marketId, onSuccess, onCancel }: OrderFormProps) {
 				<CardDescription>{market.question}</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<form onSubmit={handleSubmit} className="space-y-4">
+				<form onSubmit={handleSubmit} className='space-y-4'>
 					{error && (
-						<div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+						<div className='p-3 text-sm text-destructive bg-destructive/10 rounded-md'>
 							{error}
 						</div>
 					)}
 
-					<div className="space-y-2">
+					<div className='space-y-2'>
 						<Label>Side</Label>
 						<Select value={side} onValueChange={(v) => setSide(v as 'BUY' | 'SELL')}>
 							<SelectTrigger>
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="BUY">Buy</SelectItem>
-								<SelectItem value="SELL">Sell</SelectItem>
+								<SelectItem value='BUY'>Buy</SelectItem>
+								<SelectItem value='SELL'>Sell</SelectItem>
 							</SelectContent>
 						</Select>
 					</div>
 
-					<div className="space-y-2">
+					<div className='space-y-2'>
 						<Label>Outcome</Label>
-						<Select value={outcome} onValueChange={(v) => setOutcome(v as 'YES' | 'NO')}>
+						<Select
+							value={outcome}
+							onValueChange={(v) => setOutcome(v as 'YES' | 'NO')}>
 							<SelectTrigger>
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{yesOutcome && <SelectItem value="YES">YES ({(yesOutcome.price * 100).toFixed(1)}%)</SelectItem>}
-								{noOutcome && <SelectItem value="NO">NO ({(noOutcome.price * 100).toFixed(1)}%)</SelectItem>}
+								{yesOutcome && (
+									<SelectItem value='YES'>
+										YES ({(yesOutcome.price * 100).toFixed(1)}%)
+									</SelectItem>
+								)}
+								{noOutcome && (
+									<SelectItem value='NO'>
+										NO ({(noOutcome.price * 100).toFixed(1)}%)
+									</SelectItem>
+								)}
 							</SelectContent>
 						</Select>
 					</div>
 
-					<div className="space-y-2">
+					<div className='space-y-2'>
 						<Label>Price (0-1)</Label>
 						<Input
-							type="number"
-							step="0.01"
-							min="0"
-							max="1"
+							type='number'
+							step='0.01'
+							min='0'
+							max='1'
 							value={price}
 							onChange={(e) => setPrice(e.target.value)}
-							placeholder="0.50"
+							placeholder='0.50'
 							required
 						/>
-						<p className="text-xs text-muted-foreground">
-							Current: {(outcome === 'YES' ? yesOutcome?.price : noOutcome?.price) ? 
-								((outcome === 'YES' ? yesOutcome!.price : noOutcome!.price) * 100).toFixed(1) + '%' : 
-								'N/A'}
+						<p className='text-xs text-muted-foreground'>
+							Current:{' '}
+							{(outcome === 'YES' ? yesOutcome?.price : noOutcome?.price)
+								? (
+										(outcome === 'YES' ? yesOutcome!.price : noOutcome!.price) *
+										100
+									).toFixed(1) + '%'
+								: 'N/A'}
 						</p>
 					</div>
 
-					<div className="space-y-2">
+					<div className='space-y-2'>
 						<Label>Quantity</Label>
 						<Input
-							type="number"
-							step="0.01"
-							min="0"
+							type='number'
+							step='0.01'
+							min='0'
 							value={quantity}
 							onChange={(e) => setQuantity(e.target.value)}
-							placeholder="10"
+							placeholder='10'
 							required
 						/>
 					</div>
 
-					<div className="flex gap-2">
-						<Button type="submit" disabled={loading} className="flex-1">
+					<div className='flex gap-2'>
+						<Button type='submit' disabled={loading} className='flex-1'>
 							{loading ? 'Placing...' : 'Place Order'}
 						</Button>
 						{onCancel && (
-							<Button type="button" variant="outline" onClick={onCancel}>
+							<Button type='button' variant='outline' onClick={onCancel}>
 								Cancel
 							</Button>
 						)}
@@ -172,4 +192,3 @@ export function OrderForm({ marketId, onSuccess, onCancel }: OrderFormProps) {
 		</Card>
 	)
 }
-

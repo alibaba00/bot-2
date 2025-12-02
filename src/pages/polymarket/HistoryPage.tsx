@@ -18,16 +18,16 @@ export default function HistoryPage() {
 	}
 
 	return (
-		<div className="flex flex-1 flex-col gap-6 p-4 pt-0 pb-16">
-			<div className="flex items-center justify-between">
+		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>
+			<div className='flex items-center justify-between'>
 				<div>
-					<h1 className="text-3xl font-bold">Transaction History</h1>
-					<p className="text-muted-foreground mt-1">
+					<h1 className='text-3xl font-bold'>Transaction History</h1>
+					<p className='text-muted-foreground mt-1'>
 						View your trading history and transactions
 					</p>
 				</div>
-				<Button variant="outline" onClick={handleRefresh}>
-					<RefreshCw className="h-4 w-4 mr-2" />
+				<Button variant='outline' onClick={handleRefresh}>
+					<RefreshCw className='h-4 w-4 mr-2' />
 					Refresh
 				</Button>
 			</div>
@@ -36,22 +36,23 @@ export default function HistoryPage() {
 				<CardHeader>
 					<CardTitle>Transactions</CardTitle>
 					<CardDescription>
-						{transactions.length} transaction{transactions.length !== 1 ? 's' : ''} found
+						{transactions.length} transaction{transactions.length !== 1 ? 's' : ''}{' '}
+						found
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
 					{loading ? (
-						<div className="space-y-2">
+						<div className='space-y-2'>
 							{[1, 2, 3, 4, 5].map((i) => (
-								<Skeleton key={i} className="h-20 w-full" />
+								<Skeleton key={i} className='h-20 w-full' />
 							))}
 						</div>
 					) : transactions.length === 0 ? (
-						<div className="text-center py-8 text-muted-foreground">
+						<div className='text-center py-8 text-muted-foreground'>
 							<p>No transactions found</p>
 						</div>
 					) : (
-						<div className="space-y-2">
+						<div className='space-y-2'>
 							{transactions.map((tx) => (
 								<TransactionItem key={tx.id} transaction={tx} />
 							))}
@@ -65,40 +66,34 @@ export default function HistoryPage() {
 
 function TransactionItem({ transaction }: { transaction: Transaction }) {
 	return (
-		<div className="flex items-center justify-between p-4 border rounded-lg">
-			<div className="flex-1">
-				<div className="flex items-center gap-2">
+		<div className='flex items-center justify-between p-4 border rounded-lg'>
+			<div className='flex-1'>
+				<div className='flex items-center gap-2'>
 					<span
 						className={`font-semibold ${
 							transaction.type === 'BUY' ? 'text-green-600' : 'text-red-600'
-						}`}
-					>
+						}`}>
 						{transaction.type}
 					</span>
 					{transaction.outcome && (
-						<span className="text-sm text-muted-foreground">
-							{transaction.outcome}
-						</span>
+						<span className='text-sm text-muted-foreground'>{transaction.outcome}</span>
 					)}
 					{transaction.price && (
-						<span className="text-sm text-muted-foreground">
+						<span className='text-sm text-muted-foreground'>
 							@ {(transaction.price * 100).toFixed(1)}%
 						</span>
 					)}
 				</div>
-				<div className="text-sm text-muted-foreground mt-1">
+				<div className='text-sm text-muted-foreground mt-1'>
 					Amount: {transaction.amount.toFixed(2)} | Status: {transaction.status}
 				</div>
-				<div className="text-xs text-muted-foreground mt-1">
+				<div className='text-xs text-muted-foreground mt-1'>
 					{new Date(transaction.timestamp).toLocaleString()}
 					{transaction.hash && (
-						<span className="ml-2 font-mono">
-							{transaction.hash.slice(0, 10)}...
-						</span>
+						<span className='ml-2 font-mono'>{transaction.hash.slice(0, 10)}...</span>
 					)}
 				</div>
 			</div>
 		</div>
 	)
 }
-

@@ -14,22 +14,23 @@ let WalletClass: any = null
 // Lazy load the modules only when needed (and in Electron)
 async function loadClobClient() {
 	if (ClobClientModule) return
-	
-	const isElectron = typeof window !== 'undefined' && 
+
+	const isElectron =
+		typeof window !== 'undefined' &&
 		(window as any).navigator?.userAgent?.includes('Electron') &&
 		(window as any).require
-	
+
 	if (!isElectron) {
 		throw new Error('Polymarket client can only be used in Electron environment')
 	}
-	
+
 	try {
 		const nodeRequire = (window as any).require
-		
+
 		// Use require() instead of import() for CommonJS modules in Electron
 		ClobClientModule = nodeRequire('@polymarket/clob-client')
 		ChainEnum = ClobClientModule.Chain
-		
+
 		// Use @ethersproject/wallet (ethers v5) which is compatible with CLOB client
 		try {
 			const ethersWallet = nodeRequire('@ethersproject/wallet')
@@ -66,22 +67,22 @@ export async function initializeClient(): Promise<any> {
 
 		// Load the client module first
 		await loadClobClient()
-		
+
 		if (!ClobClientModule || !WalletClass) {
 			throw new Error('Failed to load Polymarket client modules')
 		}
 
 		const config = getValidatedConfig()
-		
+
 		// Create wallet from private key
 		const wallet = new WalletClass(config.privateKey)
-		
+
 		// Use Polygon mainnet (chain ID 137)
 		const chainId = ChainEnum.POLYGON
-		
+
 		// Use proxy address from config or default to Polymarket CLOB API
 		const host = config.proxyAddress || 'https://clob.polymarket.com'
-		
+
 		// Initialize CLOB client first (without credentials)
 		clobClient = new ClobClientModule.ClobClient(host, chainId, wallet)
 		console.log('Initial CLOB client created')
@@ -92,14 +93,16 @@ export async function initializeClient(): Promise<any> {
 			console.log('Attempting to create/derive API key...')
 			console.log('Wallet address:', wallet.address)
 			console.log('Config userId:', config.userId)
-			
+
 			apiCreds = await clobClient.createOrDeriveApiKey()
-			
+
 			// Validate that we got proper credentials
 			if (!apiCreds || !apiCreds.key || !apiCreds.secret || !apiCreds.passphrase) {
-				throw new Error('API credentials are incomplete. Received: ' + JSON.stringify(apiCreds))
+				throw new Error(
+					'API credentials are incomplete. Received: ' + JSON.stringify(apiCreds)
+				)
 			}
-			
+
 			console.log('API credentials created/derived successfully:', {
 				hasKey: !!apiCreds?.key,
 				hasSecret: !!apiCreds?.secret,
@@ -115,7 +118,7 @@ export async function initializeClient(): Promise<any> {
 				data: apiKeyError?.data,
 				response: apiKeyError?.response
 			})
-			
+
 			// If it's a 400 error, it might mean the account doesn't exist or isn't properly set up
 			if (apiKeyError?.status === 400 || apiKeyError?.response?.status === 400) {
 				throw new Error(`API key creation failed (400 Bad Request). This usually means:
@@ -124,9 +127,11 @@ export async function initializeClient(): Promise<any> {
 3. You may need to deposit funds to the CLOB exchange first
 Original error: ${apiKeyError?.data?.error || apiKeyError?.message || String(apiKeyError)}`)
 			}
-			
+
 			// Don't continue without credentials - authenticated endpoints won't work
-			throw new Error(`Failed to create API credentials: ${apiKeyError instanceof Error ? apiKeyError.message : String(apiKeyError)}`)
+			throw new Error(
+				`Failed to create API credentials: ${apiKeyError instanceof Error ? apiKeyError.message : String(apiKeyError)}`
+			)
 		}
 
 		// Reinitialize the client with credentials (required for authenticated endpoints)
@@ -140,10 +145,10 @@ Original error: ${apiKeyError?.data?.error || apiKeyError?.message || String(api
 
 		// Test connection by checking server status
 		await clobClient.getOk()
-		
+
 		isInitialized = true
 		connectionStatus = 'connected'
-		
+
 		return clobClient
 	} catch (error) {
 		connectionStatus = 'error'
@@ -182,7 +187,7 @@ export function getConnectionStatus(): {
 	return {
 		status: connectionStatus,
 		error: lastError,
-		isConnected: connectionStatus === 'connected' && isInitialized,
+		isConnected: connectionStatus === 'connected' && isInitialized
 	}
 }
 
@@ -220,4 +225,3 @@ export async function reconnect(): Promise<any> {
 	resetClient()
 	return await initializeClient()
 }
-

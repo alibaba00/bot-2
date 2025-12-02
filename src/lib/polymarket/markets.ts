@@ -18,13 +18,13 @@ const POLYMARKET_API_BASE = 'https://polymarket.com/api'
 export async function fetchMarkets(limit = 100): Promise<Market[]> {
 	try {
 		const client = await getOrInitializeClient()
-		
+
 		// Fetch simplified markets (lighter weight)
 		const response = await client.getSimplifiedMarkets()
-		
+
 		// Handle pagination response
 		const marketsData = response.data || response.results || []
-		
+
 		// Transform API response to our Market type
 		const markets: Market[] = marketsData
 			.filter((m: any) => {
@@ -33,7 +33,8 @@ export async function fetchMarkets(limit = 100): Promise<Market[]> {
 				return id && typeof id === 'string' && id.trim() !== ''
 			})
 			.map((m: any) => {
-				const id = m.condition_id || m.id || m.conditionId || String(Date.now() + Math.random())
+				const id =
+					m.condition_id || m.id || m.conditionId || String(Date.now() + Math.random())
 				return {
 					id: id,
 					question: m.question || m.title || '',
@@ -52,10 +53,10 @@ export async function fetchMarkets(limit = 100): Promise<Market[]> {
 						id: o.outcome_id || o.id || String(Math.random()),
 						title: o.title || o.outcome || '',
 						price: parseFloat(o.price || '0'),
-						volume: parseFloat(o.volume || '0'),
+						volume: parseFloat(o.volume || '0')
 					})),
 					createdAt: m.created_at,
-					updatedAt: m.updated_at,
+					updatedAt: m.updated_at
 				}
 			})
 
@@ -76,12 +77,12 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 	try {
 		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
 		console.log(`Fetching market by slug from Gamma API: ${url}`)
-		
+
 		const response = await fetch(url, {
 			method: 'GET',
 			headers: {
-				'Accept': 'application/json',
-			},
+				Accept: 'application/json'
+			}
 		})
 
 		if (!response.ok) {
@@ -93,7 +94,7 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 		}
 
 		const marketData = await response.json()
-		
+
 		if (!marketData || !marketData.id) {
 			console.log(`Invalid market data from Gamma API for slug: ${slug}`)
 			return null
@@ -103,7 +104,7 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 		let outcomesArray: string[] = []
 		let outcomePricesArray: string[] = []
 		let clobTokenIdsArray: string[] = []
-		
+
 		try {
 			if (typeof marketData.outcomes === 'string') {
 				outcomesArray = JSON.parse(marketData.outcomes)
@@ -113,7 +114,7 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 		} catch (e) {
 			console.warn('Failed to parse outcomes:', e)
 		}
-		
+
 		try {
 			if (typeof marketData.outcomePrices === 'string') {
 				outcomePricesArray = JSON.parse(marketData.outcomePrices)
@@ -123,7 +124,7 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 		} catch (e) {
 			console.warn('Failed to parse outcomePrices:', e)
 		}
-		
+
 		try {
 			if (typeof marketData.clobTokenIds === 'string') {
 				clobTokenIdsArray = JSON.parse(marketData.clobTokenIds)
@@ -139,7 +140,7 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 			id: clobTokenIdsArray[index] || String(Math.random()), // Use CLOB token ID
 			title: outcomeTitle,
 			price: parseFloat(outcomePricesArray[index] || '0'),
-			volume: 0, // Not available in this response
+			volume: 0 // Not available in this response
 		}))
 
 		// Transform Gamma API response to our Market type
@@ -156,19 +157,20 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 			endDate: marketData.endDate || marketData.endDateIso,
 			startDate: marketData.startDate || marketData.startDateIso,
 			conditionId: marketData.conditionId || marketData.id || '',
-			marketMakerAddress: marketData.marketMakerAddress || marketData.market_maker_address || '',
+			marketMakerAddress:
+				marketData.marketMakerAddress || marketData.market_maker_address || '',
 			outcomes: outcomes,
 			createdAt: marketData.createdAt,
-			updatedAt: marketData.updatedAt,
+			updatedAt: marketData.updatedAt
 		}
-		
+
 		console.log('Parsed market from Gamma API:', {
 			id: market.id,
 			conditionId: market.conditionId,
 			question: market.question,
 			outcomesCount: market.outcomes.length,
 			tokenIds: clobTokenIdsArray,
-			prices: outcomes.map(o => `${o.title}: ${o.price}`)
+			prices: outcomes.map((o) => `${o.title}: ${o.price}`)
 		})
 
 		// Cache the market
@@ -188,12 +190,12 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 	try {
 		const url = `${GAMMA_API_BASE}/markets/${conditionId}`
 		console.log(`Fetching market from Gamma API: ${url}`)
-		
+
 		const response = await fetch(url, {
 			method: 'GET',
 			headers: {
-				'Accept': 'application/json',
-			},
+				Accept: 'application/json'
+			}
 		})
 
 		if (!response.ok) {
@@ -205,7 +207,7 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 		}
 
 		const marketData = await response.json()
-		
+
 		if (!marketData || !marketData.id) {
 			console.log(`Invalid market data from Gamma API for condition ID: ${conditionId}`)
 			return null
@@ -215,7 +217,7 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 		let outcomesArray: string[] = []
 		let outcomePricesArray: string[] = []
 		let clobTokenIdsArray: string[] = []
-		
+
 		try {
 			if (typeof marketData.outcomes === 'string') {
 				outcomesArray = JSON.parse(marketData.outcomes)
@@ -225,7 +227,7 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 		} catch (e) {
 			console.warn('Failed to parse outcomes:', e)
 		}
-		
+
 		try {
 			if (typeof marketData.outcomePrices === 'string') {
 				outcomePricesArray = JSON.parse(marketData.outcomePrices)
@@ -235,7 +237,7 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 		} catch (e) {
 			console.warn('Failed to parse outcomePrices:', e)
 		}
-		
+
 		try {
 			if (typeof marketData.clobTokenIds === 'string') {
 				clobTokenIdsArray = JSON.parse(marketData.clobTokenIds)
@@ -251,7 +253,7 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 			id: clobTokenIdsArray[index] || String(Math.random()), // Use CLOB token ID
 			title: outcomeTitle,
 			price: parseFloat(outcomePricesArray[index] || '0'),
-			volume: 0, // Not available in this response
+			volume: 0 // Not available in this response
 		}))
 
 		// Transform Gamma API response to our Market type
@@ -268,12 +270,13 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 			endDate: marketData.endDate || marketData.endDateIso,
 			startDate: marketData.startDate || marketData.startDateIso,
 			conditionId: marketData.conditionId || marketData.id || conditionId,
-			marketMakerAddress: marketData.marketMakerAddress || marketData.market_maker_address || '',
+			marketMakerAddress:
+				marketData.marketMakerAddress || marketData.market_maker_address || '',
 			outcomes: outcomes,
 			createdAt: marketData.createdAt,
-			updatedAt: marketData.updatedAt,
+			updatedAt: marketData.updatedAt
 		}
-		
+
 		console.log('Parsed market from Gamma API (by ID):', {
 			id: market.id,
 			conditionId: market.conditionId,
@@ -296,27 +299,31 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
  * Fetch current prices for a market from CLOB API
  * This provides real-time price data from the order book
  */
-export async function fetchMarketPricesFromClob(conditionId: string): Promise<Record<string, number> | null> {
+export async function fetchMarketPricesFromClob(
+	conditionId: string
+): Promise<Record<string, number> | null> {
 	try {
 		const client = await getOrInitializeClient()
 		const marketData = await client.getMarket(conditionId)
-		
+
 		if (!marketData || !marketData.outcomes) {
 			return null
 		}
-		
+
 		const prices: Record<string, number> = {}
 		marketData.outcomes.forEach((outcome: any) => {
 			const outcomeId = outcome.outcome_id || outcome.id || outcome.token_id
 			if (outcomeId) {
 				// Try to get price from various fields
-				const price = parseFloat(outcome.price || outcome.last_price || outcome.mid_price || '0')
+				const price = parseFloat(
+					outcome.price || outcome.last_price || outcome.mid_price || '0'
+				)
 				if (price > 0) {
 					prices[outcomeId] = price
 				}
 			}
 		})
-		
+
 		return Object.keys(prices).length > 0 ? prices : null
 	} catch (error) {
 		console.error('Error fetching prices from CLOB API:', error)
@@ -334,11 +341,12 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 		if (useCache) {
 			try {
 				const cached = await getCachedMarkets(5 * 60 * 1000) // 5 minutes
-				const cachedMarket = cached.find(m => 
-					m.conditionId === conditionId || 
-					m.id === conditionId ||
-					String(m.conditionId) === String(conditionId) ||
-					String(m.id) === String(conditionId)
+				const cachedMarket = cached.find(
+					(m) =>
+						m.conditionId === conditionId ||
+						m.id === conditionId ||
+						String(m.conditionId) === String(conditionId) ||
+						String(m.id) === String(conditionId)
 				)
 				if (cachedMarket) {
 					console.log(`Using cached market for condition ID: ${conditionId}`)
@@ -361,7 +369,7 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 		console.log(`Gamma API failed, trying CLOB API for condition ID: ${conditionId}`)
 		const client = await getOrInitializeClient()
 		const marketData = await client.getMarket(conditionId)
-		
+
 		if (!marketData) {
 			console.log(`Market data is null for condition ID: ${conditionId}`)
 			return null
@@ -369,10 +377,15 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 
 		// Validate that we have meaningful market data (not just an empty object with ID)
 		const hasQuestion = marketData.question || marketData.title
-		const hasOutcomes = marketData.outcomes && Array.isArray(marketData.outcomes) && marketData.outcomes.length > 0
-		
+		const hasOutcomes =
+			marketData.outcomes &&
+			Array.isArray(marketData.outcomes) &&
+			marketData.outcomes.length > 0
+
 		if (!hasQuestion && !hasOutcomes) {
-			console.log(`Market data is incomplete for condition ID: ${conditionId} - missing question and outcomes`)
+			console.log(
+				`Market data is incomplete for condition ID: ${conditionId} - missing question and outcomes`
+			)
 			return null
 		}
 
@@ -399,10 +412,10 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 				id: o.outcome_id || o.id || String(Math.random()),
 				title: o.title || o.outcome || '',
 				price: parseFloat(o.price || '0'),
-				volume: parseFloat(o.volume || '0'),
+				volume: parseFloat(o.volume || '0')
 			})),
 			createdAt: marketData.created_at,
-			updatedAt: marketData.updated_at,
+			updatedAt: marketData.updated_at
 		}
 
 		// Cache the market
@@ -411,18 +424,18 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 		return market
 	} catch (error: any) {
 		// Check if it's a 404 or "market not found" error
-		const isNotFound = 
-			error?.status === 404 || 
+		const isNotFound =
+			error?.status === 404 ||
 			error?.response?.status === 404 ||
 			error?.data?.error === 'market not found' ||
 			error?.message?.includes('404') ||
 			error?.message?.includes('not found')
-		
+
 		if (isNotFound) {
 			console.log(`Market not found via API for condition ID: ${conditionId}`)
 			return null // Return null instead of throwing for 404 errors
 		}
-		
+
 		console.error('Error fetching market:', error)
 		throw error // Re-throw other errors
 	}
@@ -435,7 +448,7 @@ async function cacheMarkets(markets: Market[]): Promise<void> {
 	try {
 		const now = Date.now()
 		// Filter out markets with invalid IDs before caching
-		const validMarkets = markets.filter(market => {
+		const validMarkets = markets.filter((market) => {
 			if (!market.id || typeof market.id !== 'string' || market.id.trim() === '') {
 				console.warn('Skipping market with invalid ID:', market)
 				return false
@@ -447,9 +460,9 @@ async function cacheMarkets(markets: Market[]): Promise<void> {
 			return
 		}
 
-		const records: MarketRecord[] = validMarkets.map(market => ({
+		const records: MarketRecord[] = validMarkets.map((market) => ({
 			...market,
-			cachedAt: now,
+			cachedAt: now
 		}))
 
 		await db.markets.bulkPut(records)
@@ -465,12 +478,9 @@ async function cacheMarkets(markets: Market[]): Promise<void> {
 export async function getCachedMarkets(maxAge = CACHE_DURATION): Promise<Market[]> {
 	try {
 		const cutoff = Date.now() - maxAge
-		const records = await db.markets
-			.where('cachedAt')
-			.above(cutoff)
-			.toArray()
+		const records = await db.markets.where('cachedAt').above(cutoff).toArray()
 
-		return records.map(r => {
+		return records.map((r) => {
 			const { cachedAt, ...market } = r
 			return market
 		})
@@ -500,11 +510,12 @@ export async function getMarkets(forceRefresh = false): Promise<Market[]> {
 export async function searchMarkets(query: string): Promise<Market[]> {
 	const markets = await getMarkets()
 	const lowerQuery = query.toLowerCase()
-	
-	return markets.filter(market => 
-		market.question.toLowerCase().includes(lowerQuery) ||
-		market.description?.toLowerCase().includes(lowerQuery) ||
-		market.slug.toLowerCase().includes(lowerQuery)
+
+	return markets.filter(
+		(market) =>
+			market.question.toLowerCase().includes(lowerQuery) ||
+			market.description?.toLowerCase().includes(lowerQuery) ||
+			market.slug.toLowerCase().includes(lowerQuery)
 	)
 }
 
@@ -513,13 +524,13 @@ export async function searchMarkets(query: string): Promise<Market[]> {
  */
 export async function getActiveMarkets(): Promise<Market[]> {
 	const markets = await getMarkets()
-	return markets.filter(m => m.active && !m.closed)
+	return markets.filter((m) => m.active && !m.closed)
 }
 
 /**
  * Fetch crypto price to beat from Polymarket API
  * This is the reference price used for crypto up/down markets
- * 
+ *
  * @param symbol - Crypto symbol (e.g., 'BTC', 'ETH', 'SOL')
  * @param eventStartTime - ISO timestamp of event start (e.g., '2025-11-30T13:30:00Z')
  * @param endDate - ISO timestamp of event end (e.g., '2025-11-30T13:45:00Z')
@@ -538,7 +549,7 @@ export async function fetchCryptoPriceToBeat(
 			symbol: symbol.toUpperCase(),
 			eventStartTime,
 			variant,
-			endDate,
+			endDate
 		})
 
 		const fullUrl = `${url}?${params.toString()}`
@@ -547,27 +558,30 @@ export async function fetchCryptoPriceToBeat(
 		const response = await fetch(fullUrl, {
 			method: 'GET',
 			headers: {
-				'Accept': 'application/json',
-			},
+				Accept: 'application/json'
+			}
 		})
 
 		if (!response.ok) {
 			const errorText = await response.text().catch(() => '')
-			console.warn(`❌ Failed to fetch price to beat: ${response.status} ${response.statusText}`, errorText)
+			console.warn(
+				`❌ Failed to fetch price to beat: ${response.status} ${response.statusText}`,
+				errorText
+			)
 			return null
 		}
 
 		const data = await response.json()
 		console.log('📦 Price to beat API response:', data)
-		
+
 		// The API returns openPrice (price at start of time window) and closePrice (price at end)
 		// The "price to beat" is the openPrice - the reference price at the start of the event
-		const price = 
-			data.openPrice ||  // Primary: price at start of time window (this is the "price to beat")
-			data.price || 
-			data.priceToBeat || 
-			data.initialPrice || 
-			data.startPrice || 
+		const price =
+			data.openPrice || // Primary: price at start of time window (this is the "price to beat")
+			data.price ||
+			data.priceToBeat ||
+			data.initialPrice ||
+			data.startPrice ||
 			data.value ||
 			data.data?.openPrice ||
 			data.data?.price ||
@@ -575,12 +589,12 @@ export async function fetchCryptoPriceToBeat(
 			data.result?.openPrice ||
 			data.result?.price ||
 			data.result?.priceToBeat
-		
+
 		if (typeof price === 'number') {
 			console.log('✅ Price to beat found (openPrice):', price)
 			return price
 		}
-		
+
 		if (typeof price === 'string') {
 			const parsed = parseFloat(price)
 			if (!isNaN(parsed)) {
@@ -589,11 +603,13 @@ export async function fetchCryptoPriceToBeat(
 			}
 		}
 
-		console.warn('⚠️ Price to beat data format unexpected. Full response:', JSON.stringify(data, null, 2))
+		console.warn(
+			'⚠️ Price to beat data format unexpected. Full response:',
+			JSON.stringify(data, null, 2)
+		)
 		return null
 	} catch (error) {
 		console.error('❌ Error fetching crypto price to beat:', error)
 		return null
 	}
 }
-

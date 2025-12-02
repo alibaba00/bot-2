@@ -35,7 +35,7 @@ export const WS_URLS = [
 	'wss://ws-subscriptions-clob.polymarket.com/ws', // Without trailing slash
 	'wss://ws-subscriptions-clob.polymarket.com', // Base URL
 	'wss://clob.polymarket.com/ws', // Alternative
-	'wss://clob.polymarket.com', // Alternative base
+	'wss://clob.polymarket.com' // Alternative base
 ]
 const PING_INTERVAL = 10000 // 10 seconds
 
@@ -87,7 +87,10 @@ export class PolymarketWebSocket {
 				this.ws.onmessage = null
 				this.ws.onerror = null
 				this.ws.onclose = null
-				if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+				if (
+					this.ws.readyState === WebSocket.OPEN ||
+					this.ws.readyState === WebSocket.CONNECTING
+				) {
 					this.ws.close(1000, 'Force reconnect')
 				}
 				this.ws = null
@@ -102,7 +105,9 @@ export class PolymarketWebSocket {
 
 		// Check if we should reconnect (only block if not forced and reconnect is disabled)
 		if (!force && !this.shouldReconnect) {
-			console.log('Reconnect disabled, not connecting. Use connect(true) to force connection.')
+			console.log(
+				'Reconnect disabled, not connecting. Use connect(true) to force connection.'
+			)
 			return
 		}
 
@@ -111,9 +116,9 @@ export class PolymarketWebSocket {
 		if (!force && !this.shouldReconnect) {
 			this.shouldReconnect = true
 		}
-		
+
 		this.isConnecting = true
-		
+
 		// Use the base URL directly (no /ws/market path needed)
 		// The subscription message determines the channel
 		const url = this.wsUrl
@@ -122,7 +127,7 @@ export class PolymarketWebSocket {
 		try {
 			console.log(`Connecting to WebSocket: ${url}`)
 			console.log(`Asset IDs to subscribe:`, this.assetIds)
-			
+
 			this.ws = new WebSocket(url)
 
 			this.ws.onopen = () => {
@@ -139,68 +144,77 @@ export class PolymarketWebSocket {
 							console.warn('⚠️ WebSocket not ready for subscription')
 							return
 						}
-						
+
 						// Try multiple subscription formats sequentially
 						// According to CLOB WebSocket docs: type should be "MARKET" (uppercase) and assets_ids (with 's')
 						const formats = [
 							// Format 1: Official CLOB format (from docs)
 							{
 								type: 'MARKET',
-								assets_ids: this.assetIds,
+								assets_ids: this.assetIds
 							},
 							// Format 2: With asset_ids (without 's')
 							{
 								type: 'MARKET',
-								asset_ids: this.assetIds,
+								asset_ids: this.assetIds
 							},
 							// Format 3: Lowercase type
 							{
 								type: 'market',
-								assets_ids: this.assetIds,
+								assets_ids: this.assetIds
 							},
 							// Format 4: Subscribe format
 							{
 								type: 'subscribe',
 								channel: 'market',
-								assets_ids: this.assetIds,
+								assets_ids: this.assetIds
 							},
 							// Format 5: With markets array
 							{
 								type: 'subscribe',
 								channel: 'market',
-								markets: this.assetIds,
-							},
+								markets: this.assetIds
+							}
 						]
-						
+
 						// Try formats sequentially
 						const tryFormat = (index: number) => {
 							if (index >= formats.length) {
 								console.error('❌ All subscription formats failed')
-								this.callbacks.onError?.(new Error('Failed to send subscription with any format'))
+								this.callbacks.onError?.(
+									new Error('Failed to send subscription with any format')
+								)
 								return
 							}
-							
+
 							if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
 								console.warn('⚠️ WebSocket not ready, cannot try format')
 								return
 							}
-							
+
 							try {
 								const subscription = formats[index]
 								const subscriptionMessage = JSON.stringify(subscription)
-								console.log(`📤 Trying subscription format ${index + 1}/${formats.length}:`, subscriptionMessage)
-								
+								console.log(
+									`📤 Trying subscription format ${index + 1}/${formats.length}:`,
+									subscriptionMessage
+								)
+
 								this.ws.send(subscriptionMessage)
 								console.log(`✅ Subscription format ${index + 1} sent successfully`)
-								
+
 								// Wait longer to see if connection stays open and we receive data
 								setTimeout(() => {
 									if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-										console.log(`✅ Format ${index + 1} appears to be working (connection still open)`)
+										console.log(
+											`✅ Format ${index + 1} appears to be working (connection still open)`
+										)
 										// Stop trying other formats if this one works
 										return
 									} else {
-										console.warn(`⚠️ Format ${index + 1} failed (connection closed), trying next format...`)
+										console.warn(
+											`⚠️ Format ${index + 1} failed (connection closed), trying next format...`
+										)
 										// Try next format if this one didn't work
 										if (index + 1 < formats.length) {
 											// Only try next format if connection was closed due to this subscription
@@ -210,14 +224,17 @@ export class PolymarketWebSocket {
 									}
 								}, 1000) // Wait longer (1 second) to see if connection stays open
 							} catch (sendError) {
-								console.error(`❌ Failed to send subscription format ${index + 1}:`, sendError)
+								console.error(
+									`❌ Failed to send subscription format ${index + 1}:`,
+									sendError
+								)
 								// Try next format
 								if (index + 1 < formats.length) {
 									tryFormat(index + 1)
 								}
 							}
 						}
-						
+
 						// Start with first format
 						tryFormat(0)
 					}, 100) // Small delay to ensure connection is stable
@@ -239,7 +256,7 @@ export class PolymarketWebSocket {
 						data: event.data,
 						readyState: this.ws?.readyState
 					})
-					
+
 					// Handle PONG response
 					if (event.data === 'PONG' || event.data === 'pong') {
 						console.log('✅ Received PONG')
@@ -251,28 +268,40 @@ export class PolymarketWebSocket {
 						try {
 							const data = JSON.parse(event.data)
 							console.log('📦 Parsed message data:', data)
-							
+
 							// Check if it's an error response from server
 							if (data.error || data.message) {
 								console.error('❌ Server error response:', data)
-								this.callbacks.onError?.(new Error(data.error || data.message || 'Server error'))
+								this.callbacks.onError?.(
+									new Error(data.error || data.message || 'Server error')
+								)
 								// Don't reconnect on server errors - likely format issue
-								if (data.error && (data.error.includes('invalid') || data.error.includes('format'))) {
+								if (
+									data.error &&
+									(data.error.includes('invalid') ||
+										data.error.includes('format'))
+								) {
 									this.shouldReconnect = false
 								}
 								return
 							}
-							
+
 							this.handleMessage(data)
 						} catch (parseError) {
 							// If it's not JSON, it might be a plain text message
 							console.log('📝 Received plain text message:', event.data)
 							// Check if it's an error message
-							if (event.data.toLowerCase().includes('error') || event.data.toLowerCase().includes('invalid')) {
+							if (
+								event.data.toLowerCase().includes('error') ||
+								event.data.toLowerCase().includes('invalid')
+							) {
 								console.error('❌ Server error message:', event.data)
 								this.callbacks.onError?.(new Error(`Server error: ${event.data}`))
 								// Stop reconnecting on format errors
-								if (event.data.toLowerCase().includes('invalid') || event.data.toLowerCase().includes('format')) {
+								if (
+									event.data.toLowerCase().includes('invalid') ||
+									event.data.toLowerCase().includes('format')
+								) {
 									this.shouldReconnect = false
 								}
 							}
@@ -282,7 +311,12 @@ export class PolymarketWebSocket {
 						console.warn('⚠️ Received non-string WebSocket message:', event.data)
 					}
 				} catch (error) {
-					console.error('❌ Error handling WebSocket message:', error, 'Data:', event.data)
+					console.error(
+						'❌ Error handling WebSocket message:',
+						error,
+						'Data:',
+						event.data
+					)
 				}
 			}
 
@@ -293,31 +327,37 @@ export class PolymarketWebSocket {
 				console.error('Asset IDs:', this.assetIds)
 				console.error('Asset IDs count:', this.assetIds.length)
 				console.error('Asset IDs type:', typeof this.assetIds[0])
-				
+
 				this.isConnecting = false
 				this.isConnected = false
-				
+
 				// Check if it's a 404 error (handshake failure)
 				// This usually means the URL is wrong
-				const errorMessage = error instanceof Error 
-					? error.message 
-					: 'WebSocket connection error. Check console for details.'
-				
-				if (errorMessage.includes('404') || errorMessage.includes('Unexpected response code: 404')) {
+				const errorMessage =
+					error instanceof Error
+						? error.message
+						: 'WebSocket connection error. Check console for details.'
+
+				if (
+					errorMessage.includes('404') ||
+					errorMessage.includes('Unexpected response code: 404')
+				) {
 					console.error('❌ 404 Error - WebSocket endpoint not found.')
-					
+
 					// Check if we should try next URL (only if reconnect is enabled)
 					if (!this.shouldReconnect) {
 						console.log('⏸️ Reconnect disabled, not trying next URL')
 						return
 					}
-					
+
 					// Try next URL if available
 					if (this.currentUrlIndex < WS_URLS.length - 1) {
 						this.currentUrlIndex++
 						this.wsUrl = WS_URLS[this.currentUrlIndex]
-						console.log(`🔄 Switching to URL ${this.currentUrlIndex + 1}/${WS_URLS.length}: ${this.wsUrl}`)
-						
+						console.log(
+							`🔄 Switching to URL ${this.currentUrlIndex + 1}/${WS_URLS.length}: ${this.wsUrl}`
+						)
+
 						// Try connecting with new URL after a short delay
 						const reconnectTimeout = setTimeout(() => {
 							// Double-check shouldReconnect before connecting
@@ -334,16 +374,20 @@ export class PolymarketWebSocket {
 						// All URLs tried, stop reconnecting
 						console.error('⛔ All WebSocket URLs failed with 404. Stopping reconnect.')
 						this.shouldReconnect = false
-						this.callbacks.onError?.(new Error('All WebSocket endpoints returned 404. Check URL configuration.'))
+						this.callbacks.onError?.(
+							new Error(
+								'All WebSocket endpoints returned 404. Check URL configuration.'
+							)
+						)
 					}
 					return
 				}
-				
+
 				// Add more context to error message
 				const detailedError = new Error(
 					`${errorMessage}\nURL: ${url}\nAsset IDs: ${this.assetIds.length}`
 				)
-				
+
 				this.callbacks.onError?.(detailedError)
 			}
 
@@ -357,9 +401,9 @@ export class PolymarketWebSocket {
 					currentUrl: this.wsUrl,
 					readyState: this.ws?.readyState
 				}
-				
+
 				console.log('🔌 WebSocket onclose event:', closeInfo)
-				
+
 				// CRITICAL: Check shouldReconnect FIRST before doing anything
 				// This prevents reconnect if disconnect() was called (which sets shouldReconnect = false)
 				if (!this.shouldReconnect) {
@@ -371,12 +415,12 @@ export class PolymarketWebSocket {
 					this.callbacks.onDisconnect?.()
 					return
 				}
-				
+
 				// Reset connection state immediately
 				this.isConnecting = false
 				this.isConnected = false
 				this.stopPing()
-				
+
 				// Log specific error codes
 				if (event.code === 1006) {
 					console.error('❌ Abnormal closure (1006). Possible causes:')
@@ -385,34 +429,44 @@ export class PolymarketWebSocket {
 					console.error('  - Network connectivity issues')
 					console.error('  - CORS or firewall blocking')
 					console.error('  - Invalid WebSocket URL (404 during handshake)')
-					
+
 					// If we get 1006 immediately after connection, it's likely a URL or format issue
 					// Don't reconnect endlessly - stop after a few attempts
 					if (this.reconnectAttempts >= 2) {
-						console.error('⛔ Too many 1006 errors - likely URL or subscription format issue. Stopping reconnect.')
+						console.error(
+							'⛔ Too many 1006 errors - likely URL or subscription format issue. Stopping reconnect.'
+						)
 						this.shouldReconnect = false
-						this.callbacks.onError?.(new Error('Connection closed with 1006 error - check WebSocket URL and subscription format'))
+						this.callbacks.onError?.(
+							new Error(
+								'Connection closed with 1006 error - check WebSocket URL and subscription format'
+							)
+						)
 					}
 				} else if (event.code === 1000) {
 					console.log('✅ Normal closure')
 				} else {
-					console.warn(`⚠️ Closure code: ${event.code} - ${event.reason || 'No reason provided'}`)
+					console.warn(
+						`⚠️ Closure code: ${event.code} - ${event.reason || 'No reason provided'}`
+					)
 				}
-				
+
 				this.callbacks.onDisconnect?.()
 
 				// Double-check shouldReconnect before attempting reconnect
 				// (it might have been disabled by disconnect() call or too many 1006 errors)
 				if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
 					this.reconnectAttempts++
-					
+
 					// Increase delay for repeated failures
 					const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 3)
-					
+
 					const reconnectTimeout = setTimeout(() => {
 						// Triple-check shouldReconnect before actually reconnecting
 						if (this.shouldReconnect) {
-							console.log(`🔄 Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+							console.log(
+								`🔄 Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+							)
 							this.connect()
 						} else {
 							console.log('⏸️ Reconnect cancelled (shouldReconnect = false)')
@@ -439,32 +493,32 @@ export class PolymarketWebSocket {
 	 */
 	disconnect(): void {
 		console.log('🛑 Disconnecting WebSocket...')
-		
+
 		// CRITICAL: Disable auto-reconnect FIRST before anything else
 		this.shouldReconnect = false
-		
+
 		// Cancel any pending reconnect attempts IMMEDIATELY
 		if ((this as any).reconnectTimeout) {
 			clearTimeout((this as any).reconnectTimeout)
 			;(this as any).reconnectTimeout = null
 			console.log('✅ Cancelled pending reconnect')
 		}
-		
+
 		// Cancel any pending URL switch attempts
 		if ((this as any).urlSwitchTimeout) {
 			clearTimeout((this as any).urlSwitchTimeout)
 			;(this as any).urlSwitchTimeout = null
 			console.log('✅ Cancelled pending URL switch')
 		}
-		
+
 		// Stop ping interval
 		this.stopPing()
-		
+
 		// Reset connection state BEFORE closing to prevent onclose from triggering reconnect
 		this.isConnected = false
 		this.isConnecting = false
 		this.reconnectAttempts = 0
-		
+
 		if (this.ws) {
 			// Remove all event listeners to prevent callbacks (especially onclose)
 			this.ws.onopen = null
@@ -472,17 +526,20 @@ export class PolymarketWebSocket {
 			this.ws.onerror = null
 			// IMPORTANT: Set onclose to null BEFORE closing to prevent reconnect
 			this.ws.onclose = null
-			
+
 			// Close the connection
-			if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+			if (
+				this.ws.readyState === WebSocket.OPEN ||
+				this.ws.readyState === WebSocket.CONNECTING
+			) {
 				this.ws.close(1000, 'Manual disconnect')
 			}
 			this.ws = null
 		}
-		
+
 		// Call disconnect callback
 		this.callbacks.onDisconnect?.()
-		
+
 		console.log('✅ WebSocket disconnected and cleaned up')
 	}
 
@@ -496,7 +553,7 @@ export class PolymarketWebSocket {
 			const subscription = {
 				type: 'subscribe',
 				channel: 'market',
-				markets: this.assetIds,
+				markets: this.assetIds
 			}
 			try {
 				this.ws.send(JSON.stringify(subscription))
@@ -507,7 +564,7 @@ export class PolymarketWebSocket {
 				try {
 					const oldSubscription = {
 						assets_ids: this.assetIds,
-						type: 'market',
+						type: 'market'
 					}
 					this.ws.send(JSON.stringify(oldSubscription))
 				} catch (oldError) {
@@ -537,7 +594,13 @@ export class PolymarketWebSocket {
 			const updateData = data.data
 			// Process the update data
 			if (updateData.price !== undefined || updateData.bids || updateData.asks) {
-				const assetId = updateData.asset_id || updateData.assetId || updateData.token_id || updateData.tokenId || updateData.market || ''
+				const assetId =
+					updateData.asset_id ||
+					updateData.assetId ||
+					updateData.token_id ||
+					updateData.tokenId ||
+					updateData.market ||
+					''
 				if (assetId) {
 					if (updateData.price !== undefined) {
 						const update: WebSocketPriceUpdate = {
@@ -545,7 +608,7 @@ export class PolymarketWebSocket {
 							price: parseFloat(updateData.price || '0'),
 							timestamp: updateData.timestamp || Date.now(),
 							side: updateData.side,
-							volume: updateData.volume ? parseFloat(updateData.volume) : undefined,
+							volume: updateData.volume ? parseFloat(updateData.volume) : undefined
 						}
 						this.callbacks.onPriceUpdate?.(update)
 					}
@@ -554,7 +617,7 @@ export class PolymarketWebSocket {
 							asset_id: assetId,
 							bids: updateData.bids || [],
 							asks: updateData.asks || [],
-							timestamp: updateData.timestamp || Date.now(),
+							timestamp: updateData.timestamp || Date.now()
 						}
 						this.callbacks.onOrderBookUpdate?.(update)
 					}
@@ -572,7 +635,7 @@ export class PolymarketWebSocket {
 					price: parseFloat(data.price || '0'),
 					timestamp: data.timestamp || Date.now(),
 					side: data.side,
-					volume: data.volume ? parseFloat(data.volume) : undefined,
+					volume: data.volume ? parseFloat(data.volume) : undefined
 				}
 				this.callbacks.onPriceUpdate?.(update)
 			}
@@ -583,7 +646,7 @@ export class PolymarketWebSocket {
 					asset_id: assetId,
 					bids: data.bids || [],
 					asks: data.asks || [],
-					timestamp: data.timestamp || Date.now(),
+					timestamp: data.timestamp || Date.now()
 				}
 				this.callbacks.onOrderBookUpdate?.(update)
 			}
@@ -592,12 +655,19 @@ export class PolymarketWebSocket {
 			const assetId = data.asset_id || data.assetId || data.token_id || data.tokenId || ''
 			if (assetId) {
 				// Look for price in different possible fields
-				const price = data.price || data.last_price || data.mid_price || data.best_bid || data.best_ask || data.lastPrice || data.midPrice
+				const price =
+					data.price ||
+					data.last_price ||
+					data.mid_price ||
+					data.best_bid ||
+					data.best_ask ||
+					data.lastPrice ||
+					data.midPrice
 				if (price !== undefined && price !== null) {
 					const update: WebSocketPriceUpdate = {
 						asset_id: assetId,
 						price: parseFloat(price),
-						timestamp: data.timestamp || Date.now(),
+						timestamp: data.timestamp || Date.now()
 					}
 					this.callbacks.onPriceUpdate?.(update)
 				}
@@ -636,4 +706,3 @@ export class PolymarketWebSocket {
 		return 'disconnected'
 	}
 }
-

@@ -1,12 +1,9 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 
 export default function DemoTab3() {
-
 	return (
 		<div className='p-4 w-full space-y-4'>
-			<ResizablePanelGroup
-				direction='horizontal'
-				className='w-full rounded-lg border h-full'>
+			<ResizablePanelGroup direction='horizontal' className='w-full rounded-lg border h-full'>
 				<ResizablePanel defaultSize={50}>
 					<div className='flex h-[400px] items-center justify-center p-6'>
 						<span className='font-semibold'>One</span>

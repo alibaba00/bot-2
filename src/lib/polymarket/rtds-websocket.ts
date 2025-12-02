@@ -66,7 +66,10 @@ export class RTDSWebSocket {
 				this.ws.onmessage = null
 				this.ws.onerror = null
 				this.ws.onclose = null
-				if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+				if (
+					this.ws.readyState === WebSocket.OPEN ||
+					this.ws.readyState === WebSocket.CONNECTING
+				) {
 					this.ws.close(1000, 'Force reconnect')
 				}
 				this.ws = null
@@ -109,7 +112,10 @@ export class RTDSWebSocket {
 			this.ws.onmessage = (event) => {
 				try {
 					// Handle empty or whitespace-only messages
-					if (!event.data || (typeof event.data === 'string' && event.data.trim() === '')) {
+					if (
+						!event.data ||
+						(typeof event.data === 'string' && event.data.trim() === '')
+					) {
 						console.log('RTDS: ⚠️ Received empty message, ignoring')
 						return
 					}
@@ -131,7 +137,10 @@ export class RTDSWebSocket {
 
 						// Validate JSON structure (should start with { or [)
 						if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-							console.log('RTDS: ⚠️ Received non-JSON message, ignoring:', trimmed.substring(0, 50))
+							console.log(
+								'RTDS: ⚠️ Received non-JSON message, ignoring:',
+								trimmed.substring(0, 50)
+							)
 							return
 						}
 
@@ -142,7 +151,10 @@ export class RTDSWebSocket {
 							// Check if it's an incomplete JSON error
 							if (parseError instanceof SyntaxError) {
 								// Log but don't throw - might be a partial message
-								console.warn('RTDS: ⚠️ JSON parse error (possibly incomplete message):', parseError.message)
+								console.warn(
+									'RTDS: ⚠️ JSON parse error (possibly incomplete message):',
+									parseError.message
+								)
 								console.warn('RTDS: Message data:', trimmed.substring(0, 100))
 								// Don't call onError for parse errors - might be temporary
 								return
@@ -155,8 +167,15 @@ export class RTDSWebSocket {
 				} catch (error) {
 					// Only log critical errors, not parse errors (handled above)
 					if (!(error instanceof SyntaxError)) {
-						console.error('RTDS: ❌ Error handling message:', error, 'Data:', event.data)
-						this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
+						console.error(
+							'RTDS: ❌ Error handling message:',
+							error,
+							'Data:',
+							event.data
+						)
+						this.callbacks.onError?.(
+							error instanceof Error ? error : new Error(String(error))
+						)
 					}
 				}
 			}
@@ -166,9 +185,8 @@ export class RTDSWebSocket {
 				this.isConnecting = false
 				this.isConnected = false
 
-				const errorMessage = error instanceof Error
-					? error.message
-					: 'RTDS WebSocket connection error'
+				const errorMessage =
+					error instanceof Error ? error.message : 'RTDS WebSocket connection error'
 
 				this.callbacks.onError?.(new Error(errorMessage))
 			}
@@ -177,7 +195,7 @@ export class RTDSWebSocket {
 				console.log('RTDS: 🔌 WebSocket closed:', {
 					code: event.code,
 					reason: event.reason,
-					wasClean: event.wasClean,
+					wasClean: event.wasClean
 				})
 
 				this.isConnecting = false
@@ -191,14 +209,18 @@ export class RTDSWebSocket {
 					this.reconnectAttempts++
 					setTimeout(() => {
 						if (this.shouldReconnect) {
-							console.log(`RTDS: 🔄 Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+							console.log(
+								`RTDS: 🔄 Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+							)
 							this.connect()
 						}
 					}, this.reconnectDelay)
 				} else if (!this.shouldReconnect) {
 					console.log('RTDS: ⏸️ Auto-reconnect disabled')
 				} else {
-					console.log(`RTDS: ⛔ Max reconnect attempts (${this.maxReconnectAttempts}) reached`)
+					console.log(
+						`RTDS: ⛔ Max reconnect attempts (${this.maxReconnectAttempts}) reached`
+					)
 				}
 			}
 		} catch (error) {
@@ -227,10 +249,10 @@ export class RTDSWebSocket {
 				// Binance format: comma-separated lowercase (e.g., "solusdt,btcusdt")
 				// Ensure symbols are in correct format (lowercase, no separator)
 				filters = this.symbols
-					.map(s => s.toLowerCase().replace('/', '').replace('usd', 'usdt'))
-					.filter(s => s.length > 0)
+					.map((s) => s.toLowerCase().replace('/', '').replace('usd', 'usdt'))
+					.filter((s) => s.length > 0)
 					.join(',')
-				
+
 				// Only set filters if we have valid symbols
 				if (!filters || filters.length === 0) {
 					filters = undefined
@@ -252,9 +274,9 @@ export class RTDSWebSocket {
 			subscriptions: [
 				{
 					topic,
-					type,
-				},
-			],
+					type
+				}
+			]
 		}
 
 		// Only add filters if they are defined and not empty (for Binance)
@@ -295,9 +317,9 @@ export class RTDSWebSocket {
 			subscriptions: [
 				{
 					topic,
-					type,
-				},
-			],
+					type
+				}
+			]
 		}
 
 		try {
@@ -334,7 +356,7 @@ export class RTDSWebSocket {
 				const update: CryptoPriceUpdate = {
 					symbol: data.payload.symbol,
 					value: data.payload.value,
-					timestamp: data.payload.timestamp || data.timestamp || Date.now(),
+					timestamp: data.payload.timestamp || data.timestamp || Date.now()
 				}
 
 				// console.log('RTDS: 📊 Price update:', update)
@@ -347,7 +369,7 @@ export class RTDSWebSocket {
 			if (process.env.NODE_ENV === 'development') {
 				console.log('RTDS: 📨 Received non-price message:', {
 					topic: data.topic,
-					type: data.type,
+					type: data.type
 				})
 			}
 		}
@@ -371,7 +393,10 @@ export class RTDSWebSocket {
 			this.ws.onerror = null
 			this.ws.onclose = null
 
-			if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+			if (
+				this.ws.readyState === WebSocket.OPEN ||
+				this.ws.readyState === WebSocket.CONNECTING
+			) {
 				this.ws.close(1000, 'Manual disconnect')
 			}
 			this.ws = null
@@ -390,10 +415,9 @@ export class RTDSWebSocket {
 	 */
 	updateSymbols(symbols: string[]): void {
 		// Check if symbols actually changed
-		const symbolsChanged = 
-			symbols.length !== this.symbols.length ||
-			symbols.some((s, i) => s !== this.symbols[i])
-		
+		const symbolsChanged =
+			symbols.length !== this.symbols.length || symbols.some((s, i) => s !== this.symbols[i])
+
 		if (!symbolsChanged) {
 			return // No change, skip update
 		}
@@ -458,4 +482,3 @@ export class RTDSWebSocket {
 		return 'disconnected'
 	}
 }
-

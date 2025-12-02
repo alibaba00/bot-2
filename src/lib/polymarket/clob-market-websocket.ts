@@ -92,7 +92,10 @@ export class CLOBMarketWebSocket {
 				this.ws.onmessage = null
 				this.ws.onerror = null
 				this.ws.onclose = null
-				if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+				if (
+					this.ws.readyState === WebSocket.OPEN ||
+					this.ws.readyState === WebSocket.CONNECTING
+				) {
 					this.ws.close(1000, 'Force reconnect')
 				}
 				this.ws = null
@@ -159,7 +162,8 @@ export class CLOBMarketWebSocket {
 
 							// Check if it's an error response
 							if (data.event_type === 'error' || (data as any).error) {
-								const errorMsg = (data as any).error || (data as any).message || 'Server error'
+								const errorMsg =
+									(data as any).error || (data as any).message || 'Server error'
 								console.error('❌ CLOB Market: Server error response:', errorMsg)
 								this.callbacks.onError?.(new Error(errorMsg))
 								return
@@ -171,11 +175,19 @@ export class CLOBMarketWebSocket {
 							}
 
 							// Handle last_trade_price events
-							if (data.event_type === 'last_trade_price' && data.asset_id && data.price) {
+							if (
+								data.event_type === 'last_trade_price' &&
+								data.asset_id &&
+								data.price
+							) {
 								this.handleLastTradePrice(data)
 							}
 						} catch (parseError) {
-							console.warn('⚠️ CLOB Market: Failed to parse message:', event.data, parseError)
+							console.warn(
+								'⚠️ CLOB Market: Failed to parse message:',
+								event.data,
+								parseError
+							)
 						}
 					} else {
 						console.warn('⚠️ CLOB Market: Received non-string message:', event.data)
@@ -190,9 +202,10 @@ export class CLOBMarketWebSocket {
 				this.isConnecting = false
 				this.isConnected = false
 
-				const errorMessage = error instanceof Error
-					? error.message
-					: 'CLOB Market WebSocket connection error'
+				const errorMessage =
+					error instanceof Error
+						? error.message
+						: 'CLOB Market WebSocket connection error'
 
 				this.callbacks.onError?.(new Error(errorMessage))
 			}
@@ -201,7 +214,7 @@ export class CLOBMarketWebSocket {
 				console.log('🔌 CLOB Market: WebSocket closed', {
 					code: event.code,
 					reason: event.reason,
-					wasClean: event.wasClean,
+					wasClean: event.wasClean
 				})
 
 				this.isConnecting = false
@@ -217,14 +230,18 @@ export class CLOBMarketWebSocket {
 
 					setTimeout(() => {
 						if (this.shouldReconnect) {
-							console.log(`🔄 CLOB Market: Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+							console.log(
+								`🔄 CLOB Market: Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+							)
 							this.connect()
 						}
 					}, delay)
 				} else if (!this.shouldReconnect) {
 					console.log('⏸️ CLOB Market: Auto-reconnect disabled')
 				} else {
-					console.log(`⛔ CLOB Market: Max reconnect attempts (${this.maxReconnectAttempts}) reached`)
+					console.log(
+						`⛔ CLOB Market: Max reconnect attempts (${this.maxReconnectAttempts}) reached`
+					)
 				}
 			}
 		} catch (error) {
@@ -253,7 +270,7 @@ export class CLOBMarketWebSocket {
 		// Use the correct format as seen on Polymarket website
 		const subscription = {
 			assets_ids: this.assetIds,
-			type: 'market',
+			type: 'market'
 		}
 
 		const subscriptionMessage = JSON.stringify(subscription)
@@ -291,7 +308,7 @@ export class CLOBMarketWebSocket {
 				size: parseFloat(priceChange.size),
 				best_bid: parseFloat(priceChange.best_bid),
 				best_ask: parseFloat(priceChange.best_ask),
-				hash: priceChange.hash,
+				hash: priceChange.hash
 			}
 
 			// console.log('💰 CLOB Market: Price update:', {
@@ -328,7 +345,7 @@ export class CLOBMarketWebSocket {
 			timestamp,
 			transaction_hash: message.transaction_hash,
 			fee_rate_bps: message.fee_rate_bps ? parseFloat(message.fee_rate_bps) : undefined,
-			market: message.market,
+			market: message.market
 		}
 
 		this.callbacks.onLastTradePriceUpdate?.(update)
@@ -354,7 +371,10 @@ export class CLOBMarketWebSocket {
 			this.ws.onerror = null
 			this.ws.onclose = null
 
-			if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+			if (
+				this.ws.readyState === WebSocket.OPEN ||
+				this.ws.readyState === WebSocket.CONNECTING
+			) {
 				this.ws.close(1000, 'Manual disconnect')
 			}
 			this.ws = null
@@ -407,4 +427,3 @@ export class CLOBMarketWebSocket {
 		return 'disconnected'
 	}
 }
-

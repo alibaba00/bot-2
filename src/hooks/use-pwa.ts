@@ -8,14 +8,14 @@ export function usePWA() {
 
 	const {
 		needRefresh: [needRefresh, setNeedRefresh],
-		updateServiceWorker,
+		updateServiceWorker
 	} = useRegisterSW({
 		onRegistered(r) {
 			console.log('SW Registered: ' + r)
 		},
 		onRegisterError(error) {
 			console.log('SW registration error', error)
-		},
+		}
 	})
 
 	useEffect(() => {
@@ -74,6 +74,6 @@ export function usePWA() {
 		canInstall: !!deferredPrompt,
 		installApp,
 		updateApp,
-		dismissUpdate: () => setNeedRefresh(false),
+		dismissUpdate: () => setNeedRefresh(false)
 	}
 }

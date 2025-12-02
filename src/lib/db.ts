@@ -51,15 +51,20 @@ db.version(1).stores({
 })
 
 // Version 2: Added 'role' field
-db.version(2).stores({
-	friends: '++id, name, age, role'
-}).upgrade(tx => {
-	return tx.table('friends').toCollection().modify(friend => {
-		if (!friend.role) {
-			friend.role = 'user'
-		}
+db.version(2)
+	.stores({
+		friends: '++id, name, age, role'
 	})
-})
+	.upgrade((tx) => {
+		return tx
+			.table('friends')
+			.toCollection()
+			.modify((friend) => {
+				if (!friend.role) {
+					friend.role = 'user'
+				}
+			})
+	})
 
 // Version 3: Added Polymarket tables
 db.version(3).stores({

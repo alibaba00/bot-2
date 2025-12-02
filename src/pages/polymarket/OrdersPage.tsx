@@ -30,38 +30,46 @@ export default function OrdersPage() {
 	}
 
 	return (
-		<div className="flex flex-1 flex-col gap-6 p-4 pt-0 pb-16">
-			<div className="flex items-center justify-between">
+		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>
+			<div className='flex items-center justify-between'>
 				<div>
-					<h1 className="text-3xl font-bold">Orders</h1>
-					<p className="text-muted-foreground mt-1">
-						Manage your open and recent orders
-					</p>
+					<h1 className='text-3xl font-bold'>Orders</h1>
+					<p className='text-muted-foreground mt-1'>Manage your open and recent orders</p>
 				</div>
-				<div className="flex gap-2">
-					<Button variant="outline" onClick={handleRefresh}>
-						<RefreshCw className="h-4 w-4 mr-2" />
+				<div className='flex gap-2'>
+					<Button variant='outline' onClick={handleRefresh}>
+						<RefreshCw className='h-4 w-4 mr-2' />
 						Refresh
 					</Button>
 					{orders.length > 0 && (
-						<Button variant="destructive" onClick={handleCancelAll}>
+						<Button variant='destructive' onClick={handleCancelAll}>
 							Cancel All
 						</Button>
 					)}
 				</div>
 			</div>
 
-			<div className="grid gap-6 md:grid-cols-2">
+			<div className='grid gap-6 md:grid-cols-2'>
 				<Card>
 					<CardHeader>
 						<CardTitle>Open Orders</CardTitle>
 						<CardDescription>
-							{orders.filter(o => o.status === 'OPEN' || o.status === 'PENDING').length} open order{orders.filter(o => o.status === 'OPEN' || o.status === 'PENDING').length !== 1 ? 's' : ''}
+							{
+								orders.filter((o) => o.status === 'OPEN' || o.status === 'PENDING')
+									.length
+							}{' '}
+							open order
+							{orders.filter((o) => o.status === 'OPEN' || o.status === 'PENDING')
+								.length !== 1
+								? 's'
+								: ''}
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<OrderList
-							orders={orders.filter(o => o.status === 'OPEN' || o.status === 'PENDING')}
+							orders={orders.filter(
+								(o) => o.status === 'OPEN' || o.status === 'PENDING'
+							)}
 							loading={loading}
 							showCancel={true}
 						/>
@@ -72,7 +80,9 @@ export default function OrdersPage() {
 					<CardHeader>
 						<CardTitle>Place New Order</CardTitle>
 						<CardDescription>
-							{selectedMarket ? selectedMarket.question : 'Select a market to place an order'}
+							{selectedMarket
+								? selectedMarket.question
+								: 'Select a market to place an order'}
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
@@ -81,7 +91,7 @@ export default function OrdersPage() {
 				</Card>
 			</div>
 
-			{orders.filter(o => o.status !== 'OPEN' && o.status !== 'PENDING').length > 0 && (
+			{orders.filter((o) => o.status !== 'OPEN' && o.status !== 'PENDING').length > 0 && (
 				<Card>
 					<CardHeader>
 						<CardTitle>Order History</CardTitle>
@@ -91,7 +101,9 @@ export default function OrdersPage() {
 					</CardHeader>
 					<CardContent>
 						<OrderList
-							orders={orders.filter(o => o.status !== 'OPEN' && o.status !== 'PENDING')}
+							orders={orders.filter(
+								(o) => o.status !== 'OPEN' && o.status !== 'PENDING'
+							)}
 							loading={loading}
 							showCancel={false}
 						/>
@@ -101,4 +113,3 @@ export default function OrdersPage() {
 		</div>
 	)
 }
-

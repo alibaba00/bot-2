@@ -4,7 +4,10 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { CLOBMarketWebSocket } from '@/lib/polymarket/clob-market-websocket'
-import type { CLOBMarketPriceUpdate, CLOBLastTradePriceUpdate } from '@/lib/polymarket/clob-market-websocket'
+import type {
+	CLOBMarketPriceUpdate,
+	CLOBLastTradePriceUpdate
+} from '@/lib/polymarket/clob-market-websocket'
 
 export interface UseCLOBMarketWebSocketOptions {
 	assetIds: string[] // Asset IDs (not market addresses!)
@@ -25,10 +28,18 @@ export interface UseCLOBMarketWebSocketReturn {
 export function useCLOBMarketWebSocket(
 	options: UseCLOBMarketWebSocketOptions
 ): UseCLOBMarketWebSocketReturn {
-	const { assetIds, onPriceUpdate, onLastTradePriceUpdate, onError, autoConnect = false } = options
+	const {
+		assetIds,
+		onPriceUpdate,
+		onLastTradePriceUpdate,
+		onError,
+		autoConnect = false
+	} = options
 
 	const wsRef = useRef<CLOBMarketWebSocket | null>(null)
-	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
+	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>(
+		'disconnected'
+	)
 	const [lastPriceUpdate, setLastPriceUpdate] = useState<CLOBMarketPriceUpdate | null>(null)
 
 	useEffect(() => {
@@ -51,7 +62,7 @@ export function useCLOBMarketWebSocket(
 				console.error('CLOB Market WebSocket error:', error)
 				setStatus('disconnected')
 				onError?.(error)
-			},
+			}
 		})
 
 		// Auto-connect if enabled
@@ -113,7 +124,6 @@ export function useCLOBMarketWebSocket(
 		disconnect,
 		updateAssetIds,
 		status,
-		lastPriceUpdate,
+		lastPriceUpdate
 	}
 }
-

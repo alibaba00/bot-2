@@ -40,10 +40,10 @@ action when value changed:
 	}, [value])
 */
 
-import {create} from 'zustand'		// https://github.com/pmndrs/zustand
-import {useShallow} from 'zustand/react/shallow'
+import { create } from 'zustand' // https://github.com/pmndrs/zustand
+import { useShallow } from 'zustand/react/shallow'
 // import { persist, createJSONStorage } from 'zustand/middleware'
-import localForage from "localforage";
+import localForage from 'localforage'
 
 const env = import.meta.env
 const isElectron = window?.navigator.userAgent.includes('Electron')
@@ -53,23 +53,21 @@ const isProduction = env.PROD || env.MODE === 'production'
 const fs = isElectron ? (window as any)?.require?.('fs') : null
 const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 
-
 // ---------------------------------------------------------------------------- getBasename
 // Get the basename for the current environment
 const getBasename = () => {
 	// In Electron or file protocol, use empty basename
 	if (isElectron || isFileProtocol || isDevelopment) return ''
-	
+
 	// For production web deployment, determine basename from current path
 	const currentPath = window?.location.pathname
-	const pathSegments = currentPath.split('/').filter(segment => segment !== '')
-	return (pathSegments.length > 0) ? '/' + pathSegments[0] : ''
+	const pathSegments = currentPath.split('/').filter((segment) => segment !== '')
+	return pathSegments.length > 0 ? '/' + pathSegments[0] : ''
 }
-
 
 // ---------------------------------------------------------------------------- useStorePersisted
 // export const useStorePersisted = create(persist(() => ({
-// 	isInit: false,	
+// 	isInit: false,
 // 	status: 'initializing',
 // }), {
 // 	name: 'store',
@@ -79,81 +77,79 @@ const getBasename = () => {
 // 	// }),
 // }));
 
-
 // ---------------------------------------------------------------------------- useStore
 export const useStore = create(() => ({
 	isInit: false,
-	status: 'initializing',
-}));
-
-
+	status: 'initializing'
+}))
 
 // ============================================================================ Store
 const Store = {
-	config		: null as any,
-	cache		: null as any,
-	basename	: getBasename(),
-	env			: env,
+	config: null as any,
+	cache: null as any,
+	basename: getBasename(),
+	env: env,
 	isElectron,
 	isDevelopment,
 	isProduction,
-	
+
 	set: (state: any, value?: any) => {
-		if (typeof state === 'string') state = {[state]: value}
+		if (typeof state === 'string') state = { [state]: value }
 		useStore.setState(state)
 	},
 
 	// get: useStore.getState,
 	get: (value?: string) => {
-		return value? useStore.getState()[value as any] : useStore.getState()	
+		return value ? useStore.getState()[value as any] : useStore.getState()
 	},
 
 	use: (...keys: string[]) => {
-		return useStore(useShallow((state: any) => 
-			keys.length === 1 ? state[keys[0]] : keys.map(key => state[key])
-		))
+		return useStore(
+			useShallow((state: any) =>
+				keys.length === 1 ? state[keys[0]] : keys.map((key) => state[key])
+			)
+		)
 	},
 
 	async init() {
-		this.config = await loadConfig();
+		this.config = await loadConfig()
 
 		// create cache instance
 		this.cache = localForage.createInstance({
 			name: this.config.name,
-			storeName: this.config.name + "-store"
-		});
+			storeName: this.config.name + '-store'
+		})
 
-		console.log('---store init:', this.config.name, this.config.version, this);
-		useStore.setState({'isInit': true, 'status': this.config.info || 'initialized'});
+		console.log('---store init:', this.config.name, this.config.version, this)
+		useStore.setState({ isInit: true, status: this.config.info || 'initialized' })
 	}
-};
+}
 
-export default Store;
-
+export default Store
 
 // ---------------------------------------------------------------------------- loadConfig
 // load config from config.json and userConfig.json
 const loadConfig = async () => {
 	const configPath = './config.json'
 	console.log('Loading config from:', configPath)
-	
-	const config = await fetch(configPath).then(res => res.json());
-	if (!config) return;
+
+	const config = await fetch(configPath).then((res) => res.json())
+	if (!config) return
 
 	// try to load user config
 	if (isElectron) {
 		try {
-			const userConfigPath = config.userConfig;
+			const userConfigPath = config.userConfig
 			if (fs?.existsSync(userConfigPath)) {
-				const userConfig = await fsPromises?.readFile(userConfigPath, 'utf8');
+				const userConfig = await fsPromises?.readFile(userConfigPath, 'utf8')
 				// merge user config with app config
-				Object.assign(config, JSON.parse(userConfig));
+				Object.assign(config, JSON.parse(userConfig))
 			}
 		} catch (error) {
-			console.log('---fs access error:', error);
+			console.log('---fs access error:', error)
 		}
 	}
 
-	console.log('---config:', config);
-	return config;
+	console.log('---config:', config)
+	return config
 }

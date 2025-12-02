@@ -23,21 +23,22 @@ import OrdersPage from './polymarket/OrdersPage'
 import PolymarketHistoryPage from './polymarket/HistoryPage'
 import TickerPage from './polymarket/TickerPage'
 import TickerPage2 from './polymarket/TickerPage2'
-
+import TickerPage3 from './polymarket/TickerPage3'
 
 const pages = [
-	{id:'demo', path:'/playground/demo', page:<DemoPage />},
-	{id:'editor', path:'/playground/editor', page:EditorPage},
-	{id:'history', path:'/playground/history', page:<HistoryPage />},
-	{id:'starred', path:'/playground/starred', page:<StarredPage />},
-	{id:'settings', path:'/playground/settings', page:SettingsPage},
-	{id:'polymarket', path:'/polymarket', page:<DashboardPage />},
-	{id:'polymarket-dashboard', path:'/polymarket/dashboard', page:<DashboardPage />},
-	{id:'polymarket-markets', path:'/polymarket/markets', page:<MarketsPage />},
-	{id:'polymarket-orders', path:'/polymarket/orders', page:<OrdersPage />},
-	{id:'polymarket-history', path:'/polymarket/history', page:<PolymarketHistoryPage />},
-	{id:'polymarket-ticker', path:'/polymarket/ticker', page:<TickerPage />},
-	{id:'polymarket-ticker2', path:'/polymarket/ticker2', page:<TickerPage2 />}
+	{ id: 'demo', path: '/playground/demo', page: <DemoPage /> },
+	{ id: 'editor', path: '/playground/editor', page: EditorPage },
+	{ id: 'history', path: '/playground/history', page: <HistoryPage /> },
+	{ id: 'starred', path: '/playground/starred', page: <StarredPage /> },
+	{ id: 'settings', path: '/playground/settings', page: SettingsPage },
+	{ id: 'polymarket', path: '/polymarket', page: <DashboardPage /> },
+	{ id: 'polymarket-dashboard', path: '/polymarket/dashboard', page: <DashboardPage /> },
+	{ id: 'polymarket-markets', path: '/polymarket/markets', page: <MarketsPage /> },
+	{ id: 'polymarket-orders', path: '/polymarket/orders', page: <OrdersPage /> },
+	{ id: 'polymarket-history', path: '/polymarket/history', page: <PolymarketHistoryPage /> },
+	{ id: 'polymarket-ticker', path: '/polymarket/ticker', page: <TickerPage /> },
+	{ id: 'polymarket-ticker2', path: '/polymarket/ticker2', page: <TickerPage2 /> },
+	{ id: 'polymarket-ticker3', path: '/polymarket/ticker3', page: <TickerPage3 /> }
 ]
 
 const data = {
@@ -71,6 +72,10 @@ const data = {
 					title: 'Ticker 2',
 					url: '/polymarket/ticker2'
 				},
+				{
+					title: 'Ticker 3',
+					url: '/polymarket/ticker3'
+				}
 			]
 		},
 		{
@@ -100,19 +105,19 @@ const data = {
 					url: '/playground/settings'
 				}
 			]
-		},
-	],
+		}
+	]
 }
 
 export default function Page() {
-	const location = useLocation();
+	const location = useLocation()
 
 	const getCurrentBreadcrumb = () => {
-		const path = location.pathname;
-		if (path.includes('/playground/')) return 'Playground';
-		if (path.includes('/polymarket/')) return 'Polymarket';
-		return 'Building Your Application';
-	};
+		const path = location.pathname
+		if (path.includes('/playground/')) return 'Playground'
+		if (path.includes('/polymarket/')) return 'Polymarket'
+		return 'Building Your Application'
+	}
 
 	return (
 		<SidebarProvider>
@@ -143,11 +148,10 @@ export default function Page() {
 
 				<PageView
 					content={pages}
-					selectedNode={pages.find(node => location.pathname === node.path)}
+					selectedNode={pages.find((node) => location.pathname === node.path)}
 					autoUnmount={false}
-					cache='playground-page'		
+					cache='playground-page'
 				/>
-
 			</SidebarInset>
 		</SidebarProvider>
 	)

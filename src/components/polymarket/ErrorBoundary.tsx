@@ -38,10 +38,10 @@ export class PolymarketErrorBoundary extends Component<Props, State> {
 			}
 
 			return (
-				<Card className="border-destructive m-4">
+				<Card className='border-destructive m-4'>
 					<CardHeader>
-						<CardTitle className="flex items-center gap-2 text-destructive">
-							<AlertCircle className="h-5 w-5" />
+						<CardTitle className='flex items-center gap-2 text-destructive'>
+							<AlertCircle className='h-5 w-5' />
 							Something went wrong
 						</CardTitle>
 						<CardDescription>
@@ -49,10 +49,10 @@ export class PolymarketErrorBoundary extends Component<Props, State> {
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						<div className="space-y-4">
+						<div className='space-y-4'>
 							{this.state.error && (
-								<div className="p-3 bg-destructive/10 rounded-md">
-									<p className="text-sm font-mono text-destructive">
+								<div className='p-3 bg-destructive/10 rounded-md'>
+									<p className='text-sm font-mono text-destructive'>
 										{this.state.error.message}
 									</p>
 								</div>
@@ -67,4 +67,3 @@ export class PolymarketErrorBoundary extends Component<Props, State> {
 		return this.props.children
 	}
 }
-

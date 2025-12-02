@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { FileCode, Download, Copy, Save } from 'lucide-react'
 import Editor, { loader } from '@monaco-editor/react'
-import * as monaco from 'monaco-editor';
+import * as monaco from 'monaco-editor'
 // Import workers via Vite to ensure correct MIME type and URLs in web builds
 // These are classes that construct Workers
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
@@ -34,31 +34,36 @@ export default function EditorPage() {
 	useEffect(() => {
 		// Configure Monaco Environment to return proper Worker instances
 		if (typeof window !== 'undefined') {
-			(window as Window & { MonacoEnvironment?: any }).MonacoEnvironment = {
+			;(window as Window & { MonacoEnvironment?: any }).MonacoEnvironment = {
 				getWorker: function (_moduleId: string, label: string) {
 					if (label === 'json') return new JsonWorker()
-					if (label === 'css' || label === 'scss' || label === 'less') return new CssWorker()
-					if (label === 'html' || label === 'handlebars' || label === 'razor') return new HtmlWorker()
+					if (label === 'css' || label === 'scss' || label === 'less')
+						return new CssWorker()
+					if (label === 'html' || label === 'handlebars' || label === 'razor')
+						return new HtmlWorker()
 					if (label === 'typescript' || label === 'javascript') return new TsWorker()
 					return new EditorWorker()
 				}
 			} as any
 		}
 
-		loader.config({ monaco });
-		
-		// Initialize the loader
-		loader.init().then((monaco) => {
-			console.log('Monaco Editor loaded successfully:', monaco)
-		}).catch((error) => {
-			console.error('Failed to load Monaco Editor:', error)
-		})
+		loader.config({ monaco })
 
+		// Initialize the loader
+		loader
+			.init()
+			.then((monaco) => {
+				console.log('Monaco Editor loaded successfully:', monaco)
+			})
+			.catch((error) => {
+				console.error('Failed to load Monaco Editor:', error)
+			})
 	}, [])
 
 	// Mock file contents - in a real app, these would be fetched from the server
-	const fileContents: FileContent = useMemo(() => ({
-		'package.json': `{
+	const fileContents: FileContent = useMemo(
+		() => ({
+			'package.json': `{
 	"name": "app-template.2",
 	"private": true,
 	"version": "1.0.1",
@@ -146,23 +151,28 @@ export default function EditorPage() {
 		"vite": "^7.1.2"
 	}
 }`,
-		'config.json': `{
+			'config.json': `{
 	"name": "demo",
 	"info": "welcome in the demo app",
 	"version": "1.0.2",
 	"release": "01.09.2025",
 	"userConfig": "c:/jtcore/userConfig.json"
 }`
-	}), [])
+		}),
+		[]
+	)
 
-	const loadFileContent = useCallback((filename: string) => {
-		setIsLoading(true)
-		// Simulate loading delay
-		setTimeout(() => {
-			setFileContent(fileContents[filename] || '')
-			setIsLoading(false)
-		}, 300)
-	}, [fileContents])
+	const loadFileContent = useCallback(
+		(filename: string) => {
+			setIsLoading(true)
+			// Simulate loading delay
+			setTimeout(() => {
+				setFileContent(fileContents[filename] || '')
+				setIsLoading(false)
+			}, 300)
+		},
+		[fileContents]
+	)
 
 	useEffect(() => {
 		loadFileContent(selectedFile)

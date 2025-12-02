@@ -3,7 +3,11 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { RTDSWebSocket, CryptoPriceUpdate, CryptoPriceSource } from '@/lib/polymarket/rtds-websocket'
+import {
+	RTDSWebSocket,
+	CryptoPriceUpdate,
+	CryptoPriceSource
+} from '@/lib/polymarket/rtds-websocket'
 
 export interface UseRTDSWebSocketOptions {
 	source?: CryptoPriceSource
@@ -22,19 +26,19 @@ export interface UseRTDSWebSocketReturn {
 	lastPriceUpdate: CryptoPriceUpdate | null
 }
 
-export function useRTDSWebSocket(
-	options: UseRTDSWebSocketOptions = {}
-): UseRTDSWebSocketReturn {
+export function useRTDSWebSocket(options: UseRTDSWebSocketOptions = {}): UseRTDSWebSocketReturn {
 	const {
 		source = 'binance',
 		symbols = [],
 		onPriceUpdate,
 		onError,
-		autoConnect = false,
+		autoConnect = false
 	} = options
 
 	const wsRef = useRef<RTDSWebSocket | null>(null)
-	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
+	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>(
+		'disconnected'
+	)
 	const [lastPriceUpdate, setLastPriceUpdate] = useState<CryptoPriceUpdate | null>(null)
 
 	// Create WebSocket instance on mount
@@ -55,7 +59,7 @@ export function useRTDSWebSocket(
 				console.error('RTDS WebSocket error:', error)
 				setStatus('disconnected')
 				onError?.(error)
-			},
+			}
 		})
 
 		// Auto-connect if enabled
@@ -133,7 +137,6 @@ export function useRTDSWebSocket(
 		updateSymbols,
 		updateSource,
 		status,
-		lastPriceUpdate,
+		lastPriceUpdate
 	}
 }
-

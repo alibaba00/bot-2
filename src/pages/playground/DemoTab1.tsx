@@ -75,9 +75,13 @@ export default function DemoTab1() {
 				<Button
 					onClick={() => {
 						// Nur Admins abrufen (filtert nach role)
-						db.friends.where('role').equals('admin').toArray().then((admins) => {
-							console.log('Nur Admins:', admins)
-						})
+						db.friends
+							.where('role')
+							.equals('admin')
+							.toArray()
+							.then((admins) => {
+								console.log('Nur Admins:', admins)
+							})
 					}}
 					variant='outline'>
 					Get Admins Only
