@@ -19,19 +19,14 @@ class PolymarketApi {
 	constructor() {
 		this.gammaApiBase = GAMMA_API_BASE
 		this.polymarketApiBase = POLYMARKET_API_BASE
+		this.init()
 	}
 
 	async init() {
+		console.log('-----------------------init PolymarketApi-----------------------')
 		const cachedMarkets = (await cache.getItem('markets')) || []
 		console.log('cachedMarkets', cachedMarkets)
 		this.markets = cachedMarkets
-
-		if (this.markets.length === 0) {
-			this.currentMarket = await this.createMarket('btc-updown-15m')
-			this.markets.push(this.currentMarket)
-		} else {
-			this.currentMarket = this.markets[0]
-		}
 
 		return this.markets
 
@@ -54,12 +49,23 @@ class PolymarketApi {
 		// })
 	}
 
-	async createMarket(type) {
+
+	initMarket(symbol) {		//e.g. btc-updown-15m
 		const timestamp = this.getCurrent15MinuteUTCTimestamp()
+		const marketSlug = `${symbol}-${timestamp}`
+		if (this.markets?.[symbol]?.[marketSlug]) return this.markets[symbol][marketSlug]
+
+		if (!this.markets?.[symbol]) this.markets[symbol] = {}
+		const market = this.createMarket(timestamp, marketSlug)
+		this.markets[symbol][market.slug] = market
+		return market
+	}
+
+
+	createMarket(timestamp, marketSlug) {
 		const startTimestamp = timestamp * 1000 // Convert to milliseconds
 		const endTimestamp = startTimestamp + 15 * 60 * 1000 // Add 15 minutes
 
-		const marketSlug = `${type}-${timestamp}`
 		console.log('marketSlug', marketSlug)
 
 		console.log('startTimestamp', new Date(startTimestamp).toISOString())
@@ -71,10 +77,14 @@ class PolymarketApi {
 		const market = {
 			success: true,
 			message: 'Market created successfully',
-			slug: marketSlug
+			slug: marketSlug,
+			timestamp,
+			startTimestamp,
+			endTimestamp,
+			state: 'init',
 			// priceToBeat: priceToBeat ? priceToBeat : null,
 		}
-		this.setPriceToBeat(market)
+		// this.setPriceToBeat(market)
 
 		return market
 	}
@@ -90,25 +100,19 @@ class PolymarketApi {
 	}
 
 	// Default Bitcoin market slug - dynamically generated based on current 15-minute UTC timestamp
-	getDefaultBTCMarketSlug() {
-		const timestamp = this.getCurrent15MinuteUTCTimestamp()
-		console.log('Default Bitcoin market slug:', `btc-updown-15m-${timestamp}`)
-		return `btc-updown-15m-${timestamp}`
-	}
+	// getDefaultBTCMarketSlug() {
+	// 	const timestamp = this.getCurrent15MinuteUTCTimestamp()
+	// 	console.log('Default Bitcoin market slug:', `btc-updown-15m-${timestamp}`)
+	// 	return `btc-updown-15m-${timestamp}`
+	// }
 
 	// Get price to beat for a given symbol, event start time, and end date
 	async getPriceToBeat(symbol, eventStartTime, endDate) {
-		const priceToBeat = await fetchCryptoPriceToBeat(symbol, eventStartTime, endDate, 'fifteen')
-		if (!priceToBeat) {
-			throw new Error('Failed to fetch price to beat')
-		}
-		return priceToBeat
+		return await fetchCryptoPriceToBeat(symbol, eventStartTime, endDate, 'fifteen') || null
 	}
 
-	setPriceToBeat(market) {
-		// market.priceToBeat = 'loading...' as unknown as number
-		// market.priceToBeat = await this.getPriceToBeat(market.slug.split('-')[0], market.slug.split('-')[1], market.slug.split('-')[2])
-	}
 }
 
 export default new PolymarketApi()
+
+
