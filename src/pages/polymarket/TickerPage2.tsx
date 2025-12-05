@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,7 +11,7 @@ import {
 	fetchMarketPricesFromClob,
 	fetchCryptoPriceToBeat
 } from '@/lib/polymarket/markets'
-import type { Market } from '@/lib/polymarket/types'
+import type { Market, MarketOutcome } from '@/lib/polymarket/types'
 import type { CryptoPriceSource } from '@/lib/polymarket/rtds-websocket'
 import { WS_URLS } from '@/lib/polymarket/websocket'
 import { Wifi, WifiOff, Play, Square, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
@@ -87,6 +87,13 @@ export default function TickerPage2() {
 	// Price to beat (reference price for crypto up/down markets)
 	const [priceToBeat, setPriceToBeat] = useState<number | null>(null)
 	const [priceToBeatLoading, setPriceToBeatLoading] = useState(false)
+
+	// Countdown timer state
+	const [timeRemaining, setTimeRemaining] = useState<{
+		minutes: number
+		seconds: number
+		isExpired: boolean
+	} | null>(null)
 
 	// RTDS WebSocket for crypto prices
 	const cryptoWs = useRTDSWebSocket({
@@ -580,6 +587,112 @@ export default function TickerPage2() {
 		return (price * 100).toFixed(2) + '%'
 	}
 
+	// Check if market is finished/ended
+	const isMarketFinished = (market: Market | null): boolean => {
+		if (!market) return false
+		
+		// Check if market is closed
+		if (market.closed) return true
+		
+		// Check if endDate is in the past
+		if (market.endDate) {
+			const endDate = new Date(market.endDate)
+			const now = new Date()
+			return endDate < now
+		}
+		
+		return false
+	}
+
+	// Get the winning outcome (highest price indicates winner in resolved markets)
+	// Memoized to prevent endless loops when called during render
+	const winningOutcome = useMemo((): MarketOutcome | null => {
+		if (!market || !isMarketFinished(market)) return null
+		
+		// Use real-time prices from marketPrices if available, otherwise use static outcome prices
+		const outcomesWithPrices = market.outcomes.map((outcome) => {
+			const realTimePrice = marketPrices[outcome.id]?.price
+			return {
+				...outcome,
+				currentPrice: realTimePrice !== undefined ? realTimePrice : outcome.price
+			}
+		})
+		
+		// In a resolved binary market, the winner should have the highest price
+		// Find outcome with highest price (should be >= 0.5 for winner in binary markets)
+		if (outcomesWithPrices.length === 0) return null
+		
+		// Sort outcomes by current price descending and take the highest
+		const sortedOutcomes = [...outcomesWithPrices].sort((a, b) => b.currentPrice - a.currentPrice)
+		const highestPriceOutcome = sortedOutcomes[0]
+		
+		// In binary markets, winner should have price > 0.5
+		// For safety, also check if price is significantly higher than others
+		if (highestPriceOutcome.currentPrice > 0.5) {
+			// Return the original outcome object (not the extended one)
+			return market.outcomes.find((o) => o.id === highestPriceOutcome.id) || highestPriceOutcome
+		}
+		
+		// If no clear winner (all prices are close), return null
+		return null
+	}, [market, marketPrices])
+
+	// Format end date for display
+	const formatEndDate = (endDate: string | undefined): string => {
+		if (!endDate) return ''
+		const date = new Date(endDate)
+		return date.toLocaleString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit',
+			hour12: true
+		})
+	}
+
+	// Countdown timer effect - updates every second
+	useEffect(() => {
+		if (!market?.endDate) {
+			setTimeRemaining(null)
+			return
+		}
+
+		const updateCountdown = () => {
+			const endDate = new Date(market.endDate!)
+			const now = new Date()
+			const diff = endDate.getTime() - now.getTime()
+
+			if (diff <= 0) {
+				setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
+				return
+			}
+
+			const minutes = Math.floor(diff / 60000)
+			const seconds = Math.floor((diff % 60000) / 1000)
+			setTimeRemaining({ minutes, seconds, isExpired: false })
+		}
+
+		// Update immediately
+		updateCountdown()
+
+		// Update every second
+		const interval = setInterval(updateCountdown, 1000)
+
+		return () => clearInterval(interval)
+	}, [market?.endDate])
+
+	// Format countdown timer for display
+	const formatCountdown = (): string => {
+		if (!timeRemaining) return ''
+		
+		if (timeRemaining.isExpired) {
+			return 'Ended'
+		}
+
+		const { minutes, seconds } = timeRemaining
+		return `${minutes}m ${seconds.toString().padStart(2, '0')}s`
+	}
+
 	return (
 		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>
 			<div className='flex items-center justify-between'>
@@ -596,7 +709,28 @@ export default function TickerPage2() {
 				<CardHeader>
 					<div className='flex items-center justify-between'>
 						<div>
-							<CardTitle>Market Ticker (RTDS & CLOB WebSocket)</CardTitle>
+							<div className='flex items-center gap-3'>
+								<CardTitle>Market Ticker (RTDS & CLOB WebSocket)</CardTitle>
+								{market && isMarketFinished(market) && (
+									<div className='flex items-center gap-2'>
+										<span className='px-2 py-1 text-xs font-semibold rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'>
+											Past
+										</span>
+										{market.endDate && (
+											<span className='text-xs text-muted-foreground'>
+												Ended: {formatEndDate(market.endDate)}
+											</span>
+										)}
+									</div>
+								)}
+								{market && !isMarketFinished(market) && timeRemaining && (
+									<div className='flex items-center gap-2'>
+										<span className='px-2 py-1 text-sm font-semibold rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700'>
+											{formatCountdown()}
+										</span>
+									</div>
+								)}
+							</div>
 							<CardDescription>
 								{market ? market.question : 'Loading market...'}
 								<br />
@@ -732,6 +866,80 @@ export default function TickerPage2() {
 						</div>
 					) : market ? (
 						<div className='space-y-4'>
+							{/* Display Countdown Timer for active markets */}
+							{!isMarketFinished(market) && timeRemaining && (
+								<Card className='bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 border-2 border-blue-300 dark:border-blue-700'>
+									<CardContent className='pt-6'>
+										<div className='flex items-center justify-between'>
+											<div>
+												<div className='text-sm font-semibold text-muted-foreground mb-2'>
+													Time Remaining
+												</div>
+												<div className='text-4xl font-bold text-blue-600 dark:text-blue-400 font-mono'>
+													{formatCountdown()}
+												</div>
+											</div>
+											<div className='text-xs text-muted-foreground text-right'>
+												{market.endDate && (
+													<div>
+														<div>Ends: {formatEndDate(market.endDate)}</div>
+													</div>
+												)}
+											</div>
+										</div>
+									</CardContent>
+								</Card>
+							)}
+							{/* Display Market Outcome if finished */}
+							{isMarketFinished(market) && (
+								<Card className='bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border-2 border-indigo-300 dark:border-indigo-700'>
+									<CardContent className='pt-6'>
+										<div className='flex items-center justify-between'>
+											<div>
+												<div className='text-sm font-semibold text-muted-foreground mb-2'>
+													Market Outcome
+												</div>
+												{(() => {
+													const winner = winningOutcome
+													if (winner) {
+														const isUp = winner.title.toUpperCase().includes('UP')
+														const isDown = winner.title.toUpperCase().includes('DOWN')
+														return (
+															<div className='flex items-center gap-3'>
+																<div
+																	className={cn(
+																		'text-4xl font-bold',
+																		isUp
+																			? 'text-green-600 dark:text-green-400'
+																			: isDown
+																				? 'text-red-600 dark:text-red-400'
+																				: 'text-indigo-600 dark:text-indigo-400'
+																	)}>
+																	{winner.title.toUpperCase()}
+																</div>
+																<div className='text-lg text-muted-foreground'>
+																	{formatMarketPrice(winner.price)}
+																</div>
+																{isUp && (
+																	<TrendingUp className='h-10 w-10 text-green-600 dark:text-green-400' />
+																)}
+																{isDown && (
+																	<TrendingDown className='h-10 w-10 text-red-600 dark:text-red-400' />
+																)}
+															</div>
+														)
+													}
+													return (
+														<div className='text-lg text-muted-foreground'>
+															Market resolved - outcome pending
+														</div>
+													)
+												})()}
+											</div>
+										</div>
+									</CardContent>
+								</Card>
+							)}
 							{/* Display Price to Beat - Show for crypto up/down markets */}
 							{market.slug.match(/^([a-z]+)-updown-15m-(\d+)$/i) && (
 								<Card className='bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800'>
@@ -915,16 +1123,36 @@ export default function TickerPage2() {
 									const isUp =
 										outcome.title.toUpperCase().includes('UP') ||
 										outcome.title.toUpperCase().includes('YES')
+									const winner = winningOutcome
+									const isWinningOutcome = winner?.id === outcome.id
 
 									return (
-										<Card key={outcome.id} className='relative overflow-hidden'>
+										<Card
+											key={outcome.id}
+											className={cn(
+												'relative overflow-hidden',
+												isWinningOutcome &&
+													'border-2 border-indigo-500 dark:border-indigo-400 shadow-lg'
+											)}>
 											<CardContent className='pt-6'>
 												<div className='flex items-center justify-between'>
 													<div>
-														<div className='text-sm text-muted-foreground mb-1'>
-															{outcome.title}
+														<div className='flex items-center gap-2 mb-1'>
+															<div className='text-sm text-muted-foreground'>
+																{outcome.title}
+															</div>
+															{isWinningOutcome && (
+																<span className='px-2 py-0.5 text-xs font-semibold rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'>
+																	Winner
+																</span>
+															)}
 														</div>
-														<div className='text-3xl font-bold'>
+														<div
+															className={cn(
+																'text-3xl font-bold',
+																isWinningOutcome &&
+																	'text-indigo-600 dark:text-indigo-400'
+															)}>
 															{formatMarketPrice(price)}
 														</div>
 														{priceData && (
@@ -939,11 +1167,19 @@ export default function TickerPage2() {
 													<div
 														className={cn(
 															'p-3 rounded-full',
-															isUp
-																? 'bg-green-100 dark:bg-green-900/20'
-																: 'bg-red-100 dark:bg-red-900/20'
+															isWinningOutcome
+																? 'bg-indigo-100 dark:bg-indigo-900/50'
+																: isUp
+																	? 'bg-green-100 dark:bg-green-900/20'
+																	: 'bg-red-100 dark:bg-red-900/20'
 														)}>
-														{isUp ? (
+														{isWinningOutcome ? (
+															isUp ? (
+																<TrendingUp className='h-6 w-6 text-indigo-600 dark:text-indigo-400' />
+															) : (
+																<TrendingDown className='h-6 w-6 text-indigo-600 dark:text-indigo-400' />
+															)
+														) : isUp ? (
 															<TrendingUp className='h-6 w-6 text-green-600 dark:text-green-400' />
 														) : (
 															<TrendingDown className='h-6 w-6 text-red-600 dark:text-red-400' />
