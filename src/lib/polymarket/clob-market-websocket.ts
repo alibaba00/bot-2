@@ -170,9 +170,9 @@ export class CLOBMarketWebSocket {
 							}
 
 							// Handle price_change events
-							if (data.event_type === 'price_change' && data.price_changes) {
-								this.handlePriceChanges(data)
-							}
+							// if (data.event_type === 'price_change' && data.price_changes) {
+							// 	this.handlePriceChanges(data)
+							// }
 
 							// Handle last_trade_price events
 							if (

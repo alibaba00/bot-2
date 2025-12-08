@@ -84,9 +84,14 @@ export default function TickerPage2() {
 		>
 	>({})
 
-	// Price to beat (reference price for crypto up/down markets)
+	// Price to beat and final price (reference price for crypto up/down markets)
 	const [priceToBeat, setPriceToBeat] = useState<number | null>(null)
+	const [finalPrice, setFinalPrice] = useState<number | null>(null)
 	const [priceToBeatLoading, setPriceToBeatLoading] = useState(false)
+	const [finalPriceLoading, setFinalPriceLoading] = useState(false)
+	
+	// Trigger to start polling when market ends (updates when market end time is reached)
+	const [pollingTrigger, setPollingTrigger] = useState(0)
 
 	// Countdown timer state
 	const [timeRemaining, setTimeRemaining] = useState<{
@@ -289,6 +294,7 @@ export default function TickerPage2() {
 				const defaultSlug = getDefaultBTCMarketSlug()
 				const marketData = await fetchMarketBySlugFromGamma(defaultSlug)
 				if (marketData && marketData.id && marketData.question) {
+					console.log('🔍 Market data:', marketData)
 					setMarket(marketData)
 					// Extract asset IDs from outcomes
 					const ids = marketData.outcomes.map((outcome) => outcome.id).filter(Boolean)
@@ -340,17 +346,24 @@ export default function TickerPage2() {
 
 						setPriceToBeatLoading(true)
 						try {
-							const priceToBeatValue = await fetchCryptoPriceToBeat(
+							const priceData = await fetchCryptoPriceToBeat(
 								symbol,
 								eventStartTime,
 								endDate,
 								'fifteen'
 							)
-							console.log('✅ Price to beat received:', priceToBeatValue)
-							setPriceToBeat(priceToBeatValue)
+							if (priceData) {
+								console.log('✅ Crypto price data received:', priceData)
+								setPriceToBeat(priceData.priceToBeat)
+								setFinalPrice(priceData.finalPrice)
+							} else {
+								setPriceToBeat(null)
+								setFinalPrice(null)
+							}
 						} catch (error) {
-							console.warn('❌ Failed to fetch price to beat:', error)
+							console.warn('❌ Failed to fetch crypto price data:', error)
 							setPriceToBeat(null)
+							setFinalPrice(null)
 						} finally {
 							setPriceToBeatLoading(false)
 						}
@@ -372,6 +385,195 @@ export default function TickerPage2() {
 
 		loadMarket()
 	}, [])
+
+	// Check if market is finished/ended
+	const isMarketFinished = (market: Market | null): boolean => {
+		if (!market) return false
+		
+		// Check if market is closed
+		if (market.closed) return true
+		
+		// Check if endDate is in the past
+		if (market.endDate) {
+			const endDate = new Date(market.endDate)
+			const now = new Date()
+			return endDate < now
+		}
+		
+		return false
+	}
+
+	// Track if polling has been started to avoid multiple starts
+	const pollingStartedRef = useRef<string | null>(null)
+
+	// Poll for final price when market is finished (until final price is available)
+	useEffect(() => {
+console.log('🔍 useEffect market:', market, finalPrice, pollingTrigger, pollingStartedRef.current)
+		if (!market) {
+			pollingStartedRef.current = null
+			return
+		}
+		
+		const slugMatch = market.slug?.match(/^([a-z]+)-updown-15m-(\d+)$/i)
+console.log('🔍 slugMatch:', slugMatch)
+		if (!slugMatch) {
+			pollingStartedRef.current = null
+			return // Only for crypto up/down markets
+		}
+
+console.log('🔍 pollingStartedRef.current:', pollingStartedRef.current, market.slug)
+		// If polling already started for this market, don't start again
+		if (pollingStartedRef.current === market.slug) {
+			return
+		}
+		
+		// If final price is already available, don't start polling
+console.log('🔍 finalPrice:', finalPrice)
+		if (finalPrice !== null) {
+			console.log('🔍 finalPrice is not null, skipping polling')
+			pollingStartedRef.current = market.slug
+			return
+		}
+		
+		// Check if market has ended
+		const marketFinished = isMarketFinished(market)
+console.log('🔍 marketFinished:', marketFinished, pollingStartedRef.current)
+
+		if (!marketFinished) {
+			pollingStartedRef.current = null
+			return // Market not finished yet
+		}
+
+		// Market is finished - start polling
+console.log('🔄 Market is finished, starting polling setup:', {
+			marketSlug: market.slug,
+			closed: market.closed,
+			endDate: market.endDate,
+			finalPrice
+		})
+		
+		pollingStartedRef.current = market.slug
+		
+		const symbol = slugMatch[1].toUpperCase()
+		const slugTimestamp = parseInt(slugMatch[2], 10)
+		const startTimestamp = slugTimestamp * 1000
+		const endTimestamp = startTimestamp + 15 * 60 * 1000
+		const eventStartTime = new Date(startTimestamp).toISOString()
+		const endDate = new Date(endTimestamp).toISOString()
+		
+		console.log('🔄 Starting polling for final price:', {
+			symbol,
+			eventStartTime,
+			endDate,
+			marketSlug: market.slug,
+			currentFinalPrice: finalPrice
+		})
+		
+		let pollCount = 0
+		let intervalId: NodeJS.Timeout | null = null
+		let isPolling = true
+		
+		const pollFinalPrice = async () => {
+			// Check if we should stop polling (final price might have been set from outside)
+			if (!isPolling) {
+				return
+			}
+			
+			try {
+				pollCount++
+				// console.log(`🔄 Polling for final price (attempt ${pollCount})...`)
+				
+				setFinalPriceLoading(true)
+				const priceData = await fetchCryptoPriceToBeat(
+					symbol,
+					eventStartTime,
+					endDate,
+					'fifteen'
+				)
+				
+				if (priceData) {
+					console.log('📥 Received price data:', {
+						priceToBeat: priceData.priceToBeat,
+						finalPrice: priceData.finalPrice
+					})
+					
+					// Update price to beat if available
+					if (priceData.priceToBeat !== null) {
+						setPriceToBeat((prev) => prev ?? priceData.priceToBeat)
+					}
+					
+					// Update final price if available
+					if (priceData.finalPrice !== null && priceData.finalPrice !== undefined) {
+						console.log('✅ Final price received:', priceData.finalPrice)
+						setFinalPrice(priceData.finalPrice)
+						// Stop polling once we have the final price
+						isPolling = false
+						if (intervalId) {
+							clearInterval(intervalId)
+							intervalId = null
+							console.log('🛑 Stopping polling - final price received')
+						}
+					// } else {
+						// console.log('⏳ Final price not yet available (closePrice is null), will continue polling...')
+					}
+				} else {
+					console.warn('⚠️ No price data returned from API')
+				}
+			} catch (error) {
+				console.warn('⚠️ Failed to poll final price:', error)
+			} finally {
+				setFinalPriceLoading(false)
+			}
+		}
+		
+		// Poll every 5 seconds until final price is available
+		intervalId = setInterval(pollFinalPrice, 5000)
+		pollFinalPrice() // Initial fetch
+		
+		return () => {
+			isPolling = false
+			if (intervalId) {
+				clearInterval(intervalId)
+				console.log('🛑 Cleanup: Stopping polling interval')
+			}
+		}
+		// Depend on market, finalPrice, and pollingTrigger to start when market ends
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [market, finalPrice, pollingTrigger])
+
+	// Separate effect to periodically check if market has ended (since market object doesn't update)
+	useEffect(() => {
+		if (!market) return
+		
+		const slugMatch = market.slug?.match(/^([a-z]+)-updown-15m-(\d+)$/i)
+		if (!slugMatch) return
+		
+		// If final price is already available, don't check
+		if (finalPrice !== null) return
+		
+		// If polling already started, don't check
+		if (pollingStartedRef.current === market.slug) return
+		
+		// Check immediately if market has ended
+		if (isMarketFinished(market) && pollingStartedRef.current !== market.slug) {
+			console.log('🕐 Market has ended (immediate check), triggering polling start')
+			pollingStartedRef.current = market.slug
+			setPollingTrigger((prev) => prev + 1) // Trigger polling
+			return
+		}
+		
+		// Check every second if market has ended
+		const checkInterval = setInterval(() => {
+			if (isMarketFinished(market) && pollingStartedRef.current !== market.slug) {
+				console.log('🕐 Market just ended (detected by periodic check), triggering polling start')
+				// pollingStartedRef.current = market.slug
+				setPollingTrigger((prev) => prev + 1) // Trigger polling
+			}
+		}, 1000) // Check every second
+		
+		return () => clearInterval(checkInterval)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [market, finalPrice])
 
 	// Polling fallback for market prices (since WebSocket doesn't work)
 	useEffect(() => {
@@ -587,29 +789,31 @@ export default function TickerPage2() {
 		return (price * 100).toFixed(2) + '%'
 	}
 
-	// Check if market is finished/ended
-	const isMarketFinished = (market: Market | null): boolean => {
-		if (!market) return false
-		
-		// Check if market is closed
-		if (market.closed) return true
-		
-		// Check if endDate is in the past
-		if (market.endDate) {
-			const endDate = new Date(market.endDate)
-			const now = new Date()
-			return endDate < now
-		}
-		
-		return false
-	}
-
-	// Get the winning outcome (highest price indicates winner in resolved markets)
+	// Get the winning outcome based on final price vs price to beat
 	// Memoized to prevent endless loops when called during render
 	const winningOutcome = useMemo((): MarketOutcome | null => {
 		if (!market || !isMarketFinished(market)) return null
 		
-		// Use real-time prices from marketPrices if available, otherwise use static outcome prices
+		// For crypto up/down markets, determine outcome based on final price vs price to beat
+		const slugMatch = market.slug?.match(/^([a-z]+)-updown-15m-(\d+)$/i)
+		if (slugMatch && priceToBeat !== null && finalPrice !== null) {
+			// Compare final price with price to beat
+			// If finalPrice >= priceToBeat, outcome is "UP"
+			// If finalPrice < priceToBeat, outcome is "DOWN"
+			const isUp = finalPrice >= priceToBeat
+			
+			// Find the matching outcome
+			const outcome = market.outcomes.find((o) => {
+				const titleUpper = o.title.toUpperCase()
+				return isUp
+					? titleUpper.includes('UP')
+					: titleUpper.includes('DOWN')
+			})
+			
+			return outcome || null
+		}
+		
+		// Fallback: Use real-time prices from marketPrices if available
 		const outcomesWithPrices = market.outcomes.map((outcome) => {
 			const realTimePrice = marketPrices[outcome.id]?.price
 			return {
@@ -618,8 +822,6 @@ export default function TickerPage2() {
 			}
 		})
 		
-		// In a resolved binary market, the winner should have the highest price
-		// Find outcome with highest price (should be >= 0.5 for winner in binary markets)
 		if (outcomesWithPrices.length === 0) return null
 		
 		// Sort outcomes by current price descending and take the highest
@@ -627,15 +829,12 @@ export default function TickerPage2() {
 		const highestPriceOutcome = sortedOutcomes[0]
 		
 		// In binary markets, winner should have price > 0.5
-		// For safety, also check if price is significantly higher than others
 		if (highestPriceOutcome.currentPrice > 0.5) {
-			// Return the original outcome object (not the extended one)
 			return market.outcomes.find((o) => o.id === highestPriceOutcome.id) || highestPriceOutcome
 		}
 		
-		// If no clear winner (all prices are close), return null
 		return null
-	}, [market, marketPrices])
+	}, [market, marketPrices, priceToBeat, finalPrice])
 
 	// Format end date for display
 	const formatEndDate = (endDate: string | undefined): string => {
@@ -710,7 +909,7 @@ export default function TickerPage2() {
 					<div className='flex items-center justify-between'>
 						<div>
 							<div className='flex items-center gap-3'>
-								<CardTitle>Market Ticker (RTDS & CLOB WebSocket)</CardTitle>
+							<CardTitle>Market Ticker (RTDS & CLOB WebSocket)</CardTitle>
 								{market && isMarketFinished(market) && (
 									<div className='flex items-center gap-2'>
 										<span className='px-2 py-1 text-xs font-semibold rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'>
@@ -895,36 +1094,70 @@ export default function TickerPage2() {
 								<Card className='bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border-2 border-indigo-300 dark:border-indigo-700'>
 									<CardContent className='pt-6'>
 										<div className='flex items-center justify-between'>
-											<div>
+											<div className='flex-1'>
 												<div className='text-sm font-semibold text-muted-foreground mb-2'>
 													Market Outcome
 												</div>
 												{(() => {
+													const slugMatch = market.slug?.match(/^([a-z]+)-updown-15m-(\d+)$/i)
+													const isCryptoUpDown = slugMatch !== null
+													
+													// For crypto up/down markets, check if final price is available
+													if (isCryptoUpDown && finalPrice === null) {
+														return (
+															<div className='space-y-2'>
+																<div className='flex items-center gap-3'>
+																	<div className='text-4xl font-bold text-yellow-600 dark:text-yellow-400'>
+																		Pending Outcome
+																	</div>
+																</div>
+																{/* {finalPriceLoading && (
+																	<div className='text-sm text-muted-foreground'>
+																		Loading final price...
+																	</div>
+																)} */}
+															</div>
+														)
+													}
+													
 													const winner = winningOutcome
 													if (winner) {
 														const isUp = winner.title.toUpperCase().includes('UP')
 														const isDown = winner.title.toUpperCase().includes('DOWN')
 														return (
-															<div className='flex items-center gap-3'>
-																<div
-																	className={cn(
-																		'text-4xl font-bold',
-																		isUp
-																			? 'text-green-600 dark:text-green-400'
-																			: isDown
-																				? 'text-red-600 dark:text-red-400'
-																				: 'text-indigo-600 dark:text-indigo-400'
-																	)}>
-																	{winner.title.toUpperCase()}
+															<div className='space-y-2'>
+																<div className='flex items-center gap-3'>
+																	<div
+																		className={cn(
+																			'text-4xl font-bold',
+																			isUp
+																				? 'text-green-600 dark:text-green-400'
+																				: isDown
+																					? 'text-red-600 dark:text-red-400'
+																					: 'text-indigo-600 dark:text-indigo-400'
+																		)}>
+																		{winner.title.toUpperCase()}
+																	</div>
+																	<div className='text-lg text-muted-foreground'>
+																		{formatMarketPrice(winner.price)}
+																	</div>
+																	{isUp && (
+																		<TrendingUp className='h-10 w-10 text-green-600 dark:text-green-400' />
+																	)}
+																	{isDown && (
+																		<TrendingDown className='h-10 w-10 text-red-600 dark:text-red-400' />
+																	)}
 																</div>
-																<div className='text-lg text-muted-foreground'>
-																	{formatMarketPrice(winner.price)}
-																</div>
-																{isUp && (
-																	<TrendingUp className='h-10 w-10 text-green-600 dark:text-green-400' />
-																)}
-																{isDown && (
-																	<TrendingDown className='h-10 w-10 text-red-600 dark:text-red-400' />
+																{/* Show final price for crypto up/down markets */}
+																{isCryptoUpDown && finalPrice !== null && (
+																	<div className='text-sm text-muted-foreground'>
+																		Final Price: <span className='font-semibold text-foreground'>${finalPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+																		{priceToBeat !== null && (
+																			<span className='ml-2'>
+																				(Price to Beat: ${priceToBeat.toLocaleString('en-US', { maximumFractionDigits: 2 })})
+																			</span>
+																		)}
+																	</div>
 																)}
 															</div>
 														)
@@ -1139,8 +1372,8 @@ export default function TickerPage2() {
 													<div>
 														<div className='flex items-center gap-2 mb-1'>
 															<div className='text-sm text-muted-foreground'>
-																{outcome.title}
-															</div>
+															{outcome.title}
+														</div>
 															{isWinningOutcome && (
 																<span className='px-2 py-0.5 text-xs font-semibold rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'>
 																	Winner
@@ -1170,8 +1403,8 @@ export default function TickerPage2() {
 															isWinningOutcome
 																? 'bg-indigo-100 dark:bg-indigo-900/50'
 																: isUp
-																	? 'bg-green-100 dark:bg-green-900/20'
-																	: 'bg-red-100 dark:bg-red-900/20'
+																? 'bg-green-100 dark:bg-green-900/20'
+																: 'bg-red-100 dark:bg-red-900/20'
 														)}>
 														{isWinningOutcome ? (
 															isUp ? (

@@ -1,4 +1,3 @@
-import { fetchCryptoPriceToBeat } from '@/lib/polymarket/markets'
 import localForage from 'localforage'
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
@@ -10,10 +9,12 @@ const cache = localForage.createInstance({
 	storeName: 'polymarket-cache'
 })
 
+
+
 class PolymarketApi {
 	gammaApiBase = GAMMA_API_BASE
 	polymarketApiBase = POLYMARKET_API_BASE
-	markets = []
+	markets = {}
 	currentMarket = null
 
 	constructor() {
@@ -24,11 +25,10 @@ class PolymarketApi {
 
 	async init() {
 		console.log('-----------------------init PolymarketApi-----------------------')
-		const cachedMarkets = (await cache.getItem('markets')) || []
-		console.log('cachedMarkets', cachedMarkets)
-		this.markets = cachedMarkets
-
-		return this.markets
+		// const cachedMarkets = (await cache.getItem('markets')) || []
+		// console.log('cachedMarkets', cachedMarkets)
+		// this.markets = cachedMarkets
+		// return this.markets
 
 		// this.currentMarket = new Market({
 		// 	id: '1234567890123456789012345678901234567890123456789012345678901234',
@@ -50,39 +50,51 @@ class PolymarketApi {
 	}
 
 
-	initMarket(symbol) {		//e.g. btc-updown-15m
+	// from CryptoTickerPage
+	async initMarket(symbol, type) {		//symbol: btc, type: updown-15m
 		const timestamp = this.getCurrent15MinuteUTCTimestamp()
-		const marketSlug = `${symbol}-${timestamp}`
-		if (this.markets?.[symbol]?.[marketSlug]) return this.markets[symbol][marketSlug]
+		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
+		const marketSlug = `${marketName}-${timestamp}`	//e.g. btc-updown-15m-1765144800
 
-		if (!this.markets?.[symbol]) this.markets[symbol] = {}
-		const market = this.createMarket(timestamp, marketSlug)
-		this.markets[symbol][market.slug] = market
+		if (this.markets?.[marketName]?.[marketSlug]) return this.markets[marketName][marketSlug]
+
+		if (!this.markets?.[marketName]) this.markets[marketName] = {}
+
+		let market = await cache.getItem(marketSlug)
+		if (market){
+			this.markets[marketName][market.slug] = market
+			return market
+		} 
+
+		market = this.createMarket(symbol, marketName, timestamp, marketSlug)
+		this.markets[marketName][market.slug] = market
+		await this.cacheMarket(market)
+
 		return market
 	}
 
 
-	createMarket(timestamp, marketSlug) {
+	createMarket(symbol, marketName, timestamp, marketSlug) {
 		const startTimestamp = timestamp * 1000 // Convert to milliseconds
 		const endTimestamp = startTimestamp + 15 * 60 * 1000 // Add 15 minutes
 
-		console.log('marketSlug', marketSlug)
-
-		console.log('startTimestamp', new Date(startTimestamp).toISOString())
-		console.log('endTimestamp', new Date(endTimestamp).toISOString())
+		// console.log('startTimestamp', new Date(startTimestamp).toISOString())
+		// console.log('endTimestamp', new Date(endTimestamp).toISOString())
 
 		// const priceToBeat = await this.getPriceToBeat('btc', new Date(startTimestamp).toISOString(), new Date(endTimestamp).toISOString())
 		// console.log('priceToBeat', priceToBeat)
 
 		const market = {
-			success: true,
-			message: 'Market created successfully',
+			symbol: symbol.toUpperCase(),
+			marketName: marketName,
 			slug: marketSlug,
 			timestamp,
 			startTimestamp,
 			endTimestamp,
-			state: 'init',
-			// priceToBeat: priceToBeat ? priceToBeat : null,
+			state: 'init',	//init, pending, started, running, stopped, completed
+			marketData: null,
+			openPrice: null,	// priceToBeat
+			closePrice: null,	// finalPrice
 		}
 		// this.setPriceToBeat(market)
 
@@ -107,12 +119,169 @@ class PolymarketApi {
 	// }
 
 	// Get price to beat for a given symbol, event start time, and end date
-	async getPriceToBeat(symbol, eventStartTime, endDate) {
-		return await fetchCryptoPriceToBeat(symbol, eventStartTime, endDate, 'fifteen') || null
+	async getCryptoPrice(market) {
+		const symbol = market.symbol
+		const eventStartTime = new Date(market.startTimestamp).toISOString()
+		const endDate = new Date(market.endTimestamp).toISOString()
+
+		const url = `${POLYMARKET_API_BASE}/crypto/crypto-price`
+		const params = new URLSearchParams({
+			symbol,
+			eventStartTime,
+			variant: 'fifteen',
+			endDate
+		})
+
+		const fullUrl = `${url}?${params.toString()}`
+		const response = await fetch(fullUrl, {
+			method: 'GET',
+			headers: {
+				Accept: 'application/json'
+			}
+		})
+
+		if (!response.ok) return null
+		
+		const data = await response.json()
+		return data
+	}
+
+
+	async cacheMarket(market) {
+		await cache.setItem(market.slug, market)
 	}
 
 }
 
 export default new PolymarketApi()
 
+/*
+// https://polymarket.com/api/crypto/crypto-price?symbol=BTC
+// 		&eventStartTime=2025-12-06T09:15:00Z&variant=fifteen&endDate=2025-12-06T09:30:00Z
+{
+    "openPrice": 89299.0560483538,
+    "closePrice": 89530.1902704494,
+    "timestamp": 1765012902842,
+    "completed": true,
+    "incomplete": false,
+    "cached": true
+}
+*/
+
+/*
+// https://polymarket.com/api/crypto/crypto-price
+// ?symbol=BTC&eventStartTime=2025-12-07T22%3A00%3A00.000Z&variant=fifteen&endDate=2025-12-07T22%3A15%3A00.000Z
+	return await fetchCryptoPriceToBeat(symbol, eventStartTime, endDate, 'fifteen') || null
+
+export async function fetchCryptoPriceToBeat(
+	symbol: string,
+	eventStartTime: string,
+	endDate: string,
+	variant: string = 'fifteen'
+): Promise<CryptoPriceData | null> {
+	try {
+		const url = `${POLYMARKET_API_BASE}/crypto/crypto-price`
+		const params = new URLSearchParams({
+			symbol: symbol.toUpperCase(),
+			eventStartTime,
+			variant,
+			endDate
+		})
+
+		const fullUrl = `${url}?${params.toString()}`
+		console.log('🌐 Fetching price to beat from:', fullUrl)
+
+		const response = await fetch(fullUrl, {
+			method: 'GET',
+			headers: {
+				Accept: 'application/json'
+			}
+		})
+
+		if (!response.ok) {
+			const errorText = await response.text().catch(() => '')
+			console.warn(
+				`❌ Failed to fetch price to beat: ${response.status} ${response.statusText}`,
+				errorText
+			)
+			return null
+		}
+
+		const data = await response.json()
+		console.log('📦 Crypto price API response:', data)
+
+		// The API returns openPrice (price at start of time window) and closePrice (price at end)
+		// The "price to beat" is the openPrice - the reference price at the start of the event
+		// The "final price" is the closePrice - the price at the end of the event
+		const openPrice =
+			data.openPrice ||
+			data.price ||
+			data.priceToBeat ||
+			data.initialPrice ||
+			data.startPrice ||
+			data.value ||
+			data.data?.openPrice ||
+			data.data?.price ||
+			data.data?.priceToBeat ||
+			data.result?.openPrice ||
+			data.result?.price ||
+			data.result?.priceToBeat
+
+		const closePrice =
+			data.closePrice ||
+			data.finalPrice ||
+			data.endPrice ||
+			data.data?.closePrice ||
+			data.data?.finalPrice ||
+			data.data?.endPrice ||
+			data.result?.closePrice ||
+			data.result?.finalPrice ||
+			data.result?.endPrice
+
+		let priceToBeatValue: number | null = null
+		let finalPriceValue: number | null = null
+
+		// Parse openPrice (price to beat)
+		if (typeof openPrice === 'number') {
+			priceToBeatValue = openPrice
+		} else if (typeof openPrice === 'string') {
+			const parsed = parseFloat(openPrice)
+			if (!isNaN(parsed)) {
+				priceToBeatValue = parsed
+			}
+		}
+
+		// Parse closePrice (final price)
+		if (typeof closePrice === 'number') {
+			finalPriceValue = closePrice
+		} else if (typeof closePrice === 'string') {
+			const parsed = parseFloat(closePrice)
+			if (!isNaN(parsed)) {
+				finalPriceValue = parsed
+			}
+		}
+
+		if (priceToBeatValue !== null || finalPriceValue !== null) {
+			console.log('✅ Crypto price data found:', {
+				priceToBeat: priceToBeatValue,
+				finalPrice: finalPriceValue
+			})
+			return {
+				priceToBeat: priceToBeatValue,
+				finalPrice: finalPriceValue
+			}
+		}
+
+		console.warn(
+			'⚠️ Crypto price data format unexpected. Full response:',
+			JSON.stringify(data, null, 2)
+		)
+		return null
+	} catch (error) {
+		console.error('❌ Error fetching crypto price to beat:', error)
+		return null
+	}
+}
+
+*/
 

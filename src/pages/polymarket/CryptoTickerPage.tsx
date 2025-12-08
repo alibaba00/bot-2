@@ -5,7 +5,7 @@ import type { Market } from '@/lib/polymarket/types'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { Button } from '@/components/ui/button'
 
-export default function CryptoTickerPage({ symbol }: { symbol: string }) {
+export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
 	// const [market, setMarket] = useState<Market | null>(null)
 	const [markets, setMarkets] = useState<Market[]>([])
 	const [chainlinkPrice, setChainlinkPrice] = useState<number | null>(null)
@@ -31,11 +31,15 @@ export default function CryptoTickerPage({ symbol }: { symbol: string }) {
 	})
 
 	useEffect(() => {
-		// console.log('---init CryptoTickerPage---', symbol)
+		console.log('---init CryptoTickerPage---', symbol, type)
 
-		const market = PolymarketApi.initMarket(symbol + '-updown-15m')
+		PolymarketApi.initMarket(symbol, type)
+		.then((market) => {
+			console.log('market', market)
+			setMarkets([market as Market])
+		})
 		// setMarket(market)
-		setMarkets([market as Market])
+		// setMarkets([market as Market])
 
 		// Cleanup on unmount
 		return () => {
@@ -70,7 +74,7 @@ export default function CryptoTickerPage({ symbol }: { symbol: string }) {
 	return (
 		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>
 			<div className='flex items-center justify-between'>
-				<h1>Ticker {symbol.toUpperCase()}</h1>
+			<h1>Ticker {symbol.toUpperCase()}</h1>
 				<Button
 					onClick={toggleTicker}
 					disabled={isConnecting}

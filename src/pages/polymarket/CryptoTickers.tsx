@@ -8,25 +8,22 @@ const content = [
 	{
 		label: 'BTC',
 		value: 'btc',
-		page: <CryptoTickerPage symbol='btc' />
+		page: <CryptoTickerPage symbol='btc' type='updown-15m' />
 	},
 	{
 		label: 'ETH',
 		value: 'eth',
-		page: <CryptoTickerPage symbol='eth' />,
-		autoUnmount: false
+		page: <CryptoTickerPage symbol='eth' type='updown-15m' />,
 	},
 	{
 		label: 'SOL',
 		value: 'sol',
-		page: <CryptoTickerPage symbol='sol' />,
-		autoMount: true
+		page: <CryptoTickerPage symbol='sol' type='updown-15m' />,
 	},
 	{
 		label: 'XRP',
 		value: 'xrp',
-		page: <CryptoTickerPage symbol='xrp' />,
-		autoMount: true
+		page: <CryptoTickerPage symbol='xrp' type='updown-15m' />,
 	}
 ]
 
@@ -63,7 +60,7 @@ export default function CryptoTickers() {
 				<PageView
 					content={content}
 					selectedNode={activeNode}
-					// autoMount
+					autoMount={false}
 					// autoUnmount={false}
 				/>
 			</Tabs>

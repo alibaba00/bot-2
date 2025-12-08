@@ -528,21 +528,26 @@ export async function getActiveMarkets(): Promise<Market[]> {
 }
 
 /**
- * Fetch crypto price to beat from Polymarket API
+ * Fetch crypto price to beat and final price from Polymarket API
  * This is the reference price used for crypto up/down markets
  *
  * @param symbol - Crypto symbol (e.g., 'BTC', 'ETH', 'SOL')
  * @param eventStartTime - ISO timestamp of event start (e.g., '2025-11-30T13:30:00Z')
  * @param endDate - ISO timestamp of event end (e.g., '2025-11-30T13:45:00Z')
  * @param variant - Time variant (e.g., 'fifteen' for 15-minute intervals)
- * @returns The price to beat value, or null if not found
+ * @returns Object with priceToBeat (openPrice) and finalPrice (closePrice), or null if not found
  */
+export interface CryptoPriceData {
+	priceToBeat: number | null
+	finalPrice: number | null
+}
+
 export async function fetchCryptoPriceToBeat(
 	symbol: string,
 	eventStartTime: string,
 	endDate: string,
 	variant: string = 'fifteen'
-): Promise<number | null> {
+): Promise<CryptoPriceData | null> {
 	try {
 		const url = `${POLYMARKET_API_BASE}/crypto/crypto-price`
 		const params = new URLSearchParams({
@@ -553,7 +558,7 @@ export async function fetchCryptoPriceToBeat(
 		})
 
 		const fullUrl = `${url}?${params.toString()}`
-		console.log('🌐 Fetching price to beat from:', fullUrl)
+		// console.log('🌐 Fetching price to beat from:', fullUrl)
 
 		const response = await fetch(fullUrl, {
 			method: 'GET',
@@ -572,42 +577,112 @@ export async function fetchCryptoPriceToBeat(
 		}
 
 		const data = await response.json()
-		console.log('📦 Price to beat API response:', data)
+		// console.log('📦 Crypto price API response (full):', JSON.stringify(data, null, 2))
+
+		// Handle case where API returns an array
+		let responseData = data
+		if (Array.isArray(data) && data.length > 0) {
+			responseData = data[0]
+			console.log('📦 API returned array, using first element:', responseData)
+		}
 
 		// The API returns openPrice (price at start of time window) and closePrice (price at end)
 		// The "price to beat" is the openPrice - the reference price at the start of the event
-		const price =
-			data.openPrice || // Primary: price at start of time window (this is the "price to beat")
-			data.price ||
-			data.priceToBeat ||
-			data.initialPrice ||
-			data.startPrice ||
-			data.value ||
-			data.data?.openPrice ||
-			data.data?.price ||
-			data.data?.priceToBeat ||
-			data.result?.openPrice ||
-			data.result?.price ||
-			data.result?.priceToBeat
+		// The "final price" is the closePrice - the price at the end of the event
+		// Primary fields: openPrice and closePrice (as confirmed by API response)
+		const openPrice = responseData.openPrice
+		const closePrice = responseData.closePrice
 
-		if (typeof price === 'number') {
-			console.log('✅ Price to beat found (openPrice):', price)
-			return price
-		}
+		// Fallback to other possible field names if primary fields are not available
+		const openPriceFallback =
+			responseData.open_price ||
+			responseData.price ||
+			responseData.priceToBeat ||
+			responseData.price_to_beat ||
+			responseData.initialPrice ||
+			responseData.initial_price ||
+			responseData.startPrice ||
+			responseData.start_price ||
+			responseData.value ||
+			responseData.data?.openPrice ||
+			responseData.data?.open_price ||
+			responseData.data?.price ||
+			responseData.data?.priceToBeat ||
+			responseData.data?.price_to_beat ||
+			responseData.result?.openPrice ||
+			responseData.result?.open_price ||
+			responseData.result?.price ||
+			responseData.result?.priceToBeat ||
+			responseData.result?.price_to_beat ||
+			responseData.response?.openPrice ||
+			responseData.response?.open_price ||
+			(responseData.prices && responseData.prices.open) ||
+			(responseData.prices && responseData.prices.start)
 
-		if (typeof price === 'string') {
-			const parsed = parseFloat(price)
+		const closePriceFallback =
+			responseData.close_price ||
+			responseData.finalPrice ||
+			responseData.final_price ||
+			responseData.endPrice ||
+			responseData.end_price ||
+			responseData.data?.closePrice ||
+			responseData.data?.close_price ||
+			responseData.data?.finalPrice ||
+			responseData.data?.final_price ||
+			responseData.data?.endPrice ||
+			responseData.data?.end_price ||
+			responseData.result?.closePrice ||
+			responseData.result?.close_price ||
+			responseData.result?.finalPrice ||
+			responseData.result?.final_price ||
+			responseData.result?.endPrice ||
+			responseData.result?.end_price ||
+			responseData.response?.closePrice ||
+			responseData.response?.close_price ||
+			(responseData.prices && responseData.prices.close) ||
+			(responseData.prices && responseData.prices.end) ||
+			(responseData.prices && responseData.prices.final)
+
+		// Use primary fields first, fallback to alternatives
+		const finalOpenPrice = openPrice !== undefined ? openPrice : openPriceFallback
+		const finalClosePrice = closePrice !== undefined ? closePrice : closePriceFallback
+
+		let priceToBeatValue: number | null = null
+		let finalPriceValue: number | null = null
+
+		// Parse openPrice (price to beat)
+		if (typeof finalOpenPrice === 'number') {
+			priceToBeatValue = finalOpenPrice
+		} else if (typeof finalOpenPrice === 'string') {
+			const parsed = parseFloat(finalOpenPrice)
 			if (!isNaN(parsed)) {
-				console.log('✅ Price to beat parsed from string:', parsed)
-				return parsed
+				priceToBeatValue = parsed
 			}
 		}
 
-		console.warn(
-			'⚠️ Price to beat data format unexpected. Full response:',
-			JSON.stringify(data, null, 2)
-		)
-		return null
+		// Parse closePrice (final price)
+		if (typeof finalClosePrice === 'number') {
+			finalPriceValue = finalClosePrice
+		} else if (typeof finalClosePrice === 'string') {
+			const parsed = parseFloat(finalClosePrice)
+			if (!isNaN(parsed)) {
+				finalPriceValue = parsed
+			}
+		}
+
+		// Always return the data, even if one value is null
+		// This allows us to get priceToBeat even if finalPrice is not yet available
+		// console.log('📊 Parsed crypto price data:', {
+		// 	priceToBeat: priceToBeatValue,
+		// 	finalPrice: finalPriceValue,
+		// 	rawOpenPrice: openPrice,
+		// 	rawClosePrice: closePrice
+		// })
+		
+		return {
+			priceToBeat: priceToBeatValue,
+			finalPrice: finalPriceValue
+		}
 	} catch (error) {
 		console.error('❌ Error fetching crypto price to beat:', error)
 		return null

@@ -14,6 +14,8 @@ export interface UseCLOBMarketWebSocketOptions {
 	onPriceUpdate?: (update: CLOBMarketPriceUpdate) => void
 	onLastTradePriceUpdate?: (update: CLOBLastTradePriceUpdate) => void
 	onError?: (error: Error) => void
+	onConnect?: () => void
+	onDisconnect?: () => void
 	autoConnect?: boolean
 }
 
@@ -33,6 +35,8 @@ export function useCLOBMarketWebSocket(
 		onPriceUpdate,
 		onLastTradePriceUpdate,
 		onError,
+		onConnect,
+		onDisconnect,
 		autoConnect = false
 	} = options
 
@@ -54,9 +58,11 @@ export function useCLOBMarketWebSocket(
 			},
 			onConnect: () => {
 				setStatus('connected')
+				onConnect?.()
 			},
 			onDisconnect: () => {
 				setStatus('disconnected')
+				onDisconnect?.()
 			},
 			onError: (error) => {
 				console.error('CLOB Market WebSocket error:', error)
