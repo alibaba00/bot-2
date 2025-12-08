@@ -36,7 +36,7 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		PolymarketApi.initMarket(symbol, type)
 		.then((market) => {
 			console.log('market', market)
-			setMarkets([market as MarketData])
+			setMarkets([market as unknown as MarketData])
 		})
 		// setMarket(market)
 		// setMarkets([market as Market])

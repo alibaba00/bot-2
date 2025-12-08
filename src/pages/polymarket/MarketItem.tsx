@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import PolymarketApi from "./PolymarketApi";
 import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
-import type { MarketData, MarketState } from "@/lib/polymarket/types";
+import type { Market, MarketData, MarketState } from "@/lib/polymarket/types";
 import { Button } from "@/components/ui/button";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
-import type { CLOBLastTradePriceUpdate, CLOBMarketPriceUpdate } from "@/lib/polymarket/clob-market-websocket";
 
 
 
@@ -15,7 +14,6 @@ export default function MarketItem(props: { market: { slug?: string; state?: str
 	const [marketData, setMarketData] = useState<MarketData | null>(null)
 	const [assetIds, setAssetIds] = useState<string[]>([])
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
-	const [lastMarketPriceUpdate, setLastMarketPriceUpdate] = useState<CLOBMarketPriceUpdate | null>(null)
 	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
 	const [state, setState] = useState<MarketState>('init')
 
@@ -46,10 +44,6 @@ export default function MarketItem(props: { market: { slug?: string; state?: str
 
 	const clobMarketWs = useCLOBMarketWebSocket({
 		assetIds: assetIds,
-		onPriceUpdate: (update) => {
-			console.log('clobMarketWs price update', update)
-			setLastMarketPriceUpdate(update)
-		},
 		onLastTradePriceUpdate: (update) => {
 			// console.log('clobMarketWs last trade price update', update)
 
@@ -108,7 +102,7 @@ export default function MarketItem(props: { market: { slug?: string; state?: str
 		.then((_marketData) => {
 			console.log('marketData:', _marketData)
 			market.marketData = _marketData as MarketData
-			PolymarketApi.cacheMarket(market)
+			PolymarketApi.cacheMarket(market as unknown as Market)
 
 			// market.state = 'test'
 
