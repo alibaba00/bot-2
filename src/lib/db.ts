@@ -1,7 +1,7 @@
 // db.ts
 import Dexie, { type EntityTable } from 'dexie'
 import { exportDB, importDB, importInto } from 'dexie-export-import'
-import type { Market, Order, Transaction } from './polymarket/types'
+import type { MarketData, Order, Transaction } from './polymarket/types'
 
 interface Friend {
 	id: number
@@ -11,7 +11,7 @@ interface Friend {
 }
 
 // Polymarket database interfaces
-interface MarketRecord extends Market {
+interface MarketRecord extends MarketData {
 	id: string // Market ID from Polymarket
 	cachedAt: number // Timestamp when cached
 }

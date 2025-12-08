@@ -147,6 +147,23 @@ class PolymarketApi {
 	}
 
 
+	async fetchMarketBySlug(slug) {
+		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
+		console.log(`Fetching market by slug from Gamma API: ${url}`)
+
+		const response = await fetch(url, {
+			method: 'GET',
+			headers: {
+				Accept: 'application/json'
+			}
+		})
+		if (!response.ok) return null
+		
+		const data = await response.json()
+		return data
+	}
+
+
 	async cacheMarket(market) {
 		await cache.setItem(market.slug, market)
 	}

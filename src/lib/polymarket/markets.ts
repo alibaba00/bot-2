@@ -4,7 +4,7 @@
  */
 
 import { getOrInitializeClient } from './client'
-import type { Market } from './types'
+import type { MarketData } from './types'
 import { db } from '../db'
 import type { MarketRecord } from '../db'
 
@@ -15,7 +15,7 @@ const POLYMARKET_API_BASE = 'https://polymarket.com/api'
 /**
  * Fetch markets from Polymarket API
  */
-export async function fetchMarkets(limit = 100): Promise<Market[]> {
+export async function fetchMarkets(limit = 100): Promise<MarketData[]> {
 	try {
 		const client = await getOrInitializeClient()
 
@@ -26,7 +26,7 @@ export async function fetchMarkets(limit = 100): Promise<Market[]> {
 		const marketsData = response.data || response.results || []
 
 		// Transform API response to our Market type
-		const markets: Market[] = marketsData
+		const markets: MarketData[] = marketsData
 			.filter((m: any) => {
 				// Filter out markets without a valid ID
 				const id = m.condition_id || m.id || m.conditionId
@@ -61,7 +61,7 @@ export async function fetchMarkets(limit = 100): Promise<Market[]> {
 			})
 
 		// Cache markets
-		await cacheMarkets(markets)
+		// await cacheMarkets(markets)
 
 		return markets.slice(0, limit)
 	} catch (error) {
@@ -73,7 +73,7 @@ export async function fetchMarkets(limit = 100): Promise<Market[]> {
 /**
  * Fetch a single market from Gamma API by slug
  */
-export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market | null> {
+export async function fetchMarketBySlugFromGamma(slug: string): Promise<MarketData | null> {
 	try {
 		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
 		console.log(`Fetching market by slug from Gamma API: ${url}`)
@@ -135,6 +135,8 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 			console.warn('Failed to parse clobTokenIds:', e)
 		}
 
+console.log('full market data:', marketData)
+
 		// Create outcomes array with token IDs and prices
 		const outcomes = outcomesArray.map((outcomeTitle: string, index: number) => ({
 			id: clobTokenIdsArray[index] || String(Math.random()), // Use CLOB token ID
@@ -144,7 +146,7 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 		}))
 
 		// Transform Gamma API response to our Market type
-		const market: Market = {
+		const market: MarketData = {
 			id: marketData.id || marketData.conditionId || '',
 			question: marketData.question || marketData.title || '',
 			slug: marketData.slug || slug,
@@ -164,17 +166,8 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 			updatedAt: marketData.updatedAt
 		}
 
-		console.log('Parsed market from Gamma API:', {
-			id: market.id,
-			conditionId: market.conditionId,
-			question: market.question,
-			outcomesCount: market.outcomes.length,
-			tokenIds: clobTokenIdsArray,
-			prices: outcomes.map((o) => `${o.title}: ${o.price}`)
-		})
-
 		// Cache the market
-		await cacheMarkets([market])
+		// await cacheMarkets([market])
 
 		return market
 	} catch (error: any) {
@@ -186,7 +179,7 @@ export async function fetchMarketBySlugFromGamma(slug: string): Promise<Market |
 /**
  * Fetch a single market from Gamma API by condition ID
  */
-export async function fetchMarketFromGamma(conditionId: string): Promise<Market | null> {
+export async function fetchMarketFromGamma(conditionId: string): Promise<MarketData | null> {
 	try {
 		const url = `${GAMMA_API_BASE}/markets/${conditionId}`
 		console.log(`Fetching market from Gamma API: ${url}`)
@@ -257,7 +250,7 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 		}))
 
 		// Transform Gamma API response to our Market type
-		const market: Market = {
+		const market: MarketData = {
 			id: marketData.id || marketData.conditionId || conditionId,
 			question: marketData.question || marketData.title || '',
 			slug: marketData.slug || '',
@@ -286,7 +279,7 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<Market 
 		})
 
 		// Cache the market
-		await cacheMarkets([market])
+		// await cacheMarkets([market])
 
 		return market
 	} catch (error: any) {
@@ -335,7 +328,7 @@ export async function fetchMarketPricesFromClob(
  * Fetch a single market by condition ID
  * Tries Gamma API first, then falls back to CLOB API
  */
-export async function fetchMarket(conditionId: string, useCache = false): Promise<Market | null> {
+export async function fetchMarket(conditionId: string, useCache = false): Promise<MarketData | null> {
 	try {
 		// Optionally check cache first (but don't use stale data for direct API calls)
 		if (useCache) {
@@ -394,7 +387,7 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 			throw new Error(`Invalid market ID for condition: ${conditionId}`)
 		}
 
-		const market: Market = {
+		const market: MarketData = {
 			id: id,
 			question: marketData.question || marketData.title || '',
 			slug: marketData.slug || '',
@@ -419,7 +412,7 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 		}
 
 		// Cache the market
-		await cacheMarkets([market])
+		// await cacheMarkets([market])
 
 		return market
 	} catch (error: any) {
@@ -444,7 +437,7 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 /**
  * Cache markets in the database
  */
-async function cacheMarkets(markets: Market[]): Promise<void> {
+async function cacheMarkets(markets: MarketData[]): Promise<void> {
 	try {
 		const now = Date.now()
 		// Filter out markets with invalid IDs before caching
@@ -475,7 +468,7 @@ async function cacheMarkets(markets: Market[]): Promise<void> {
 /**
  * Get markets from cache
  */
-export async function getCachedMarkets(maxAge = CACHE_DURATION): Promise<Market[]> {
+export async function getCachedMarkets(maxAge = CACHE_DURATION): Promise<MarketData[]> {
 	try {
 		const cutoff = Date.now() - maxAge
 		const records = await db.markets.where('cachedAt').above(cutoff).toArray()
@@ -493,7 +486,7 @@ export async function getCachedMarkets(maxAge = CACHE_DURATION): Promise<Market[
 /**
  * Get markets (from cache if available, otherwise fetch)
  */
-export async function getMarkets(forceRefresh = false): Promise<Market[]> {
+export async function getMarkets(forceRefresh = false): Promise<MarketData[]> {
 	if (!forceRefresh) {
 		const cached = await getCachedMarkets()
 		if (cached.length > 0) {
@@ -507,7 +500,7 @@ export async function getMarkets(forceRefresh = false): Promise<Market[]> {
 /**
  * Search markets by query
  */
-export async function searchMarkets(query: string): Promise<Market[]> {
+export async function searchMarkets(query: string): Promise<MarketData[]> {
 	const markets = await getMarkets()
 	const lowerQuery = query.toLowerCase()
 
@@ -522,7 +515,7 @@ export async function searchMarkets(query: string): Promise<Market[]> {
 /**
  * Get active markets only
  */
-export async function getActiveMarkets(): Promise<Market[]> {
+export async function getActiveMarkets(): Promise<MarketData[]> {
 	const markets = await getMarkets()
 	return markets.filter((m) => m.active && !m.closed)
 }

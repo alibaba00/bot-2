@@ -5,7 +5,7 @@
 
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import type { Market, Order, Transaction, WalletBalance, AccountInfo } from './types'
+import type { MarketData, Order, Transaction, WalletBalance, AccountInfo } from './types'
 import { getConnectionStatus, testConnection, initializeClient } from './client'
 import * as marketsService from './markets'
 import * as ordersService from './orders'
@@ -17,10 +17,10 @@ interface PolymarketState {
 	connectionError: string | null
 
 	// Markets
-	markets: Market[]
+	markets: MarketData[]
 	marketsLoading: boolean
 	marketsError: string | null
-	selectedMarket: Market | null
+	selectedMarket: MarketData | null
 
 	// Orders
 	orders: Order[]
@@ -44,8 +44,8 @@ interface PolymarketState {
 	refreshConnection: () => Promise<void>
 
 	fetchMarkets: (forceRefresh?: boolean) => Promise<void>
-	selectMarket: (market: Market | null) => void
-	searchMarkets: (query: string) => Promise<Market[]>
+	selectMarket: (market: MarketData | null) => void
+	searchMarkets: (query: string) => Promise<MarketData[]>
 
 	fetchOrders: () => Promise<void>
 	placeOrder: (params: any) => Promise<void>
@@ -125,7 +125,7 @@ export const usePolymarketStore = create<PolymarketState>((set, get) => ({
 		}
 	},
 
-	selectMarket: (market: Market | null) => {
+	selectMarket: (market: MarketData | null) => {
 		set({ selectedMarket: market })
 	},
 

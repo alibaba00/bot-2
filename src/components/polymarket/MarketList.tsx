@@ -1,11 +1,11 @@
 import { Skeleton } from '@/components/ui/skeleton'
 import { MarketCard } from './MarketCard'
-import type { Market } from '@/lib/polymarket/types'
+import type { MarketData } from '@/lib/polymarket/types'
 
 interface MarketListProps {
-	markets: Market[]
+	markets: MarketData[]
 	loading: boolean
-	onMarketSelect?: (market: Market) => void
+	onMarketSelect?: (market: MarketData) => void
 }
 
 export function MarketList({ markets, loading, onMarketSelect }: MarketListProps) {

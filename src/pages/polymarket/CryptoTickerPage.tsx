@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import MarketItem from './MarketItem'
 import PolymarketApi from './PolymarketApi'
-import type { Market } from '@/lib/polymarket/types'
+import type { MarketData } from '@/lib/polymarket/types'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { Button } from '@/components/ui/button'
 
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
 	// const [market, setMarket] = useState<Market | null>(null)
-	const [markets, setMarkets] = useState<Market[]>([])
+	const [markets, setMarkets] = useState<MarketData[]>([])
 	const [chainlinkPrice, setChainlinkPrice] = useState<number | null>(null)
 	const [priceTimestamp, setPriceTimestamp] = useState<number | null>(null)
 
@@ -36,7 +36,7 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		PolymarketApi.initMarket(symbol, type)
 		.then((market) => {
 			console.log('market', market)
-			setMarkets([market as Market])
+			setMarkets([market as MarketData])
 		})
 		// setMarket(market)
 		// setMarkets([market as Market])

@@ -1,22 +1,32 @@
 import { useEffect, useState } from "react";
 import PolymarketApi from "./PolymarketApi";
 import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
-import type { Market } from "@/lib/polymarket/types";
+import type { MarketData, MarketState } from "@/lib/polymarket/types";
 import { Button } from "@/components/ui/button";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
 import type { CLOBLastTradePriceUpdate, CLOBMarketPriceUpdate } from "@/lib/polymarket/clob-market-websocket";
 
 
 
-export default function MarketItem(props: { market: { slug?: string; description?: string; marketData?: Market | null } }) {
-	const market = props.market
+export default function MarketItem(props: { market: { slug?: string; state?: string; description?: string; marketData?: MarketData | null } }) {
+	const market = props.market as { slug?: string; state?: string; description?: string; marketData?: MarketData | null }
 	const priceToBeat = usePriceToBeat(market)
 	// const finalPrice = useFinalPrice(market)
-	const [marketData, setMarketData] = useState<Market | null>(null)
+	const [marketData, setMarketData] = useState<MarketData | null>(null)
 	const [assetIds, setAssetIds] = useState<string[]>([])
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	const [lastMarketPriceUpdate, setLastMarketPriceUpdate] = useState<CLOBMarketPriceUpdate | null>(null)
 	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
+	const [state, setState] = useState<MarketState>('init')
+
+	useEffect(() => {
+		if (market?.state) {
+			setState(market.state as MarketState)
+		}
+	}, [market?.state])
+
+	// Countdown timer state
+	const timeRemaining = useTimer({ endDate: market?.marketData?.endDate || undefined })
 
 	// Last trade prices from last_trade_price events
 	const [lastTradePrices, setLastTradePrices] = useState<
@@ -41,7 +51,8 @@ export default function MarketItem(props: { market: { slug?: string; description
 			setLastMarketPriceUpdate(update)
 		},
 		onLastTradePriceUpdate: (update) => {
-			console.log('clobMarketWs last trade price update', update)
+			// console.log('clobMarketWs last trade price update', update)
+
 /* last trade price update sample:
 {
     "asset_id": "92581211377091492168759303491099262196233985218333357388679289186455984779645",
@@ -82,17 +93,36 @@ export default function MarketItem(props: { market: { slug?: string; description
 	useEffect(() => {
 		console.log('market:', market)
 
+		// PolymarketApi.fetchMarketBySlug(market?.slug || '')
+		// .then((_marketData) => {
+		// 	console.log('marketData:', _marketData)
+		// 	market.marketData = _marketData as any
+		// })
+
+		fetchMarketData()
+	}, [market])
+
+
+	function fetchMarketData() {
 		fetchMarketBySlugFromGamma(market?.slug || '')
 		.then((_marketData) => {
 			console.log('marketData:', _marketData)
-			market.marketData = _marketData as Market | null
+			market.marketData = _marketData as MarketData
+			PolymarketApi.cacheMarket(market)
+
+			// market.state = 'test'
 
 			setMarketData(_marketData || null)
 			setAssetIds(_marketData?.outcomes.map((outcome) => outcome.id) || [])
 			clobMarketWs.updateAssetIds(assetIds)
-		})
-	}, [market])
+			fetchMarketState(market)
 
+		})
+	}
+
+	function fetchMarketState(market) {
+		// TODO: fetch market state from Gamma API
+	}
 
 	function connectMarket() {
 		clobMarketWs.connect()
@@ -107,7 +137,10 @@ export default function MarketItem(props: { market: { slug?: string; description
 	return (
 		<div className='flex flex-col gap-4'>
 			<div className='flex flex-col gap-2'>
-				<div className='text-sm text-muted-foreground'>{market.slug}</div>
+				<div className='text-sm text-muted-foreground'>{marketData?.question}</div>
+				<div className='text-sm text-muted-foreground'>{'slug: ' + marketData?.slug}</div>
+				<div className='text-sm text-muted-foreground'>{'state: ' + market.state}</div>
+				<div className='text-sm text-muted-foreground'>{timeRemaining?.minutes}m {timeRemaining?.seconds}s</div>
 			</div>
 			<div className='flex flex-col gap-2'>
 				<div className='text-sm text-muted-foreground'>{'Price to beat: ' + priceToBeat}</div>
@@ -115,8 +148,12 @@ export default function MarketItem(props: { market: { slug?: string; description
 			</div>
 			{marketData &&
 			<div className='flex flex-col gap-2'>
+				<div className='flex flex-row gap-2'>
 				<Button variant='outline' onClick={clobMarketWsStatus === 'disconnected' ? connectMarket :
 					disconnectMarket}>{clobMarketWsStatus === 'disconnected' ? 'Connect Market WebSockets' : 'Disconnect Market WebSockets'}</Button>
+				<Button variant='outline' onClick={fetchMarketData}>Fetch Market Data</Button>
+				</div>
+
 				<div className='text-sm text-muted-foreground'>{clobMarketWsStatus}</div>
 				<div className='text-sm text-muted-foreground'>{'Up (' + lastTradePrices[assetIds[0]]?.side + '): ' + lastTradePrices[assetIds[0]]?.price}</div>
 				<div className='text-sm text-muted-foreground'>{'Down (' + lastTradePrices[assetIds[1]]?.side + '): ' + lastTradePrices[assetIds[1]]?.price}</div>
@@ -151,6 +188,58 @@ export default function MarketItem(props: { market: { slug?: string; description
 			}
 		</div>
 	)
+}
+
+
+let interval: NodeJS.Timeout | null = null
+
+// ---------------------------------------------------------------------------- useTimer
+function useTimer(market: { endDate?: string }) {
+	// Countdown timer state
+	const [timeRemaining, setTimeRemaining] = useState<{
+		minutes: number
+		seconds: number
+		isExpired: boolean
+	} | null>(null)
+
+
+	useEffect(() => {
+		if (interval) clearInterval(interval)
+
+		if (!market?.endDate) {
+			setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
+			return
+		}
+
+		const updateCountdown = () => {
+			const endDate = new Date(market.endDate!)
+			const now = new Date()
+			const diff = endDate.getTime() - now.getTime()
+
+			if (diff <= 0) {
+				setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
+				if (interval) clearInterval(interval)
+				return
+			}
+
+			const minutes = Math.floor(diff / 60000)
+			const seconds = Math.floor((diff % 60000) / 1000)
+			setTimeRemaining({ minutes, seconds, isExpired: false })
+		}
+
+		// Update immediately
+		updateCountdown()
+
+		// Update every second
+		interval = setInterval(updateCountdown, 1000)
+
+		return () => {
+			if (interval) clearInterval(interval)
+			interval = null
+		}
+	}, [market?.endDate])
+
+	return timeRemaining
 }
 
 

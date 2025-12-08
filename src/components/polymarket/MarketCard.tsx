@@ -1,9 +1,9 @@
 import { Card, CardContent } from '@/components/ui/card'
-import type { Market } from '@/lib/polymarket/types'
+import type { MarketData } from '@/lib/polymarket/types'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 
 interface MarketCardProps {
-	market: Market
+	market: MarketData
 	onClick?: () => void
 }
 

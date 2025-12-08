@@ -3,6 +3,22 @@
  */
 
 export interface Market {
+	symbol: string
+	marketName: string
+	slug: string
+	timestamp: number
+	startTimestamp: number
+	endTimestamp: number
+	state: MarketState
+	marketData: MarketData | null
+	openPrice: number | null	// priceToBeat
+	closePrice: number | null	// finalPrice
+}
+
+
+export type MarketState = 'init' | 'pending' | 'started' | 'running' | 'stopped' | 'completed' | 'failed'
+
+export interface MarketData {
 	id: string
 	question: string
 	slug: string

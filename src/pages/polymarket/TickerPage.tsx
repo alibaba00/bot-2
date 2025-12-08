@@ -8,7 +8,7 @@ import {
 	fetchMarketBySlugFromGamma,
 	fetchMarketPricesFromClob
 } from '@/lib/polymarket/markets'
-import type { Market } from '@/lib/polymarket/types'
+import type { MarketData } from '@/lib/polymarket/types'
 import {
 	Activity,
 	TrendingUp,
@@ -33,7 +33,7 @@ const DEFAULT_BTC_MARKET_CONDITION_IDS = ['1764256500'] // Try both in case
 const DEFAULT_BTC_MARKET_SLUGS = ['btc-updown-15m-1764256500']
 
 export default function TickerPage() {
-	const [market, setMarket] = useState<Market | null>(null)
+	const [market, setMarket] = useState<MarketData | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const [assetIds, setAssetIds] = useState<string[]>([])
@@ -91,7 +91,7 @@ export default function TickerPage() {
 				setLoading(true)
 				setError(null)
 
-				let marketData: Market | null = null
+				let marketData: MarketData | null = null
 
 				// Strategy: Try direct API first, then fallback to search
 				// Direct API might work even if getMarket() fails

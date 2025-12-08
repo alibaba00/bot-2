@@ -11,7 +11,7 @@ import {
 	fetchMarketPricesFromClob,
 	fetchCryptoPriceToBeat
 } from '@/lib/polymarket/markets'
-import type { Market, MarketOutcome } from '@/lib/polymarket/types'
+import type { MarketData, MarketOutcome } from '@/lib/polymarket/types'
 import type { CryptoPriceSource } from '@/lib/polymarket/rtds-websocket'
 import { WS_URLS } from '@/lib/polymarket/websocket'
 import { Wifi, WifiOff, Play, Square, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
@@ -54,7 +54,7 @@ export default function TickerPage2() {
 	const [cryptoError, setCryptoError] = useState<string | null>(null)
 
 	// Market ticker state (CLOB)
-	const [market, setMarket] = useState<Market | null>(null)
+	const [market, setMarket] = useState<MarketData | null>(null)
 	const [marketLoading, setMarketLoading] = useState(true)
 	const [marketError, setMarketError] = useState<string | null>(null)
 	const [marketPrices, setMarketPrices] = useState<
@@ -387,7 +387,7 @@ export default function TickerPage2() {
 	}, [])
 
 	// Check if market is finished/ended
-	const isMarketFinished = (market: Market | null): boolean => {
+	const isMarketFinished = (market: MarketData | null): boolean => {
 		if (!market) return false
 		
 		// Check if market is closed
