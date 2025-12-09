@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import PolymarketApi from "./PolymarketApi";
 import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
 import type { Market, MarketData, MarketState } from "@/lib/polymarket/types";
@@ -12,6 +12,8 @@ export default function MarketItem(props: { market: Market }) {
 
 	const [marketData, setMarketData] = useState<MarketData | null>(null)
 	const [assetIds, setAssetIds] = useState<string[]>([])
+	const assets = useRef<any>({})
+
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
 	const [state, setState] = useState<MarketState>()
@@ -46,8 +48,11 @@ export default function MarketItem(props: { market: Market }) {
 				market.marketData = _marketData as MarketData
 				setMarketData(_marketData || null)
 				setAssetIds(_marketData?.outcomes.map((outcome) => outcome.id) || [])
-		
 				clobMarketWs.updateAssetIds(assetIds)
+
+				_marketData?.outcomes.forEach((outcome) => {
+					assets.current[outcome.id] = outcome.title
+				})
 
 				let _state = PolymarketApi.getMarketState(market) as MarketState
 				setMarketState(_state)
@@ -120,19 +125,6 @@ export default function MarketItem(props: { market: Market }) {
 		assetIds: assetIds,
 		onLastTradePriceUpdate: (update) => {
 			// console.log('clobMarketWs last trade price update', update)
-
-/* last trade price update sample:
-{
-    "asset_id": "92581211377091492168759303491099262196233985218333357388679289186455984779645",
-    "price": 0.86,
-    "size": 6,
-    "side": "BUY",
-    "timestamp": 1765146357284,
-    "transaction_hash": "0x8a0880c31e122e7e063af3c0bdb849faf5ed5e9c319cceed8901255bd7c570e7",
-    "fee_rate_bps": 0,
-    "market": "0x7ee34465015e239f9b7a76e4aee22caf049db9f914c8c3216882e32c6e7541e1"
-}
-*/
 			// setLastMarketLastTradePriceUpdate(update)
 			setLastTradePrices((prev) => ({
 				...prev,
@@ -144,6 +136,14 @@ export default function MarketItem(props: { market: Market }) {
 					transaction_hash: update.transaction_hash
 				}
 			}))
+market.trades.push({
+	asset: assets.current[update.asset_id],
+	price: update.price,
+	size: update.size,
+	side: update.side,
+	timestamp: update.timestamp,
+})
+
 		},
 		onError: (err) => {
 			console.log('clobMarketWs error', err)
@@ -185,6 +185,9 @@ export default function MarketItem(props: { market: Market }) {
 				<div className='flex flex-row gap-2'>
 				<Button variant='outline' onClick={clobMarketWsStatus === 'disconnected' ? connectMarket :
 					disconnectMarket}>{clobMarketWsStatus === 'disconnected' ? 'Connect Market WebSockets' : 'Disconnect Market WebSockets'}</Button>
+					<Button variant='outline' onClick={() => {
+						PolymarketApi.cacheMarket(market as unknown as Market)
+					}}>save market</Button>
 				</div>
 				<div className='text-sm text-muted-foreground'>{clobMarketWsStatus}</div>
 
@@ -247,6 +250,19 @@ function useTimer(market: { endDate?: string }) {
 	return timeRemaining
 }
 
+
+/* last trade price update sample:
+{
+    "asset_id": "92581211377091492168759303491099262196233985218333357388679289186455984779645",
+    "price": 0.86,
+    "size": 6,
+    "side": "BUY",
+    "timestamp": 1765146357284,
+    "transaction_hash": "0x8a0880c31e122e7e063af3c0bdb849faf5ed5e9c319cceed8901255bd7c570e7",
+    "fee_rate_bps": 0,
+    "market": "0x7ee34465015e239f9b7a76e4aee22caf049db9f914c8c3216882e32c6e7541e1"
+}
+*/
 
 /* market sample:
 {

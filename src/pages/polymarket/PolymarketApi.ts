@@ -100,6 +100,7 @@ class PolymarketApi {
 			marketData: null,
 			openPrice: null,	// priceToBeat
 			closePrice: null,	// finalPrice
+			trades: [],
 		}
 
 		return market

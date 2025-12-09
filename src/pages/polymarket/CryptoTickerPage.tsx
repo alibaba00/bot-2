@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import MarketItem from './MarketItem'
 import PolymarketApi from './PolymarketApi'
-import type { Market, MarketData } from '@/lib/polymarket/types'
+import type { Market } from '@/lib/polymarket/types'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { Button } from '@/components/ui/button'
 
@@ -38,7 +38,8 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 
 		PolymarketApi.initMarkets(symbol, type)
 		.then((markets) => {
-			setMarkets(markets as unknown as MarketData[])
+			setMarkets(markets as unknown as Market[])
+			// setCurrentMarket(markets[0])
 		})
 
 		// Cleanup on unmount

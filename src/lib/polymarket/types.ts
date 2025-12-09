@@ -2,6 +2,8 @@
  * TypeScript interfaces for Polymarket API responses and data structures
  */
 
+import type { CLOBMarketMessage } from "./clob-market-websocket"
+
 export interface Market {
 	symbol: string
 	marketName: string
@@ -13,6 +15,7 @@ export interface Market {
 	marketData: MarketData | null
 	openPrice: number | null	// priceToBeat
 	closePrice: number | null	// finalPrice
+	trades: any[]
 }
 
 
