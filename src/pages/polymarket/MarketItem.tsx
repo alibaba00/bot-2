@@ -7,24 +7,49 @@ import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
 
 
 
-export default function MarketItem(props: { market: { slug?: string; state?: string; description?: string; marketData?: MarketData | null } }) {
-	const market = props.market as { slug?: string; state?: string; description?: string; marketData?: MarketData | null }
-	const priceToBeat = usePriceToBeat(market)
+export default function MarketItem(props: { market: Market }) {
+	const market = props.market
+	// const priceToBeat = usePriceToBeat(market)
+	const [openPrice, setOpenPrice] = useState<number | null>(market.openPrice || null)
 	// const finalPrice = useFinalPrice(market)
+	const [closePrice, setClosePrice] = useState<number | null>(market.closePrice || null)
+
 	const [marketData, setMarketData] = useState<MarketData | null>(null)
 	const [assetIds, setAssetIds] = useState<string[]>([])
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
 	const [state, setState] = useState<MarketState>('init')
 
+	// Countdown timer state
+	const timeRemaining = useTimer({ endDate: market?.marketData?.endDate || undefined })
+
+	
+	useEffect(() => {
+		console.log('---init MarketItem:', market.slug, market)
+		// PolymarketApi.pollingMarketPrice(market, 'openPrice')
+		// .then((result) => {
+		// 	setOpenPrice(result?.openPrice || null)
+		// 	setClosePrice(result?.closePrice || null)
+		// })
+
+		if (!market.openPrice) {
+			PolymarketApi.pollingMarketPrice(market, 'openPrice')
+			.then(async (result) => {
+				market.openPrice = result
+				setOpenPrice(market.openPrice)
+				await PolymarketApi.cacheMarket(market as unknown as Market)
+			})
+		}
+
+		fetchMarketData()
+
+	}, [])
+
 	useEffect(() => {
 		if (market?.state) {
 			setState(market.state as MarketState)
 		}
 	}, [market?.state])
-
-	// Countdown timer state
-	const timeRemaining = useTimer({ endDate: market?.marketData?.endDate || undefined })
 
 	// Last trade prices from last_trade_price events
 	const [lastTradePrices, setLastTradePrices] = useState<
@@ -84,39 +109,55 @@ export default function MarketItem(props: { market: { slug?: string; state?: str
 	})
 
 
-	useEffect(() => {
-		console.log('market:', market)
-
+	function fetchMarketData() {
 		// PolymarketApi.fetchMarketBySlug(market?.slug || '')
 		// .then((_marketData) => {
 		// 	console.log('marketData:', _marketData)
 		// 	market.marketData = _marketData as any
 		// })
 
-		fetchMarketData()
-	}, [market])
-
-
-	function fetchMarketData() {
 		fetchMarketBySlugFromGamma(market?.slug || '')
 		.then((_marketData) => {
 			console.log('marketData:', _marketData)
 			market.marketData = _marketData as MarketData
-			PolymarketApi.cacheMarket(market as unknown as Market)
-
-			// market.state = 'test'
 
 			setMarketData(_marketData || null)
 			setAssetIds(_marketData?.outcomes.map((outcome) => outcome.id) || [])
 			clobMarketWs.updateAssetIds(assetIds)
-			fetchMarketState(market)
+			// fetchMarketState()
 
+			PolymarketApi.cacheMarket(market as unknown as Market)
 		})
 	}
 
-	function fetchMarketState(market) {
-		// TODO: fetch market state from Gamma API
-	}
+	useEffect(() => {
+		if (!market?.marketData) return
+
+		const data = market.marketData
+		if (market.closePrice) {
+			market.state = 'completed'
+			setState(market.state as MarketState)
+			return
+		}
+		const startDate = new Date(data.startDate || '')
+		const endDate = new Date(data.endDate || '')
+		const now = new Date()
+		if (now > endDate) {		//polling for final price
+			market.state = 'stopped'
+			setState(market.state as MarketState)
+			return
+		}
+		if (now < startDate) {
+			market.state = 'pending'
+		} else if (market.openPrice) {
+			market.state = 'running'
+		} else {					//polling for price to beat
+			market.state = 'started'
+		}
+		setState(market.state as MarketState)
+
+	}, [market?.marketData, market?.openPrice, market?.closePrice, market?.state])
+
 
 	function connectMarket() {
 		clobMarketWs.connect()
@@ -137,8 +178,8 @@ export default function MarketItem(props: { market: { slug?: string; state?: str
 				<div className='text-sm text-muted-foreground'>{timeRemaining?.minutes}m {timeRemaining?.seconds}s</div>
 			</div>
 			<div className='flex flex-col gap-2'>
-				<div className='text-sm text-muted-foreground'>{'Price to beat: ' + priceToBeat}</div>
-				{/* <div className='text-sm text-muted-foreground'>{'Final price: ' + finalPrice}</div> */}
+				<div className='text-sm text-muted-foreground'>{'Price to beat: ' + (openPrice ? openPrice.toFixed(2) : 'pending...')}</div>
+				<div className='text-sm text-muted-foreground'>{'Final price: ' + (closePrice ? closePrice.toFixed(2) : 'pending...')}</div>
 			</div>
 			{marketData &&
 			<div className='flex flex-col gap-2'>
@@ -242,7 +283,7 @@ let timeoutId: NodeJS.Timeout | null = null
 
 
 // ---------------------------------------------------------------------------- usePriceToBeat
-function usePriceToBeat(market) {
+function usePriceToBeat(market: Market) {
 	const [priceToBeat, setPriceToBeat] = useState('pending...')
 
 	useEffect(() => {
@@ -254,10 +295,9 @@ function usePriceToBeat(market) {
 
 			if (result?.openPrice) {
 				market.openPrice = result.openPrice
-				// await PolymarketApi.cacheMarket(market)
-				setPriceToBeat(result.openPrice > 100 ? result.openPrice.toFixed(2) : result.openPrice)
+				await PolymarketApi.cacheMarket(market as unknown as Market)
+				setPriceToBeat(result.openPrice > 100 ? result.openPrice.toFixed(2) : result.openPrice.toString())
 				console.log('priceToBeat', market.openPrice)
-
 			} else {
 				timeoutId = setTimeout(() => fetchPriceToBeat(), 5000)
 			}
@@ -274,7 +314,7 @@ function usePriceToBeat(market) {
 
 
 // ---------------------------------------------------------------------------- useFinalPrice
-function useFinalPrice(market) {
+function useFinalPrice(market: Market) {
 	const [finalPrice, setFinalPrice] = useState('pending...')
 
 	useEffect(() => {
@@ -282,11 +322,13 @@ function useFinalPrice(market) {
 		console.log('useFinalPrice', market.slug)
 
 		async function fetchFinalPrice() {
-			const result = await PolymarketApi.getPriceToBeat(market)
+			const result = await PolymarketApi.getCryptoPrice(market)
 
-			if (result?.finalPrice) {
-				market.finalPrice = result.finalPrice
-				setFinalPrice(result.finalPrice > 100 ? result.finalPrice.toFixed(2) : result.finalPrice)
+			if (result?.closePrice) {
+				market.closePrice = result.closePrice
+				await PolymarketApi.cacheMarket(market as unknown as Market)
+				setFinalPrice(result.closePrice > 100 ? result.closePrice.toFixed(2) : result.closePrice.toString())
+				console.log('finalPrice', market.closePrice)
 			} else {
 				timeoutId = setTimeout(() => fetchFinalPrice(), 5000)
 			}

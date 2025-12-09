@@ -187,6 +187,23 @@ class PolymarketApi {
 		await cache.setItem(market.slug, market)
 	}
 
+
+	async pollingMarketPrice(market: Market, type: 'openPrice' | 'closePrice'): Promise<number | null> {
+		const api = this
+		return new Promise((resolve, reject) => {
+			async function pollingMarketPrice() {
+				const result = await api.getCryptoPrice(market)
+				if (result?.[type]) {
+					market[type] = result[type]
+					await api.cacheMarket(market)
+					resolve(market[type] as number | null || null)
+				}
+				await new Promise(resolve => setTimeout(resolve, 5000))
+				pollingMarketPrice()
+			}
+			pollingMarketPrice()
+		})
+	}
 }
 
 export default new PolymarketApi()
