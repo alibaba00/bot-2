@@ -18,38 +18,88 @@ export default function MarketItem(props: { market: Market }) {
 	const [assetIds, setAssetIds] = useState<string[]>([])
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
-	const [state, setState] = useState<MarketState>('init')
+	const [state, setState] = useState<MarketState>()
 
 	// Countdown timer state
-	const timeRemaining = useTimer({ endDate: market?.marketData?.endDate || undefined })
+	// const timeRemaining = useTimer({ endDate: market?.marketData?.endDate || undefined })
 
-	
-	useEffect(() => {
-		console.log('---init MarketItem:', market.slug, market)
-		// PolymarketApi.pollingMarketPrice(market, 'openPrice')
-		// .then((result) => {
-		// 	setOpenPrice(result?.openPrice || null)
-		// 	setClosePrice(result?.closePrice || null)
-		// })
+	const [timeRemaining, setTimeRemaining] = useState<{
+		minutes: number
+		seconds: number
+		isExpired: boolean
+	} | null>(null)
 
-		if (!market.openPrice) {
-			PolymarketApi.pollingMarketPrice(market, 'openPrice')
-			.then(async (result) => {
-				market.openPrice = result
-				setOpenPrice(market.openPrice)
-				await PolymarketApi.cacheMarket(market as unknown as Market)
-			})
-		}
-
-		fetchMarketData()
-
-	}, [])
 
 	useEffect(() => {
-		if (market?.state) {
-			setState(market.state as MarketState)
-		}
-	}, [market?.state])
+		updateMarketState(market.state)
+	}, [market.state])
+
+
+	const setMarketState = (state: MarketState) => {
+		market.state = state
+		setState(state)
+		PolymarketApi.cacheMarket(market as unknown as Market)
+	}
+
+	const updateMarketState = async (_state: MarketState) => {
+		if (_state === state) return;
+		switch (_state){
+			case 'init':
+				console.log('---init MarketItem:', market.slug, market)
+				const _marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
+				console.log('marketData:', _marketData)
+				market.marketData = _marketData as MarketData
+				setMarketData(_marketData || null)
+				setAssetIds(_marketData?.outcomes.map((outcome) => outcome.id) || [])
+		
+				clobMarketWs.updateAssetIds(assetIds)
+
+				let _state = PolymarketApi.getMarketState(market) as MarketState
+				setMarketState(_state)
+				return;
+
+			case 'pending':
+				return;
+
+			case 'started':
+				const result = await PolymarketApi.pollingMarketPrice(market, 'openPrice')
+				if (result) {
+					console.log('---started MarketItem:', market.slug, market)
+					market.openPrice = result.openPrice || null as unknown as number
+					setOpenPrice(market.openPrice)		//price to beat
+					setMarketState('running')
+				}
+				return;
+
+			case 'running':
+				PolymarketApi.onMarketTimer(market.marketData?.endDate || '', (t) => {
+					setTimeRemaining(t)
+					if (t.isExpired) setMarketState('stopped')
+				})
+				return;
+
+			case 'stopped':
+				disconnectMarket()
+				const _result = await PolymarketApi.pollingMarketPrice(market, 'closePrice')
+				if (_result) {
+					market.closePrice = _result.closePrice || null as unknown as number
+					setClosePrice(market.closePrice)
+					setMarketState('closed')
+				}
+				return;
+
+			case 'closed':
+				return;
+
+			case 'failed':
+				return;
+
+			default:
+				console.log('---default MarketItem:', market.slug, market)
+				return;
+		}	
+	}
+
 
 	// Last trade prices from last_trade_price events
 	const [lastTradePrices, setLastTradePrices] = useState<
@@ -108,58 +158,8 @@ export default function MarketItem(props: { market: Market }) {
 		autoConnect: false
 	})
 
-
-	function fetchMarketData() {
-		// PolymarketApi.fetchMarketBySlug(market?.slug || '')
-		// .then((_marketData) => {
-		// 	console.log('marketData:', _marketData)
-		// 	market.marketData = _marketData as any
-		// })
-
-		fetchMarketBySlugFromGamma(market?.slug || '')
-		.then((_marketData) => {
-			console.log('marketData:', _marketData)
-			market.marketData = _marketData as MarketData
-
-			setMarketData(_marketData || null)
-			setAssetIds(_marketData?.outcomes.map((outcome) => outcome.id) || [])
-			clobMarketWs.updateAssetIds(assetIds)
-			// fetchMarketState()
-
-			PolymarketApi.cacheMarket(market as unknown as Market)
-		})
-	}
-
-	useEffect(() => {
-		if (!market?.marketData) return
-
-		const data = market.marketData
-		if (market.closePrice) {
-			market.state = 'completed'
-			setState(market.state as MarketState)
-			return
-		}
-		const startDate = new Date(data.startDate || '')
-		const endDate = new Date(data.endDate || '')
-		const now = new Date()
-		if (now > endDate) {		//polling for final price
-			market.state = 'stopped'
-			setState(market.state as MarketState)
-			return
-		}
-		if (now < startDate) {
-			market.state = 'pending'
-		} else if (market.openPrice) {
-			market.state = 'running'
-		} else {					//polling for price to beat
-			market.state = 'started'
-		}
-		setState(market.state as MarketState)
-
-	}, [market?.marketData, market?.openPrice, market?.closePrice, market?.state])
-
-
 	function connectMarket() {
+		if (clobMarketWs.status === 'connected' || market.state !== 'running') return;
 		clobMarketWs.connect()
 		console.log('clobMarketWs status', clobMarketWs.status)
 	}
@@ -170,7 +170,7 @@ export default function MarketItem(props: { market: Market }) {
 	}
 
 	return (
-		<div className='flex flex-col gap-4'>
+		<div className='flex flex-col gap-4 border-t border-black/20 dark:border-white/20 pt-4'>
 			<div className='flex flex-col gap-2'>
 				<div className='text-sm text-muted-foreground'>{marketData?.question}</div>
 				<div className='text-sm text-muted-foreground'>{'slug: ' + marketData?.slug}</div>
@@ -178,47 +178,20 @@ export default function MarketItem(props: { market: Market }) {
 				<div className='text-sm text-muted-foreground'>{timeRemaining?.minutes}m {timeRemaining?.seconds}s</div>
 			</div>
 			<div className='flex flex-col gap-2'>
-				<div className='text-sm text-muted-foreground'>{'Price to beat: ' + (openPrice ? openPrice.toFixed(2) : 'pending...')}</div>
-				<div className='text-sm text-muted-foreground'>{'Final price: ' + (closePrice ? closePrice.toFixed(2) : 'pending...')}</div>
+				<div className='text-sm text-muted-foreground'>{'Price to beat: ' + (openPrice || (state === 'started'? 'pending...':'---'))}</div>
+				<div className='text-sm text-muted-foreground'>{'Final price: ' + (closePrice || (state === 'stopped'? 'pending...' : '---'))}</div>
 			</div>
 			{marketData &&
 			<div className='flex flex-col gap-2'>
 				<div className='flex flex-row gap-2'>
 				<Button variant='outline' onClick={clobMarketWsStatus === 'disconnected' ? connectMarket :
 					disconnectMarket}>{clobMarketWsStatus === 'disconnected' ? 'Connect Market WebSockets' : 'Disconnect Market WebSockets'}</Button>
-				<Button variant='outline' onClick={fetchMarketData}>Fetch Market Data</Button>
 				</div>
 
 				<div className='text-sm text-muted-foreground'>{clobMarketWsStatus}</div>
 				<div className='text-sm text-muted-foreground'>{'Up (' + lastTradePrices[assetIds[0]]?.side + '): ' + lastTradePrices[assetIds[0]]?.price}</div>
 				<div className='text-sm text-muted-foreground'>{'Down (' + lastTradePrices[assetIds[1]]?.side + '): ' + lastTradePrices[assetIds[1]]?.price}</div>
 
-				{/* <div className='text-sm text-muted-foreground'>{lastMarketPriceUpdate?.price}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastMarketPriceUpdate?.size}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastMarketPriceUpdate?.side}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastMarketPriceUpdate?.best_bid}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastMarketPriceUpdate?.best_ask}</div>	 */}
-				{/* <div className='text-sm text-muted-foreground'>{lastMarketPriceUpdate?.hash}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastTradePrices[assetIds[0]]?.price}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastTradePrices[assetIds[0]]?.size}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastTradePrices[assetIds[0]]?.side}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastTradePrices[assetIds[0]]?.timestamp}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{lastTradePrices[assetIds[0]]?.transaction_hash}</div> */}
-				{/* <div className='text-sm text-muted-foreground'>{marketData.question}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.description}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.image}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.endDate}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.startDate}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.conditionId}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.marketMakerAddress}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.volume}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.liquidity}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.createdAt}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.updatedAt}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.outcomes.length}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.active ? 'active' : 'inactive'}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.closed ? 'closed' : 'open'}</div>
-				<div className='text-sm text-muted-foreground'>{marketData.outcomes.map((outcome) => outcome.title).join(', ')}</div> */}
 				</div>
 			}
 		</div>
@@ -277,71 +250,6 @@ function useTimer(market: { endDate?: string }) {
 	return timeRemaining
 }
 
-
-// ---------------------------------------------------------------------------- timeoutId
-let timeoutId: NodeJS.Timeout | null = null
-
-
-// ---------------------------------------------------------------------------- usePriceToBeat
-function usePriceToBeat(market: Market) {
-	const [priceToBeat, setPriceToBeat] = useState('pending...')
-
-	useEffect(() => {
-		if (timeoutId) clearTimeout(timeoutId)
-		console.log('usePriceToBeat', market.slug)
-
-		async function fetchPriceToBeat() {
-			const result = await PolymarketApi.getCryptoPrice(market)
-
-			if (result?.openPrice) {
-				market.openPrice = result.openPrice
-				await PolymarketApi.cacheMarket(market as unknown as Market)
-				setPriceToBeat(result.openPrice > 100 ? result.openPrice.toFixed(2) : result.openPrice.toString())
-				console.log('priceToBeat', market.openPrice)
-			} else {
-				timeoutId = setTimeout(() => fetchPriceToBeat(), 5000)
-			}
-		}
-		fetchPriceToBeat()
-
-		return () => {
-			if (timeoutId) clearTimeout(timeoutId)
-		}
-	}, [market.slug])
-
-	return priceToBeat
-}
-
-
-// ---------------------------------------------------------------------------- useFinalPrice
-function useFinalPrice(market: Market) {
-	const [finalPrice, setFinalPrice] = useState('pending...')
-
-	useEffect(() => {
-		if (timeoutId) clearTimeout(timeoutId)
-		console.log('useFinalPrice', market.slug)
-
-		async function fetchFinalPrice() {
-			const result = await PolymarketApi.getCryptoPrice(market)
-
-			if (result?.closePrice) {
-				market.closePrice = result.closePrice
-				await PolymarketApi.cacheMarket(market as unknown as Market)
-				setFinalPrice(result.closePrice > 100 ? result.closePrice.toFixed(2) : result.closePrice.toString())
-				console.log('finalPrice', market.closePrice)
-			} else {
-				timeoutId = setTimeout(() => fetchFinalPrice(), 5000)
-			}
-		}
-		fetchFinalPrice()
-
-		return () => {
-			if (timeoutId) clearTimeout(timeoutId)
-		}
-	}, [market.slug])
-
-	return finalPrice
-}
 
 /* market sample:
 {

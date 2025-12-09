@@ -33,13 +33,10 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 	useEffect(() => {
 		console.log('---init CryptoTickerPage---', symbol, type)
 
-		PolymarketApi.initMarket(symbol, type)
-		.then((market) => {
-			console.log('market', market)
-			setMarkets([market as unknown as MarketData])
+		PolymarketApi.initMarkets(symbol, type)
+		.then((markets) => {
+			setMarkets(markets as unknown as MarketData[])
 		})
-		// setMarket(market)
-		// setMarkets([market as Market])
 
 		// Cleanup on unmount
 		return () => {

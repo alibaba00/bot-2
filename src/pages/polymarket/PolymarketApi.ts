@@ -1,5 +1,5 @@
 import localForage from 'localforage'
-import type { Market, MarketData } from '@/lib/polymarket/types'
+import type { Market, MarketData, MarketState } from '@/lib/polymarket/types'
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
 const POLYMARKET_API_BASE = 'https://polymarket.com/api'
@@ -39,57 +39,46 @@ class PolymarketApi {
 
 	async init(): Promise<void> {
 		console.log('-----------------------init PolymarketApi-----------------------')
-		// const cachedMarkets = (await cache.getItem('markets')) || []
-		// console.log('cachedMarkets', cachedMarkets)
-		// this.markets = cachedMarkets
-		// return this.markets
-
-		// this.currentMarket = new Market({
-		// 	id: '1234567890123456789012345678901234567890123456789012345678901234',
-		// 	question: 'What is the price of Bitcoin?',
-		// 	slug: 'btc-updown-15m-12345678901234567890123456789012',
-		// 	description: 'This is a test market',
-		// 	image: 'https://polymarket.com/images/btc.png',
-		// 	active: true,
-		// 	closed: false,
-		// 	outcomes: [
-		// 		{
-		// 			id: '12345678901234567890123456789012',
-		// 			title: 'Yes',
-		// 			price: 0.5,
-		// 			volume: 100
-		// 		}
-		// 	]
-		// })
 	}
 
 
 	// from CryptoTickerPage
-	async initMarket(symbol: string, type: string): Promise<Market> {
+	async initMarkets(symbol: string, type: string): Promise<Market[]> {
 		//symbol: btc, type: updown-15m
-		const timestamp = this.getCurrent15MinuteUTCTimestamp()
+		const lastMarket = await this.getMarketFromDate(symbol, type, new Date(Date.now() - 15 * 60000), 15)
+		const currentMarket = await this.getMarketFromDate(symbol, type, new Date(), 15)
+		const nextMarket = await this.getMarketFromDate(symbol, type, new Date(Date.now() + 15 * 60000), 15)
+		return [
+			nextMarket as Market,
+			currentMarket as Market,
+			lastMarket as Market,
+		]
+	}
+
+
+	async getMarketFromDate(symbol: string, type: string, date: Date, minutes: number): Promise<Market> {
+		const timestamp = this.getUTCTimestamp(date, minutes)
 		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
 		const marketSlug = `${marketName}-${timestamp}`	//e.g. btc-updown-15m-1765144800
 
-		if (this.markets?.[marketName]?.[marketSlug]) {
-			return this.markets[marketName][marketSlug]
-		}
+		// if (this.markets?.[marketName]?.[marketSlug]) {
+		// 	return this.markets[marketName][marketSlug]
+		// }
 
-		if (!this.markets?.[marketName]) {
-			this.markets[marketName] = {}
-		}
+		if (!this.markets?.[marketName]) this.markets[marketName] = {}
 
-		const cachedMarket = await cache.getItem<Market>(marketSlug)
-		if (cachedMarket) {
-			this.markets[marketName][cachedMarket.slug] = cachedMarket
-			return cachedMarket
-		}
+		// const cachedMarket = await cache.getItem<Market>(marketSlug)
+		// if (cachedMarket) {
+		// 	cachedMarket.state = 'init'
+		// 	this.markets[marketName][cachedMarket.slug] = cachedMarket
+		// 	return cachedMarket
+		// }
 
 		const market = this.createMarket(symbol, marketName, timestamp, marketSlug)
 		this.markets[marketName][market.slug] = market
 		await this.cacheMarket(market)
 
-		return market
+		return market as Market
 	}
 
 
@@ -99,9 +88,6 @@ class PolymarketApi {
 
 		// console.log('startTimestamp', new Date(startTimestamp).toISOString())
 		// console.log('endTimestamp', new Date(endTimestamp).toISOString())
-
-		// const priceToBeat = await this.getPriceToBeat('btc', new Date(startTimestamp).toISOString(), new Date(endTimestamp).toISOString())
-		// console.log('priceToBeat', priceToBeat)
 
 		const market: Market = {
 			symbol: symbol.toUpperCase(),
@@ -115,27 +101,19 @@ class PolymarketApi {
 			openPrice: null,	// priceToBeat
 			closePrice: null,	// finalPrice
 		}
-		// this.setPriceToBeat(market)
 
 		return market
 	}
 
-	// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
-	getCurrent15MinuteUTCTimestamp(): number {
-		const now = Date.now() // Current time in milliseconds
-		console.log('Current 15-minute UTC timestamp:', now)
-		const nowSeconds = Math.floor(now / 1000) // Convert to seconds
-		const fifteenMinutes = 15 * 60 // 15 minutes in seconds (900)
-		// Round down to the nearest 15-minute interval
-		return Math.floor(nowSeconds / fifteenMinutes) * fifteenMinutes
-	}
 
-	// Default Bitcoin market slug - dynamically generated based on current 15-minute UTC timestamp
-	// getDefaultBTCMarketSlug() {
-	// 	const timestamp = this.getCurrent15MinuteUTCTimestamp()
-	// 	console.log('Default Bitcoin market slug:', `btc-updown-15m-${timestamp}`)
-	// 	return `btc-updown-15m-${timestamp}`
-	// }
+	// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
+	getUTCTimestamp(date: Date | number, minutes: number): number {
+		const dateTime = date instanceof Date ? date.getTime() : date
+		const dateTimeSeconds = Math.floor(dateTime / 1000) // Convert to seconds
+		const minutesSeconds = minutes * 60 // minutes in seconds
+		// Round down to the nearest minutes interval
+		return Math.floor(dateTimeSeconds / minutesSeconds) * minutesSeconds
+	}
 
 	// Get price to beat for a given symbol, event start time, and end date
 	async getCryptoPrice(market: Market): Promise<CryptoPriceResponse | null> {
@@ -183,12 +161,98 @@ class PolymarketApi {
 	}
 
 
+	getMarketState(market: Market): MarketState | null {
+		if (!market) return 'failed'
+
+		if (market.closePrice) {
+			market.state = 'closed'
+			return market.state
+		}
+		const startTime = new Date(market.startTimestamp || '')
+		const endTime = new Date(market.endTimestamp || '')
+		const now = new Date()
+		if (now > endTime) {		//polling for final price
+			market.state = 'stopped'
+			return market.state
+		}
+		if (now < startTime) return 'pending'
+		if (market.openPrice) return 'running'
+		return 'started'
+	}
+
+
+	onMarketTimer(
+		_endDate: string,
+		onTimer?: (t: { minutes: number; seconds: number; isExpired: boolean }) => void
+	): void {
+		const endDate = new Date(_endDate || "")
+		let interval: NodeJS.Timeout | null = null
+
+		const updateTimer = () => {
+			if (!onTimer){
+				if (interval) clearInterval(interval)
+				return
+			}
+			const now = new Date()
+			const diff = endDate.getTime() - now.getTime()
+			if (diff <= 0) {
+				onTimer?.({ minutes: 0, seconds: 0, isExpired: true })
+				if (interval) clearInterval(interval)
+				return
+			}
+			const minutes = Math.floor(diff / 60000)
+			const seconds = Math.floor((diff % 60000) / 1000)
+			onTimer?.({ minutes, seconds, isExpired: false })
+		}
+
+		updateTimer()
+		interval = setInterval(updateTimer, 1000)
+	}
+
+/*
+	useEffect(() => {
+		if (interval) clearInterval(interval)
+
+		if (!market?.endDate) {
+			setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
+			return
+		}
+
+		const updateCountdown = () => {
+			const endDate = new Date(market.endDate!)
+			const now = new Date()
+			const diff = endDate.getTime() - now.getTime()
+
+			if (diff <= 0) {
+				setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
+				if (interval) clearInterval(interval)
+				return
+			}
+
+			const minutes = Math.floor(diff / 60000)
+			const seconds = Math.floor((diff % 60000) / 1000)
+			setTimeRemaining({ minutes, seconds, isExpired: false })
+		}
+
+		// Update immediately
+		updateCountdown()
+
+		// Update every second
+		interval = setInterval(updateCountdown, 1000)
+
+		return () => {
+			if (interval) clearInterval(interval)
+			interval = null
+		}
+	}, [market?.endDate])
+*/
+
 	async cacheMarket(market: Market): Promise<void> {
 		await cache.setItem(market.slug, market)
 	}
 
 
-	async pollingMarketPrice(market: Market, type: 'openPrice' | 'closePrice'): Promise<number | null> {
+	async pollingMarketPrice(market: Market, type: 'openPrice' | 'closePrice'): Promise<CryptoPriceResponse | null> {
 		const api = this
 		return new Promise((resolve, reject) => {
 			async function pollingMarketPrice() {
@@ -196,10 +260,11 @@ class PolymarketApi {
 				if (result?.[type]) {
 					market[type] = result[type]
 					await api.cacheMarket(market)
-					resolve(market[type] as number | null || null)
+					resolve(result)
+				}else{
+					await new Promise(resolve => setTimeout(resolve, 5000))
+					pollingMarketPrice()
 				}
-				await new Promise(resolve => setTimeout(resolve, 5000))
-				pollingMarketPrice()
 			}
 			pollingMarketPrice()
 		})
