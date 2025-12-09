@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import MarketItem from './MarketItem'
 import PolymarketApi from './PolymarketApi'
-import type { MarketData } from '@/lib/polymarket/types'
+import type { Market, MarketData } from '@/lib/polymarket/types'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { Button } from '@/components/ui/button'
 
+
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
 	// const [market, setMarket] = useState<Market | null>(null)
-	const [markets, setMarkets] = useState<MarketData[]>([])
+	const [markets, setMarkets] = useState<Market[]>([])
 	const [chainlinkPrice, setChainlinkPrice] = useState<number | null>(null)
 	const [priceTimestamp, setPriceTimestamp] = useState<number | null>(null)
+	const [currentMarket, setCurrentMarket] = useState<Market | null>(null)
+
 
 	// Convert symbol to Chainlink format (e.g., "btc" -> "btc/usd")
 	const chainlinkSymbol = `${symbol.toLowerCase()}/usd`

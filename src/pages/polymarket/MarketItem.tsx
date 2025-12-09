@@ -9,10 +9,6 @@ import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
 
 export default function MarketItem(props: { market: Market }) {
 	const market = props.market
-	// const priceToBeat = usePriceToBeat(market)
-	const [openPrice, setOpenPrice] = useState<number | null>(market.openPrice || null)
-	// const finalPrice = useFinalPrice(market)
-	const [closePrice, setClosePrice] = useState<number | null>(market.closePrice || null)
 
 	const [marketData, setMarketData] = useState<MarketData | null>(null)
 	const [assetIds, setAssetIds] = useState<string[]>([])
@@ -42,9 +38,8 @@ export default function MarketItem(props: { market: Market }) {
 	}
 
 	const updateMarketState = async (_state: MarketState) => {
-		if (_state === state) return;
 		switch (_state){
-			case 'init':
+			case 'init':		//market is initializing
 				console.log('---init MarketItem:', market.slug, market)
 				const _marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
 				console.log('marketData:', _marketData)
@@ -58,43 +53,47 @@ export default function MarketItem(props: { market: Market }) {
 				setMarketState(_state)
 				return;
 
-			case 'pending':
+			case 'pending':		//wait till market starts
+				PolymarketApi.onMarketTimer(market.startTimestamp || 0, (t) => {
+					setTimeRemaining(t)
+					if (t.isExpired) setMarketState('started')
+				})
 				return;
 
-			case 'started':
+			case 'started':		//wait till market price is available
 				const result = await PolymarketApi.pollingMarketPrice(market, 'openPrice')
 				if (result) {
 					console.log('---started MarketItem:', market.slug, market)
 					market.openPrice = result.openPrice || null as unknown as number
-					setOpenPrice(market.openPrice)		//price to beat
+					// setOpenPrice(market.openPrice)		//price to beat
 					setMarketState('running')
 				}
 				return;
 
-			case 'running':
-				PolymarketApi.onMarketTimer(market.marketData?.endDate || '', (t) => {
+			case 'running':		//market is running
+				PolymarketApi.onMarketTimer(market.endTimestamp || 0, (t) => {
 					setTimeRemaining(t)
 					if (t.isExpired) setMarketState('stopped')
 				})
 				return;
 
-			case 'stopped':
+			case 'stopped':		//market is stopped
 				disconnectMarket()
 				const _result = await PolymarketApi.pollingMarketPrice(market, 'closePrice')
 				if (_result) {
 					market.closePrice = _result.closePrice || null as unknown as number
-					setClosePrice(market.closePrice)
+					// setClosePrice(market.closePrice)
 					setMarketState('closed')
 				}
 				return;
 
-			case 'closed':
+			case 'closed':		//market is closed
 				return;
 
-			case 'failed':
+			case 'failed':		//market is failed
 				return;
 
-			default:
+			default:			//unknown state
 				console.log('---default MarketItem:', market.slug, market)
 				return;
 		}	
@@ -178,22 +177,20 @@ export default function MarketItem(props: { market: Market }) {
 				<div className='text-sm text-muted-foreground'>{timeRemaining?.minutes}m {timeRemaining?.seconds}s</div>
 			</div>
 			<div className='flex flex-col gap-2'>
-				<div className='text-sm text-muted-foreground'>{'Price to beat: ' + (openPrice || (state === 'started'? 'pending...':'---'))}</div>
-				<div className='text-sm text-muted-foreground'>{'Final price: ' + (closePrice || (state === 'stopped'? 'pending...' : '---'))}</div>
+				<div className='text-sm text-muted-foreground'>{'Price to beat: ' + (market.openPrice || (state === 'started'? 'pending...':'---'))}</div>
+				<div className='text-sm text-muted-foreground'>{'Final price: ' + (market.closePrice || (state === 'stopped'? 'pending...' : '---'))}</div>
 			</div>
-			{marketData &&
+
 			<div className='flex flex-col gap-2'>
 				<div className='flex flex-row gap-2'>
 				<Button variant='outline' onClick={clobMarketWsStatus === 'disconnected' ? connectMarket :
 					disconnectMarket}>{clobMarketWsStatus === 'disconnected' ? 'Connect Market WebSockets' : 'Disconnect Market WebSockets'}</Button>
 				</div>
-
 				<div className='text-sm text-muted-foreground'>{clobMarketWsStatus}</div>
+
 				<div className='text-sm text-muted-foreground'>{'Up (' + lastTradePrices[assetIds[0]]?.side + '): ' + lastTradePrices[assetIds[0]]?.price}</div>
 				<div className='text-sm text-muted-foreground'>{'Down (' + lastTradePrices[assetIds[1]]?.side + '): ' + lastTradePrices[assetIds[1]]?.price}</div>
-
-				</div>
-			}
+			</div>
 		</div>
 	)
 }

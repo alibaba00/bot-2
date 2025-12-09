@@ -181,11 +181,9 @@ class PolymarketApi {
 	}
 
 
-	onMarketTimer(
-		_endDate: string,
+	onMarketTimer(endTimestamp: number,
 		onTimer?: (t: { minutes: number; seconds: number; isExpired: boolean }) => void
 	): void {
-		const endDate = new Date(_endDate || "")
 		let interval: NodeJS.Timeout | null = null
 
 		const updateTimer = () => {
@@ -194,7 +192,7 @@ class PolymarketApi {
 				return
 			}
 			const now = new Date()
-			const diff = endDate.getTime() - now.getTime()
+			const diff = endTimestamp - now.getTime()
 			if (diff <= 0) {
 				onTimer?.({ minutes: 0, seconds: 0, isExpired: true })
 				if (interval) clearInterval(interval)
@@ -257,6 +255,9 @@ class PolymarketApi {
 		return new Promise((resolve, reject) => {
 			async function pollingMarketPrice() {
 				const result = await api.getCryptoPrice(market)
+				if (result && type === 'closePrice' && !market.openPrice && result.openPrice){
+					market.openPrice = result.openPrice //update missing openPrice
+				}
 				if (result?.[type]) {
 					market[type] = result[type]
 					await api.cacheMarket(market)
