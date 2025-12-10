@@ -1,5 +1,6 @@
 import localForage from 'localforage'
 import type { Market, MarketData, MarketState } from '@/lib/polymarket/types'
+import { fetchMarketBySlugFromGamma } from '@/lib/polymarket/markets'
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
 const POLYMARKET_API_BASE = 'https://polymarket.com/api'
@@ -61,18 +62,18 @@ class PolymarketApi {
 		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
 		const marketSlug = `${marketName}-${timestamp}`	//e.g. btc-updown-15m-1765144800
 
-		// if (this.markets?.[marketName]?.[marketSlug]) {
-		// 	return this.markets[marketName][marketSlug]
-		// }
+		if (this.markets?.[marketName]?.[marketSlug]) {
+			return this.markets[marketName][marketSlug]
+		}
 
 		if (!this.markets?.[marketName]) this.markets[marketName] = {}
 
-		// const cachedMarket = await cache.getItem<Market>(marketSlug)
-		// if (cachedMarket) {
-		// 	cachedMarket.state = 'init'
-		// 	this.markets[marketName][cachedMarket.slug] = cachedMarket
-		// 	return cachedMarket
-		// }
+		const cachedMarket = await cache.getItem<Market>(marketSlug)
+		if (cachedMarket) {
+			cachedMarket.state = 'init'
+			this.markets[marketName][cachedMarket.slug] = cachedMarket
+			return cachedMarket
+		}
 
 		const market = this.createMarket(symbol, marketName, timestamp, marketSlug)
 		this.markets[marketName][market.slug] = market
@@ -208,45 +209,9 @@ class PolymarketApi {
 		interval = setInterval(updateTimer, 1000)
 	}
 
-/*
-	useEffect(() => {
-		if (interval) clearInterval(interval)
-
-		if (!market?.endDate) {
-			setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
-			return
-		}
-
-		const updateCountdown = () => {
-			const endDate = new Date(market.endDate!)
-			const now = new Date()
-			const diff = endDate.getTime() - now.getTime()
-
-			if (diff <= 0) {
-				setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
-				if (interval) clearInterval(interval)
-				return
-			}
-
-			const minutes = Math.floor(diff / 60000)
-			const seconds = Math.floor((diff % 60000) / 1000)
-			setTimeRemaining({ minutes, seconds, isExpired: false })
-		}
-
-		// Update immediately
-		updateCountdown()
-
-		// Update every second
-		interval = setInterval(updateCountdown, 1000)
-
-		return () => {
-			if (interval) clearInterval(interval)
-			interval = null
-		}
-	}, [market?.endDate])
-*/
 
 	async cacheMarket(market: Market): Promise<void> {
+		console.log('cacheMarket:', market.slug, market.openPrice, market.closePrice)
 		await cache.setItem(market.slug, market)
 	}
 
@@ -255,14 +220,24 @@ class PolymarketApi {
 		const api = this
 		return new Promise((resolve, reject) => {
 			async function pollingMarketPrice() {
+				// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, '...')
+
 				const result = await api.getCryptoPrice(market)
 				if (result && type === 'closePrice' && !market.openPrice && result.openPrice){
 					market.openPrice = result.openPrice //update missing openPrice
 				}
 				if (result?.[type]) {
 					market[type] = result[type]
-					await api.cacheMarket(market)
+
+					if (type === 'closePrice') {	//update market data
+						const marketData = await fetchMarketBySlugFromGamma(market.slug || '')
+						if (marketData) market.marketData = marketData
+					}
+
+					await api.cacheMarket(market)	//update market cache
+					// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, 'completed')
 					resolve(result)
+
 				}else{
 					await new Promise(resolve => setTimeout(resolve, 5000))
 					pollingMarketPrice()

@@ -4,34 +4,96 @@ import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
 import type { Market, MarketData, MarketState } from "@/lib/polymarket/types";
 import { Button } from "@/components/ui/button";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
+import PolymarketStore from "./PolymarketStore";
 
 
 
-export default function MarketItem(props: { market: Market }) {
-	const market = props.market
-
-	const [marketData, setMarketData] = useState<MarketData | null>(null)
+// export default function MarketItem(props: { market: Market }) {
+	// const market = props.market
+export default function MarketItem({ symbol, type }: { symbol: string, type: string }) {
+	const [market, setMarket] = useState<Market | null>(null)
+	const trades = useRef<any[]>([])	//trades history
+	
 	const [assetIds, setAssetIds] = useState<string[]>([])
 	const assets = useRef<any>({})
-
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
 	const [state, setState] = useState<MarketState>()
+	// const [tradingActive, setTradingActive] = PolymarketStore.use('tradingActive')
 
-	// Countdown timer state
-	// const timeRemaining = useTimer({ endDate: market?.marketData?.endDate || undefined })
 
+	// Last trade prices from last_trade_price events
+	const [lastTradePrices, setLastTradePrices] = useState<
+	Record<
+		string,
+		{
+			price: number
+			size: number
+			side: 'BUY' | 'SELL'
+			timestamp: number
+			transaction_hash?: string
+		}
+	>
+	>({})
+	
 	const [timeRemaining, setTimeRemaining] = useState<{
 		minutes: number
 		seconds: number
 		isExpired: boolean
 	} | null>(null)
 
+	const clobMarketWs = useCLOBMarketWebSocket({
+		assetIds: assetIds,
+		onLastTradePriceUpdate: (update) => {
+			// console.log('clobMarketWs last trade price update', update)
+			// setLastMarketLastTradePriceUpdate(update)
+			setLastTradePrices((prev) => ({
+				...prev,
+				[update.asset_id]: {
+					price: update.price,
+					size: update.size,
+					side: update.side,
+					timestamp: update.timestamp,
+					transaction_hash: update.transaction_hash
+				}
+			}))
+			if (trades.current) {
+				trades.current.push({
+					asset: assets.current[update.asset_id],
+					price: update.price,
+					size: update.size,
+					side: update.side,
+					timestamp: update.timestamp,
+				})
+			}
+		},
+		onError: (err) => {
+			console.log('clobMarketWs error', err)
+		},
+		onConnect: () => {
+			setClobMarketWsStatus('connected')
+		},
+		onDisconnect: () => {
+			setClobMarketWsStatus('disconnected')
+		},
+		autoConnect: false
+	})
 
 	useEffect(() => {
-		updateMarketState(market.state)
-	}, [market.state])
+		console.log('---init MarketItem:', symbol, type)
+		PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 1 * 60000), 15)
+		.then((market) => {
+			console.log('market:', market)
+			setMarket(market)
+		})
+	}, [])
 
+
+	useEffect(() => {
+		if (market?.state) updateMarketState(market.state || 'init')
+	}, [market?.state])
+
+	if (!market) return null;
 
 	const setMarketState = (state: MarketState) => {
 		market.state = state
@@ -40,18 +102,28 @@ export default function MarketItem(props: { market: Market }) {
 	}
 
 	const updateMarketState = async (_state: MarketState) => {
+		if (!market) return;
+
+		console.log('updateMarketState:', market?.slug, _state)
+
+		let _marketData: MarketData | null = null
 		switch (_state){
 			case 'init':		//market is initializing
 				console.log('---init MarketItem:', market.slug, market)
-				const _marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
+				_marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
 				console.log('marketData:', _marketData)
-				market.marketData = _marketData as MarketData
-				setMarketData(_marketData || null)
-				setAssetIds(_marketData?.outcomes.map((outcome) => outcome.id) || [])
-				clobMarketWs.updateAssetIds(assetIds)
+				market.marketData = _marketData
+
+				trades.current = market.trades
+
+				const newAssetIds = _marketData?.outcomes.map((outcome) => outcome.id) || []
+				setAssetIds(newAssetIds)
+
+				clobMarketWs.updateAssetIds(newAssetIds)
 
 				_marketData?.outcomes.forEach((outcome) => {
 					assets.current[outcome.id] = outcome.title
+					// assets.current[outcome.title] = outcome.id
 				})
 
 				let _state = PolymarketApi.getMarketState(market) as MarketState
@@ -69,8 +141,6 @@ export default function MarketItem(props: { market: Market }) {
 				const result = await PolymarketApi.pollingMarketPrice(market, 'openPrice')
 				if (result) {
 					console.log('---started MarketItem:', market.slug, market)
-					market.openPrice = result.openPrice || null as unknown as number
-					// setOpenPrice(market.openPrice)		//price to beat
 					setMarketState('running')
 				}
 				return;
@@ -80,16 +150,26 @@ export default function MarketItem(props: { market: Market }) {
 					setTimeRemaining(t)
 					if (t.isExpired) setMarketState('stopped')
 				})
+				connectMarket()
 				return;
 
 			case 'stopped':		//market is stopped
 				disconnectMarket()
-				const _result = await PolymarketApi.pollingMarketPrice(market, 'closePrice')
-				if (_result) {
-					market.closePrice = _result.closePrice || null as unknown as number
-					// setClosePrice(market.closePrice)
-					setMarketState('closed')
-				}
+
+				// update market data
+				// _marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
+				// console.log('final marketData:', _marketData)
+				// market.marketData = _marketData
+
+				// polling final close price
+				PolymarketApi.pollingMarketPrice(market, 'closePrice')
+
+				// get next market from now + 1 minute
+				PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 1 * 60000), 15)
+				.then((nextMarket) => {
+					console.log('next market:', nextMarket)
+					setMarket(nextMarket)
+				})
 				return;
 
 			case 'closed':		//market is closed
@@ -104,61 +184,8 @@ export default function MarketItem(props: { market: Market }) {
 		}	
 	}
 
-
-	// Last trade prices from last_trade_price events
-	const [lastTradePrices, setLastTradePrices] = useState<
-	Record<
-		string,
-		{
-			price: number
-			size: number
-			side: 'BUY' | 'SELL'
-			timestamp: number
-			transaction_hash?: string
-		}
-	>
-	>({})
-
-	
-
-	const clobMarketWs = useCLOBMarketWebSocket({
-		assetIds: assetIds,
-		onLastTradePriceUpdate: (update) => {
-			// console.log('clobMarketWs last trade price update', update)
-			// setLastMarketLastTradePriceUpdate(update)
-			setLastTradePrices((prev) => ({
-				...prev,
-				[update.asset_id]: {
-					price: update.price,
-					size: update.size,
-					side: update.side,
-					timestamp: update.timestamp,
-					transaction_hash: update.transaction_hash
-				}
-			}))
-market.trades.push({
-	asset: assets.current[update.asset_id],
-	price: update.price,
-	size: update.size,
-	side: update.side,
-	timestamp: update.timestamp,
-})
-
-		},
-		onError: (err) => {
-			console.log('clobMarketWs error', err)
-		},
-		onConnect: () => {
-			setClobMarketWsStatus('connected')
-		},
-		onDisconnect: () => {
-			setClobMarketWsStatus('disconnected')
-		},
-		autoConnect: false
-	})
-
 	function connectMarket() {
-		if (clobMarketWs.status === 'connected' || market.state !== 'running') return;
+		if (!market || clobMarketWs.status === 'connected' || market.state !== 'running') return;
 		clobMarketWs.connect()
 		console.log('clobMarketWs status', clobMarketWs.status)
 	}
@@ -171,8 +198,8 @@ market.trades.push({
 	return (
 		<div className='flex flex-col gap-4 border-t border-black/20 dark:border-white/20 pt-4'>
 			<div className='flex flex-col gap-2'>
-				<div className='text-sm text-muted-foreground'>{marketData?.question}</div>
-				<div className='text-sm text-muted-foreground'>{'slug: ' + marketData?.slug}</div>
+				<div className='text-sm text-muted-foreground'>{market?.marketData?.question}</div>
+				<div className='text-sm text-muted-foreground'>{'slug: ' + market?.marketData?.slug}</div>
 				<div className='text-sm text-muted-foreground'>{'state: ' + market.state}</div>
 				<div className='text-sm text-muted-foreground'>{timeRemaining?.minutes}m {timeRemaining?.seconds}s</div>
 			</div>

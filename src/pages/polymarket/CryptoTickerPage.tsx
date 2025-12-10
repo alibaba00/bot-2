@@ -8,10 +8,9 @@ import { Button } from '@/components/ui/button'
 
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
 	// const [market, setMarket] = useState<Market | null>(null)
-	const [markets, setMarkets] = useState<Market[]>([])
+	// const [markets, setMarkets] = useState<Market[]>([])
 	const [chainlinkPrice, setChainlinkPrice] = useState<number | null>(null)
 	const [priceTimestamp, setPriceTimestamp] = useState<number | null>(null)
-	const [currentMarket, setCurrentMarket] = useState<Market | null>(null)
 
 
 	// Convert symbol to Chainlink format (e.g., "btc" -> "btc/usd")
@@ -33,21 +32,21 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		autoConnect: false
 	})
 
-	useEffect(() => {
-		console.log('---init CryptoTickerPage---', symbol, type)
+	// useEffect(() => {
+	// 	console.log('---init CryptoTickerPage---', symbol, type)
 
-		PolymarketApi.initMarkets(symbol, type)
-		.then((markets) => {
-			setMarkets(markets as unknown as Market[])
-			// setCurrentMarket(markets[0])
-		})
+	// 	PolymarketApi.initMarkets(symbol, type)
+	// 	.then((markets) => {
+	// 		setMarkets(markets as unknown as Market[])
+	// 		// setCurrentMarket(markets[0])
+	// 	})
 
-		// Cleanup on unmount
-		return () => {
-			chainlinkWs.disconnect()
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [symbol])
+	// 	// Cleanup on unmount
+	// 	return () => {
+	// 		chainlinkWs.disconnect()
+	// 	}
+	// 	// eslint-disable-next-line react-hooks/exhaustive-deps
+	// }, [symbol])
 
 	// Toggle ticker connection
 	const toggleTicker = () => {
@@ -101,11 +100,14 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 					</span>
 				)}
 			</h2>
-			<div id='marketList'>
+
+			<MarketItem symbol={symbol} type={type} />
+
+			{/* <div id='marketList'>
 				{markets.map((market, index) => (
 					<MarketItem key={index} market={market} />
 				))}
-			</div>
+			</div> */}
 		</div>
 	)
 }
