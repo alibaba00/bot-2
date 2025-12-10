@@ -1,8 +1,8 @@
 {
 	"name": "demo",
 	"info": "welcome to the demo app",
-	"version": "1.0.3",
-	"release": "20.10.2025",
+	"version": "1.0.4",
+	"release": "10.12.2025",
 
 	"userConfig": "c:/jtcore/userConfig.json"
 }

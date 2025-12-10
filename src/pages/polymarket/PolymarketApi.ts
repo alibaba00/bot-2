@@ -1,9 +1,19 @@
 import localForage from 'localforage'
 import type { Market, MarketData, MarketState } from '@/lib/polymarket/types'
 import { fetchMarketBySlugFromGamma } from '@/lib/polymarket/markets'
+import { env } from 'node:process'
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
 const POLYMARKET_API_BASE = 'https://polymarket.com/api'
+const ROOT_PATH = 'A:/DATA/polymarket/'
+
+const isElectron = window?.navigator.userAgent.includes('Electron')
+// const isFileProtocol = window?.location.protocol === 'file:'
+// const isDevelopment = env.DEV || env.MODE === 'development'
+// const isProduction = env.PROD || env.MODE === 'production'
+const fs = isElectron ? (window as any)?.require?.('fs') : null
+const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
+
 
 // create cache instance
 const cache = localForage.createInstance({
@@ -239,12 +249,55 @@ class PolymarketApi {
 					resolve(result)
 
 				}else{
-					await new Promise(resolve => setTimeout(resolve, 5000))
+					await new Promise(resolve => setTimeout(resolve, type === 'openPrice' ? 5000 : 15000))
 					pollingMarketPrice()
 				}
 			}
 			pollingMarketPrice()
 		})
+	}
+
+	streams: Map<string, import('fs').WriteStream> = new Map()
+	currentDay: {
+		nextDay: number,
+		dayString: string,
+	} = { nextDay: 0, dayString: '' }
+
+	setCurrentDay(timestamp: number) {
+		const dateObj = new Date(timestamp)
+		const year = dateObj.getUTCFullYear()
+		const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0')
+		const day = String(dateObj.getUTCDate()).padStart(2, '0')
+		const nextDay = Date.UTC(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate() + 1, 0, 0, 0, 0)
+		const dayString = `${year}-${month}-${day}`
+
+		this.currentDay = {
+			nextDay,
+			dayString
+		}
+		console.log('setCurrentDay:', this.currentDay)
+	}
+
+	async onTickerLog(symbol: string, timestamp: number, price: number) {
+		if (!this.currentDay || timestamp > this.currentDay.nextDay) this.setCurrentDay(timestamp)
+
+		if (!this.streams.has(symbol + '-' + this.currentDay.dayString)){
+			const filePath = ROOT_PATH + 'tickers/' + symbol + '/' + symbol + '-' + this.currentDay.dayString + '.log'
+			console.log('createWriteStream:', filePath)
+			this.streams.set(symbol + '-' + this.currentDay.dayString, fs.createWriteStream(filePath, {flags:'a'}))
+		}
+
+		this.streams.get(symbol + '-' + this.currentDay.dayString)?.write(timestamp + ';' + price + '\n')
+	}
+
+	async onTradeLog(slug: string, log: string) {
+		if (!this.streams.has(slug)) {
+			const filePath = ROOT_PATH + 'trades/' + slug + '.log'
+			console.log('createWriteStream:', filePath)
+			this.streams.set(slug, fs.createWriteStream(filePath, {flags:'a'}))
+		}
+
+		this.streams.get(slug)?.write(log + '\n')
 	}
 }
 

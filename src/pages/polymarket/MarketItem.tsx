@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from "react";
 import PolymarketApi from "./PolymarketApi";
 import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
 import type { Market, MarketData, MarketState } from "@/lib/polymarket/types";
-import { Button } from "@/components/ui/button";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
 import PolymarketStore from "./PolymarketStore";
 
@@ -12,15 +11,21 @@ import PolymarketStore from "./PolymarketStore";
 	// const market = props.market
 export default function MarketItem({ symbol, type }: { symbol: string, type: string }) {
 	const [market, setMarket] = useState<Market | null>(null)
-	const trades = useRef<any[]>([])	//trades history
 	
 	const [assetIds, setAssetIds] = useState<string[]>([])
 	const assets = useRef<any>({})
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
 	const [state, setState] = useState<MarketState>()
-	// const [tradingActive, setTradingActive] = PolymarketStore.use('tradingActive')
+	const tradingActive = PolymarketStore.use('tradingActive_' + symbol)
 
+	const [tradeLog, setTradeLog] = useState<{
+		asset: string
+		price: number
+		size: number
+		side: 'BUY' | 'SELL'
+		timestamp: number
+	} | null>(null)
 
 	// Last trade prices from last_trade_price events
 	const [lastTradePrices, setLastTradePrices] = useState<
@@ -54,18 +59,18 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 					size: update.size,
 					side: update.side,
 					timestamp: update.timestamp,
-					transaction_hash: update.transaction_hash
+					transaction_hash: update.transaction_hash,
+					asset: assets.current[update.asset_id]
 				}
 			}))
-			if (trades.current) {
-				trades.current.push({
-					asset: assets.current[update.asset_id],
-					price: update.price,
-					size: update.size,
-					side: update.side,
-					timestamp: update.timestamp,
-				})
-			}
+			setTradeLog({
+				asset: assets.current[update.asset_id],
+				price: update.price,
+				size: update.size,
+				side: update.side,
+				timestamp: update.timestamp,
+			})
+			// onTradeLog(update)
 		},
 		onError: (err) => {
 			console.log('clobMarketWs error', err)
@@ -79,6 +84,15 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 		autoConnect: false
 	})
 
+
+	useEffect(() => {
+		if (tradeLog && market) {
+			const log = tradeLog.timestamp + ';' + tradeLog.asset + ';' + tradeLog.side + ';' + tradeLog.price + ';' + tradeLog.size;
+			PolymarketApi.onTradeLog(market.slug, log)
+		}
+	}, [tradeLog])
+
+
 	useEffect(() => {
 		console.log('---init MarketItem:', symbol, type)
 		PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 1 * 60000), 15)
@@ -87,6 +101,12 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 			setMarket(market)
 		})
 	}, [])
+
+
+	useEffect(() => {
+		if (!tradingActive) disconnectMarket()	
+		if (tradingActive && market?.state === 'running') connectMarket()
+	}, [tradingActive])
 
 
 	useEffect(() => {
@@ -113,8 +133,6 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				_marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
 				console.log('marketData:', _marketData)
 				market.marketData = _marketData
-
-				trades.current = market.trades
 
 				const newAssetIds = _marketData?.outcomes.map((outcome) => outcome.id) || []
 				setAssetIds(newAssetIds)
@@ -185,7 +203,7 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	}
 
 	function connectMarket() {
-		if (!market || clobMarketWs.status === 'connected' || market.state !== 'running') return;
+		if (!tradingActive || !market || clobMarketWs.status === 'connected' || market.state !== 'running') return;
 		clobMarketWs.connect()
 		console.log('clobMarketWs status', clobMarketWs.status)
 	}
@@ -209,15 +227,7 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 			</div>
 
 			<div className='flex flex-col gap-2'>
-				<div className='flex flex-row gap-2'>
-				<Button variant='outline' onClick={clobMarketWsStatus === 'disconnected' ? connectMarket :
-					disconnectMarket}>{clobMarketWsStatus === 'disconnected' ? 'Connect Market WebSockets' : 'Disconnect Market WebSockets'}</Button>
-					<Button variant='outline' onClick={() => {
-						PolymarketApi.cacheMarket(market as unknown as Market)
-					}}>save market</Button>
-				</div>
 				<div className='text-sm text-muted-foreground'>{clobMarketWsStatus}</div>
-
 				<div className='text-sm text-muted-foreground'>{'Up (' + lastTradePrices[assetIds[0]]?.side + '): ' + lastTradePrices[assetIds[0]]?.price}</div>
 				<div className='text-sm text-muted-foreground'>{'Down (' + lastTradePrices[assetIds[1]]?.side + '): ' + lastTradePrices[assetIds[1]]?.price}</div>
 			</div>

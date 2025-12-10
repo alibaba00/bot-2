@@ -4,14 +4,16 @@ import PolymarketApi from './PolymarketApi'
 import type { Market } from '@/lib/polymarket/types'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { Button } from '@/components/ui/button'
+import PolymarketStore from './PolymarketStore'
 
 
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
 	// const [market, setMarket] = useState<Market | null>(null)
 	// const [markets, setMarkets] = useState<Market[]>([])
-	const [chainlinkPrice, setChainlinkPrice] = useState<number | null>(null)
-	const [priceTimestamp, setPriceTimestamp] = useState<number | null>(null)
-
+	// const [chainlinkPrice, setChainlinkPrice] = useState<number | null>(null)
+	// const [priceTimestamp, setPriceTimestamp] = useState<number | null>(null)
+	const [tickerPrice, setTickerPrice] = useState<{timestamp: number, price: number} | null>(null)
+	const tradingActive = PolymarketStore.use('tradingActive_' + symbol)
 
 	// Convert symbol to Chainlink format (e.g., "btc" -> "btc/usd")
 	const chainlinkSymbol = `${symbol.toLowerCase()}/usd`
@@ -22,8 +24,9 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		symbols: [chainlinkSymbol],
 		onPriceUpdate: (update) => {
 			if (update.symbol.toLowerCase() === chainlinkSymbol.toLowerCase()) {
-				setChainlinkPrice(update.value)
-				setPriceTimestamp(update.timestamp)
+				// setChainlinkPrice(update.value)
+				// setPriceTimestamp(update.timestamp)
+				setTickerPrice({timestamp: update.timestamp, price: update.value})
 			}
 		},
 		onError: (err) => {
@@ -32,21 +35,13 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		autoConnect: false
 	})
 
-	// useEffect(() => {
-	// 	console.log('---init CryptoTickerPage---', symbol, type)
 
-	// 	PolymarketApi.initMarkets(symbol, type)
-	// 	.then((markets) => {
-	// 		setMarkets(markets as unknown as Market[])
-	// 		// setCurrentMarket(markets[0])
-	// 	})
+	useEffect(() => {
+		if (tickerPrice) {
+			PolymarketApi.onTickerLog(symbol.toLowerCase(), tickerPrice.timestamp, tickerPrice.price)
+		}
+	}, [tickerPrice])
 
-	// 	// Cleanup on unmount
-	// 	return () => {
-	// 		chainlinkWs.disconnect()
-	// 	}
-	// 	// eslint-disable-next-line react-hooks/exhaustive-deps
-	// }, [symbol])
 
 	// Toggle ticker connection
 	const toggleTicker = () => {
@@ -75,26 +70,35 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>
 			<div className='flex items-center justify-between'>
 			<h1>Ticker {symbol.toUpperCase()}</h1>
+			<div className='flex items-center gap-2'>
 				<Button
 					onClick={toggleTicker}
 					disabled={isConnecting}
-					variant={isConnected ? 'destructive' : 'default'}
+					variant={isConnected ? 'destructive' : 'outline'}
 					size='sm'>
 					{isConnecting
 						? 'Connecting...'
 						: isConnected
-							? 'Stop'
-							: 'Start'}
+							? 'Stop Ticker'
+							: 'Start Ticker'}
+				</Button>
+				<Button
+					onClick={() => PolymarketStore.set('tradingActive_' + symbol, !tradingActive)}
+					disabled={isConnecting}
+					variant={PolymarketStore.get('tradingActive_' + symbol) ? 'destructive' : 'outline'}
+					size='sm'>
+					{tradingActive ? 'Stop Trading' : 'Start Trading'}
 				</Button>
 			</div>
+			</div>
 			<h2>
-				{formatPrice(chainlinkPrice)}
-				{priceTimestamp && (
+				{formatPrice(tickerPrice?.price ?? null)}
+				{tickerPrice?.timestamp && (
 					<span className='text-sm text-muted-foreground ml-2'>
-						({new Date(priceTimestamp).toLocaleTimeString()})
+						({new Date(tickerPrice.timestamp).toLocaleTimeString()})
 					</span>
 				)}
-				{!isConnected && chainlinkPrice === null && (
+				{!isConnected && tickerPrice?.price === null && (
 					<span className='text-sm text-muted-foreground ml-2'>
 						(Click Start to begin)
 					</span>

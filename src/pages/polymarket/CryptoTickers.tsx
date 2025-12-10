@@ -28,7 +28,7 @@ const content = [
 ]
 
 export default function CryptoTickers() {
-	const [activeNode, setActiveNode] = useState(content[0])
+	const [activeNode, setActiveNode] = useState(null)
 	// const [markets, setMarkets] = useState([])
 
 	useEffect(() => {

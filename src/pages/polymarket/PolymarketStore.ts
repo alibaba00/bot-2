@@ -42,28 +42,7 @@ action when value changed:
 
 import { create } from 'zustand' // https://github.com/pmndrs/zustand
 import { useShallow } from 'zustand/react/shallow'
-// import { persist, createJSONStorage } from 'zustand/middleware'
 import localForage from 'localforage'
-
-const env = import.meta.env
-const isElectron = window?.navigator.userAgent.includes('Electron')
-const isFileProtocol = window?.location.protocol === 'file:'
-const isDevelopment = env.DEV || env.MODE === 'development'
-const isProduction = env.PROD || env.MODE === 'production'
-const fs = isElectron ? (window as any)?.require?.('fs') : null
-const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
-
-// ---------------------------------------------------------------------------- getBasename
-// Get the basename for the current environment
-const getBasename = () => {
-	// In Electron or file protocol, use empty basename
-	if (isElectron || isFileProtocol || isDevelopment) return ''
-
-	// For production web deployment, determine basename from current path
-	const currentPath = window?.location.pathname
-	const pathSegments = currentPath.split('/').filter((segment) => segment !== '')
-	return pathSegments.length > 0 ? '/' + pathSegments[0] : ''
-}
 
 // ---------------------------------------------------------------------------- useStorePersisted
 // export const useStorePersisted = create(persist(() => ({
@@ -85,13 +64,7 @@ export const useStore = create(() => ({
 
 // ============================================================================ PolymarketStore
 const PolymarketStore = {
-	config: null as any,
 	cache: null as any,
-	basename: getBasename(),
-	env: env,
-	isElectron,
-	isDevelopment,
-	isProduction,
 
 	set: (state: any, value?: any) => {
 		if (typeof state === 'string') state = { [state]: value }
@@ -111,17 +84,18 @@ const PolymarketStore = {
 		)
 	},
 
-	async init() {
 
+	async init() {
 		// create cache instance
 		this.cache = localForage.createInstance({
-			name: this.config.name,
-			storeName: this.config.name + '-store'
+			name: 'polymarket',
+			storeName: 'polymarket-cache'
 		})
 
-		console.log('---store init:', this.config.name, this.config.version, this)
-		useStore.setState({ isInit: true, status: this.config.info || 'initialized' })
-	}
+		console.log('---polymarket store init:', this)
+		useStore.setState({ isInit: true, status: 'initialized' })
+	},
+
 }
 
 export default PolymarketStore
