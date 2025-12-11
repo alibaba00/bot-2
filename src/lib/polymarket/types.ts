@@ -19,7 +19,7 @@ export interface Market {
 }
 
 
-export type MarketState = 'init' | 'pending' | 'started' | 'running' | 'stopped' | 'closed' | 'failed'
+export type MarketState = 'init' | 'pending' | 'started' | 'running' | 'trading' | 'stopped' | 'closed' | 'failed'
 
 export interface MarketData {
 	id: string

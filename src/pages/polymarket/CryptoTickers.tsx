@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import PageView from '@/components/PageView'
 import PolymarketApi from './PolymarketApi'
 import CryptoTickerPage from './CryptoTickerPage'
-import type { Market } from '@/lib/polymarket/types'
+import type { Market, MarketState } from '@/lib/polymarket/types'
 import { Button } from '@/components/ui/button'
 
 const content = [
@@ -102,16 +102,22 @@ export default function CryptoTickers() {
 	)
 }
 
-
+const marketStateColors = {
+	running: 'green',
+	stopped: 'yellow',
+	pending: 'yellow',
+	failed: 'red',
+	trading: 'blue',
+	init: 'gray',
+	closed: 'gray',
+}
 const MarketStateIndicator = ({ symbol }: { symbol: string }) => {
 	const marketState = PolymarketApi.use('marketState_' + symbol)
 
 	return (
 		<div className='flex flex-col items-center justify-center'>
 			<div className='text-2xl font-bold rounded-full w-3 h-3 bg-green-500 ml-2 mt-0.5'
-			style={
-				{backgroundColor: marketState === 'running' ? 'green' : marketState === 'stopped' ? 'yellow' : marketState === 'failed' ? 'red' : 'gray'}
-			}></div>
+			style={{backgroundColor: marketStateColors[marketState as MarketState]}}></div>
 		</div>
 	)
 }

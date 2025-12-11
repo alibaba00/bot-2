@@ -43,12 +43,6 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	>
 	>({})
 	
-	// const [timeRemaining, setTimeRemaining] = useState<{
-	// 	minutes: number
-	// 	seconds: number
-	// 	isExpired: boolean
-	// } | null>(null)
-
 	const clobMarketWs = useCLOBMarketWebSocket({
 		assetIds: assetIds,
 		onLastTradePriceUpdate: (update) => {
@@ -79,6 +73,7 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 		},
 		onConnect: () => {
 			setClobMarketWsStatus('connected')
+			setMarketState('trading')
 		},
 		onDisconnect: () => {
 			setClobMarketWsStatus('disconnected')
@@ -124,6 +119,7 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	if (!market) return null;
 
 	const setMarketState = (state: MarketState) => {
+		console.log('---setMarketState:', market?.slug, state)
 		market.state = state
 		setState(state)
 		PolymarketApi.set('marketState_' + symbol, state)	//update tab indicator
@@ -158,10 +154,6 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				return;
 
 			case 'pending':		//wait till market starts
-				// PolymarketApi.onMarketTimer(market.startTimestamp || 0, (t) => {
-				// 	setTimeRemaining(t)
-				// 	if (t.isExpired) setMarketState('started')
-				// })
 				return;
 
 			case 'started':		//wait till market price is available
@@ -173,23 +165,12 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				return;
 
 			case 'running':		//market is running
-				// PolymarketApi.onMarketTimer(market.endTimestamp || 0, (t) => {
-				// 	setTimeRemaining(t)
-				// 	if (t.isExpired) setMarketState('stopped')
-				// })
 				connectMarket()
 				return;
 
 			case 'stopped':		//market is stopped
 				disconnectMarket()
 
-				// update market data
-				// _marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
-				// console.log('final marketData:', _marketData)
-				// market.marketData = _marketData
-
-				// get next market from now + 1 minute
-				// polling final close price from last market
 				PolymarketApi.pollingClosePrice(market)
 
 				PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
@@ -197,9 +178,6 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 					console.log('next market:', nextMarket)
 					setMarket(nextMarket)	//-> 
 				})
-
-				// polling final close price
-				// PolymarketApi.pollingMarketPrice(market, 'closePrice')
 				return;
 
 			case 'closed':		//market is closed

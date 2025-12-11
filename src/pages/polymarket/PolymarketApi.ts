@@ -259,6 +259,12 @@ class PolymarketApi {
 	}
 
 
+	async saveMarket(market: Market): Promise<void> {
+		console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
+		await fsPromises?.writeFile(ROOT_PATH + 'markets/' + market.slug + '.json', JSON.stringify(market, null, '\t'))
+	}
+
+	
 	async pollingOpenPrice(market: Market): Promise<CryptoPriceResponse | null> {
 		const api = this
 		return new Promise((resolve, reject) => {
@@ -298,6 +304,8 @@ class PolymarketApi {
 				if (marketData) market.marketData = marketData
 
 				await api.cacheMarket(market)	//update market cache
+
+				await api.saveMarket(market)
 
 			}else{
 				await new Promise(resolve => setTimeout(resolve, 15000))
@@ -346,7 +354,7 @@ class PolymarketApi {
 
 	async onTradeLog(symbol: string, slug: string, log: string) {
 		if (!this.streams.has(slug)) {
-			const dirPath = ROOT_PATH + 'trades/' + symbol
+			const dirPath = ROOT_PATH + 'trades/' + symbol + '/' + this.currentDay.dayString
 			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
 			const filePath = dirPath + '/' + slug + '.log'
 			console.log('createWriteStream:', filePath)
