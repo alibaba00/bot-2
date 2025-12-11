@@ -3,7 +3,6 @@ import PolymarketApi from "./PolymarketApi";
 import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
 import type { Market, MarketData, MarketState } from "@/lib/polymarket/types";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
-import PolymarketStore from "./PolymarketStore";
 
 
 
@@ -17,7 +16,10 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
 	const [state, setState] = useState<MarketState>()
-	const tradingActive = PolymarketStore.use('tradingActive_' + symbol)
+	// const state = PolymarketApi.use('marketState_' + symbol)
+	const tradingActive = PolymarketApi.use('tradingActive')
+	const marketCompleted = PolymarketApi.use('marketCompleted')
+
 
 	const [tradeLog, setTradeLog] = useState<{
 		asset: string
@@ -41,11 +43,11 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	>
 	>({})
 	
-	const [timeRemaining, setTimeRemaining] = useState<{
-		minutes: number
-		seconds: number
-		isExpired: boolean
-	} | null>(null)
+	// const [timeRemaining, setTimeRemaining] = useState<{
+	// 	minutes: number
+	// 	seconds: number
+	// 	isExpired: boolean
+	// } | null>(null)
 
 	const clobMarketWs = useCLOBMarketWebSocket({
 		assetIds: assetIds,
@@ -88,14 +90,14 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	useEffect(() => {
 		if (tradeLog && market) {
 			const log = tradeLog.timestamp + ';' + tradeLog.asset + ';' + tradeLog.side + ';' + tradeLog.price + ';' + tradeLog.size;
-			PolymarketApi.onTradeLog(market.slug, log)
+			PolymarketApi.onTradeLog(symbol, market.slug, log)
 		}
 	}, [tradeLog])
 
 
 	useEffect(() => {
 		console.log('---init MarketItem:', symbol, type)
-		PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 1 * 60000), 15)
+		PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
 		.then((market) => {
 			console.log('market:', market)
 			setMarket(market)
@@ -113,11 +115,18 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 		if (market?.state) updateMarketState(market.state || 'init')
 	}, [market?.state])
 
+	useEffect(() => {
+		if (marketCompleted) {
+			setMarketState('stopped')
+		}
+	}, [marketCompleted])
+
 	if (!market) return null;
 
 	const setMarketState = (state: MarketState) => {
 		market.state = state
 		setState(state)
+		PolymarketApi.set('marketState_' + symbol, state)	//update tab indicator
 		PolymarketApi.cacheMarket(market as unknown as Market)
 	}
 
@@ -149,14 +158,14 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				return;
 
 			case 'pending':		//wait till market starts
-				PolymarketApi.onMarketTimer(market.startTimestamp || 0, (t) => {
-					setTimeRemaining(t)
-					if (t.isExpired) setMarketState('started')
-				})
+				// PolymarketApi.onMarketTimer(market.startTimestamp || 0, (t) => {
+				// 	setTimeRemaining(t)
+				// 	if (t.isExpired) setMarketState('started')
+				// })
 				return;
 
 			case 'started':		//wait till market price is available
-				const result = await PolymarketApi.pollingMarketPrice(market, 'openPrice')
+				const result = await PolymarketApi.pollingOpenPrice(market)
 				if (result) {
 					console.log('---started MarketItem:', market.slug, market)
 					setMarketState('running')
@@ -164,10 +173,10 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				return;
 
 			case 'running':		//market is running
-				PolymarketApi.onMarketTimer(market.endTimestamp || 0, (t) => {
-					setTimeRemaining(t)
-					if (t.isExpired) setMarketState('stopped')
-				})
+				// PolymarketApi.onMarketTimer(market.endTimestamp || 0, (t) => {
+				// 	setTimeRemaining(t)
+				// 	if (t.isExpired) setMarketState('stopped')
+				// })
 				connectMarket()
 				return;
 
@@ -179,15 +188,18 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				// console.log('final marketData:', _marketData)
 				// market.marketData = _marketData
 
-				// polling final close price
-				PolymarketApi.pollingMarketPrice(market, 'closePrice')
-
 				// get next market from now + 1 minute
-				PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 1 * 60000), 15)
+				// polling final close price from last market
+				PolymarketApi.pollingClosePrice(market)
+
+				PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
 				.then((nextMarket) => {
 					console.log('next market:', nextMarket)
-					setMarket(nextMarket)
+					setMarket(nextMarket)	//-> 
 				})
+
+				// polling final close price
+				// PolymarketApi.pollingMarketPrice(market, 'closePrice')
 				return;
 
 			case 'closed':		//market is closed
@@ -219,11 +231,11 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				<div className='text-sm text-muted-foreground'>{market?.marketData?.question}</div>
 				<div className='text-sm text-muted-foreground'>{'slug: ' + market?.marketData?.slug}</div>
 				<div className='text-sm text-muted-foreground'>{'state: ' + market.state}</div>
-				<div className='text-sm text-muted-foreground'>{timeRemaining?.minutes}m {timeRemaining?.seconds}s</div>
+				{/* <div className='text-sm text-muted-foreground'>{timeRemaining?.minutes}m {timeRemaining?.seconds}s</div> */}
 			</div>
 			<div className='flex flex-col gap-2'>
 				<div className='text-sm text-muted-foreground'>{'Price to beat: ' + (market.openPrice || (state === 'started'? 'pending...':'---'))}</div>
-				<div className='text-sm text-muted-foreground'>{'Final price: ' + (market.closePrice || (state === 'stopped'? 'pending...' : '---'))}</div>
+				{/* <div className='text-sm text-muted-foreground'>{'Final price: ' + (market.closePrice || (state === 'stopped'? 'pending...' : '---'))}</div> */}
 			</div>
 
 			<div className='flex flex-col gap-2'>
@@ -233,58 +245,6 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 			</div>
 		</div>
 	)
-}
-
-
-let interval: NodeJS.Timeout | null = null
-
-// ---------------------------------------------------------------------------- useTimer
-function useTimer(market: { endDate?: string }) {
-	// Countdown timer state
-	const [timeRemaining, setTimeRemaining] = useState<{
-		minutes: number
-		seconds: number
-		isExpired: boolean
-	} | null>(null)
-
-
-	useEffect(() => {
-		if (interval) clearInterval(interval)
-
-		if (!market?.endDate) {
-			setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
-			return
-		}
-
-		const updateCountdown = () => {
-			const endDate = new Date(market.endDate!)
-			const now = new Date()
-			const diff = endDate.getTime() - now.getTime()
-
-			if (diff <= 0) {
-				setTimeRemaining({ minutes: 0, seconds: 0, isExpired: true })
-				if (interval) clearInterval(interval)
-				return
-			}
-
-			const minutes = Math.floor(diff / 60000)
-			const seconds = Math.floor((diff % 60000) / 1000)
-			setTimeRemaining({ minutes, seconds, isExpired: false })
-		}
-
-		// Update immediately
-		updateCountdown()
-
-		// Update every second
-		interval = setInterval(updateCountdown, 1000)
-
-		return () => {
-			if (interval) clearInterval(interval)
-			interval = null
-		}
-	}, [market?.endDate])
-
-	return timeRemaining
 }
 
 

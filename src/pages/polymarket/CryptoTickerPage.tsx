@@ -4,7 +4,7 @@ import PolymarketApi from './PolymarketApi'
 import type { Market } from '@/lib/polymarket/types'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { Button } from '@/components/ui/button'
-import PolymarketStore from './PolymarketStore'
+// import PolymarketStore from './PolymarketStore'
 
 
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
@@ -13,7 +13,9 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 	// const [chainlinkPrice, setChainlinkPrice] = useState<number | null>(null)
 	// const [priceTimestamp, setPriceTimestamp] = useState<number | null>(null)
 	const [tickerPrice, setTickerPrice] = useState<{timestamp: number, price: number} | null>(null)
-	const tradingActive = PolymarketStore.use('tradingActive_' + symbol)
+	const tradingActive = PolymarketApi.use('tradingActive')
+	const tickerActive = PolymarketApi.use('tickerActive')
+
 
 	// Convert symbol to Chainlink format (e.g., "btc" -> "btc/usd")
 	const chainlinkSymbol = `${symbol.toLowerCase()}/usd`
@@ -43,14 +45,11 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 	}, [tickerPrice])
 
 
-	// Toggle ticker connection
-	const toggleTicker = () => {
-		if (chainlinkWs.status === 'connected') {
-			chainlinkWs.disconnect()
-		} else {
-			chainlinkWs.connect()
-		}
-	}
+	useEffect(() => {
+		if (!tickerActive) chainlinkWs.disconnect()
+		if (tickerActive && chainlinkWs.status === 'disconnected') chainlinkWs.connect()
+	}, [tickerActive])
+
 
 	// Format price for display
 	const formatPrice = (price: number | null): string => {
@@ -69,27 +68,29 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 	return (
 		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>
 			<div className='flex items-center justify-between'>
-			<h1>Ticker {symbol.toUpperCase()}</h1>
-			<div className='flex items-center gap-2'>
-				<Button
-					onClick={toggleTicker}
-					disabled={isConnecting}
-					variant={isConnected ? 'destructive' : 'outline'}
-					size='sm'>
-					{isConnecting
-						? 'Connecting...'
-						: isConnected
-							? 'Stop Ticker'
-							: 'Start Ticker'}
-				</Button>
-				<Button
-					onClick={() => PolymarketStore.set('tradingActive_' + symbol, !tradingActive)}
-					disabled={isConnecting}
-					variant={PolymarketStore.get('tradingActive_' + symbol) ? 'destructive' : 'outline'}
-					size='sm'>
-					{tradingActive ? 'Stop Trading' : 'Start Trading'}
-				</Button>
-			</div>
+			<h1>Market {symbol.toUpperCase()}</h1>
+
+				{/* <div className='flex items-center gap-2'>
+					<Button
+						onClick={toggleTicker}
+						disabled={isConnecting}
+						variant={isConnected ? 'destructive' : 'outline'}
+						size='sm'>
+						{isConnecting
+							? 'Connecting...'
+							: isConnected
+								? 'Stop Ticker'
+								: 'Start Ticker'}
+					</Button>
+					<Button
+						onClick={() => PolymarketApi.set('tradingActive_' + symbol, !tradingActive)}
+						disabled={isConnecting}
+						variant={PolymarketApi.get('tradingActive_' + symbol) ? 'destructive' : 'outline'}
+						size='sm'>
+						{tradingActive ? 'Stop Trading' : 'Start Trading'}
+					</Button>
+				</div> */}
+
 			</div>
 			<h2>
 				{formatPrice(tickerPrice?.price ?? null)}

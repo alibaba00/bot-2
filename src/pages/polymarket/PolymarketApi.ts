@@ -2,10 +2,12 @@ import localForage from 'localforage'
 import type { Market, MarketData, MarketState } from '@/lib/polymarket/types'
 import { fetchMarketBySlugFromGamma } from '@/lib/polymarket/markets'
 import { env } from 'node:process'
+import { create } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
 const POLYMARKET_API_BASE = 'https://polymarket.com/api'
-const ROOT_PATH = 'A:/DATA/polymarket/'
+const ROOT_PATH = 'D:/DATA/polymarket/'
 
 const isElectron = window?.navigator.userAgent.includes('Electron')
 // const isFileProtocol = window?.location.protocol === 'file:'
@@ -36,11 +38,41 @@ interface MarketsMap {
 	}
 }
 
+
+// ---------------------------------------------------------------------------- useStore
+export const useStore = create(() => ({
+	isInit: false,
+	status: 'initializing'
+}))
+
+
+// ============================================================================ PolymarketApi
 class PolymarketApi {
 	gammaApiBase: string = GAMMA_API_BASE
 	polymarketApiBase: string = POLYMARKET_API_BASE
 	markets: MarketsMap = {}
 	currentMarket: Market | null = null
+	tickerActive: boolean = false
+	tradingActive: boolean = false
+
+	set(state: any, value?: any){
+		if (typeof state === 'string') state = { [state]: value }
+		useStore.setState(state)
+	}
+
+	// get: useStore.getState,
+	get(value?: string){
+		return value ? useStore.getState()[value as any] : useStore.getState()
+	}
+
+	use(...keys: string[]){
+		return useStore(
+			useShallow((state: any) =>
+				keys.length === 1 ? state[keys[0]] : keys.map((key) => state[key])
+			)
+		)
+	}
+
 
 	constructor() {
 		this.gammaApiBase = GAMMA_API_BASE
@@ -54,17 +86,17 @@ class PolymarketApi {
 
 
 	// from CryptoTickerPage
-	async initMarkets(symbol: string, type: string): Promise<Market[]> {
-		//symbol: btc, type: updown-15m
-		const lastMarket = await this.getMarketFromDate(symbol, type, new Date(Date.now() - 15 * 60000), 15)
-		const currentMarket = await this.getMarketFromDate(symbol, type, new Date(), 15)
-		const nextMarket = await this.getMarketFromDate(symbol, type, new Date(Date.now() + 15 * 60000), 15)
-		return [
-			nextMarket as Market,
-			currentMarket as Market,
-			lastMarket as Market,
-		]
-	}
+	// async initMarkets(symbol: string, type: string): Promise<Market[]> {
+	// 	//symbol: btc, type: updown-15m
+	// 	const lastMarket = await this.getMarketFromDate(symbol, type, new Date(Date.now() - 15 * 60000), 15)
+	// 	const currentMarket = await this.getMarketFromDate(symbol, type, new Date(), 15)
+	// 	const nextMarket = await this.getMarketFromDate(symbol, type, new Date(Date.now() + 15 * 60000), 15)
+	// 	return [
+	// 		nextMarket as Market,
+	// 		currentMarket as Market,
+	// 		lastMarket as Market,
+	// 	]
+	// }
 
 
 	async getMarketFromDate(symbol: string, type: string, date: Date, minutes: number): Promise<Market> {
@@ -119,7 +151,8 @@ class PolymarketApi {
 
 
 	// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
-	getUTCTimestamp(date: Date | number, minutes: number): number {
+	getUTCTimestamp(date: Date | number | null, minutes: number = 15): number {
+		if (!date) date = new Date()
 		const dateTime = date instanceof Date ? date.getTime() : date
 		const dateTimeSeconds = Math.floor(dateTime / 1000) // Convert to seconds
 		const minutesSeconds = minutes * 60 // minutes in seconds
@@ -226,36 +259,55 @@ class PolymarketApi {
 	}
 
 
-	async pollingMarketPrice(market: Market, type: 'openPrice' | 'closePrice'): Promise<CryptoPriceResponse | null> {
+	async pollingOpenPrice(market: Market): Promise<CryptoPriceResponse | null> {
 		const api = this
 		return new Promise((resolve, reject) => {
-			async function pollingMarketPrice() {
+			async function _pollingOpenPrice() {
 				// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, '...')
 
 				const result = await api.getCryptoPrice(market)
-				if (result && type === 'closePrice' && !market.openPrice && result.openPrice){
-					market.openPrice = result.openPrice //update missing openPrice
-				}
-				if (result?.[type]) {
-					market[type] = result[type]
-
-					if (type === 'closePrice') {	//update market data
-						const marketData = await fetchMarketBySlugFromGamma(market.slug || '')
-						if (marketData) market.marketData = marketData
-					}
+				if (result?.openPrice) {
+					market.openPrice = result.openPrice
 
 					await api.cacheMarket(market)	//update market cache
-					// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, 'completed')
 					resolve(result)
 
 				}else{
-					await new Promise(resolve => setTimeout(resolve, type === 'openPrice' ? 5000 : 15000))
-					pollingMarketPrice()
+					await new Promise(resolve => setTimeout(resolve, 5000))
+					_pollingOpenPrice()
 				}
 			}
-			pollingMarketPrice()
+			_pollingOpenPrice()
 		})
 	}
+
+
+	async pollingClosePrice(market: Market){
+		const api = this
+		async function _pollingClosePrice() {
+			// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, '...')
+
+			const result = await api.getCryptoPrice(market)
+			if (result && !market.openPrice && result.openPrice){
+				market.openPrice = result.openPrice //update missing openPrice
+			}
+			if (result?.closePrice) {
+				market.closePrice = result.closePrice
+
+				const marketData = await fetchMarketBySlugFromGamma(market.slug || '')
+				if (marketData) market.marketData = marketData
+
+				await api.cacheMarket(market)	//update market cache
+
+			}else{
+				await new Promise(resolve => setTimeout(resolve, 15000))
+				_pollingClosePrice()
+			}
+		}
+		await new Promise(resolve => setTimeout(resolve, 60000))	//wait 1 minute before polling
+		_pollingClosePrice()
+	}
+
 
 	streams: Map<string, import('fs').WriteStream> = new Map()
 	currentDay: {
@@ -282,7 +334,9 @@ class PolymarketApi {
 		if (!this.currentDay || timestamp > this.currentDay.nextDay) this.setCurrentDay(timestamp)
 
 		if (!this.streams.has(symbol + '-' + this.currentDay.dayString)){
-			const filePath = ROOT_PATH + 'tickers/' + symbol + '/' + symbol + '-' + this.currentDay.dayString + '.log'
+			const dirPath = ROOT_PATH + 'tickers/' + symbol
+			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
+			const filePath = dirPath + '/' + symbol + '-' + this.currentDay.dayString + '.log'
 			console.log('createWriteStream:', filePath)
 			this.streams.set(symbol + '-' + this.currentDay.dayString, fs.createWriteStream(filePath, {flags:'a'}))
 		}
@@ -290,9 +344,11 @@ class PolymarketApi {
 		this.streams.get(symbol + '-' + this.currentDay.dayString)?.write(timestamp + ';' + price + '\n')
 	}
 
-	async onTradeLog(slug: string, log: string) {
+	async onTradeLog(symbol: string, slug: string, log: string) {
 		if (!this.streams.has(slug)) {
-			const filePath = ROOT_PATH + 'trades/' + slug + '.log'
+			const dirPath = ROOT_PATH + 'trades/' + symbol
+			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
+			const filePath = dirPath + '/' + slug + '.log'
 			console.log('createWriteStream:', filePath)
 			this.streams.set(slug, fs.createWriteStream(filePath, {flags:'a'}))
 		}
