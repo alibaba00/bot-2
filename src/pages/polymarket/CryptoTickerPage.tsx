@@ -87,8 +87,8 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 			<h2>
 				{formatPrice(tickerPrice?.price ?? null)}
 				{tickerPrice?.timestamp && (
-					<span className='text-sm text-muted-foreground ml-1'>
-						USD ({new Date(tickerPrice.timestamp).toLocaleTimeString()})
+					<span className='text-sm text-muted-foreground'>
+						$ ({new Date(tickerPrice.timestamp).toLocaleTimeString()})
 					</span>
 				)}
 				{!isConnected && tickerPrice?.price === null && (

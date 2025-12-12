@@ -4,15 +4,12 @@ import { fetchMarketBySlugFromGamma } from '@/lib/polymarket/markets'
 import { env } from 'node:process'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
+import Store from '@/Store'
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
 const POLYMARKET_API_BASE = 'https://polymarket.com/api'
-const ROOT_PATH = 'D:/DATA/polymarket/'
 
 const isElectron = window?.navigator.userAgent.includes('Electron')
-// const isFileProtocol = window?.location.protocol === 'file:'
-// const isDevelopment = env.DEV || env.MODE === 'development'
-// const isProduction = env.PROD || env.MODE === 'production'
 const fs = isElectron ? (window as any)?.require?.('fs') : null
 const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 
@@ -48,6 +45,8 @@ export const useStore = create(() => ({
 
 // ============================================================================ PolymarketApi
 class PolymarketApi {
+	config: any = null
+	rootPath: string = ''
 	gammaApiBase: string = GAMMA_API_BASE
 	polymarketApiBase: string = POLYMARKET_API_BASE
 	markets: MarketsMap = {}
@@ -75,13 +74,44 @@ class PolymarketApi {
 
 
 	constructor() {
-		this.gammaApiBase = GAMMA_API_BASE
-		this.polymarketApiBase = POLYMARKET_API_BASE
 		this.init()
 	}
 
+	// ---------------------------------------------------------------------------- loadConfig
+	// load config from config.json and userConfig.json
+	async loadConfig() {
+		const configPath = './config.json'
+		console.log('Loading config from:', configPath)
+
+		const config = await fetch(configPath).then((res) => res.json())
+		if (!config) return
+
+		// try to load user config
+		if (isElectron) {
+			try {
+				const userConfigPath = config.userConfig
+				if (fs?.existsSync(userConfigPath)) {
+					const userConfig = await fsPromises?.readFile(userConfigPath, 'utf8')
+					// merge user config with app config
+					Object.assign(config, JSON.parse(userConfig))
+				}
+			} catch (error) {
+				console.log('---fs access error:', error)
+			}
+		}
+
+		console.log('---config:', config)
+		return config
+	}
+
+
 	async init(): Promise<void> {
 		console.log('-----------------------init PolymarketApi-----------------------')
+		this.config = await this.loadConfig()
+		this.rootPath = this.config.polymarket.rootPath
+		console.log('PolymarketApi constructor:', this.rootPath)
+		this.gammaApiBase = GAMMA_API_BASE
+		this.polymarketApiBase = POLYMARKET_API_BASE
 	}
 
 
@@ -143,6 +173,9 @@ class PolymarketApi {
 			marketData: null,
 			openPrice: null,	// priceToBeat
 			closePrice: null,	// finalPrice
+			openPriceTimestamp: null,
+			closePriceTimestamp: null,
+			closeMarketTimestamp: null,
 			trades: [],
 		}
 
@@ -289,15 +322,6 @@ class PolymarketApi {
 	}
 
 
-	async saveMarket(market: Market): Promise<void> {
-		console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
-		const path = ROOT_PATH + 'markets/' + market.slug + '.json'
-		if (!fs.existsSync(path)) fs.mkdirSync(path, {recursive: true})
-		await fsPromises?.writeFile(path, JSON.stringify(market, null, '\t'))
-		console.log('saved market to:', path)
-	}
-
-	
 	async pollingOpenPrice(market: Market): Promise<CryptoPriceResponse | null> {
 		const api = this
 		return new Promise((resolve, reject) => {
@@ -388,7 +412,7 @@ class PolymarketApi {
 		if (!this.currentDay || timestamp > this.currentDay.nextDay) this.setCurrentDay(timestamp)
 
 		if (!this.streams.has(symbol + '-' + this.currentDay.dayString)){
-			const dirPath = ROOT_PATH + 'tickers/' + symbol
+			const dirPath = this.rootPath + 'tickers/' + symbol
 			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
 			const filePath = dirPath + '/' + symbol + '-' + this.currentDay.dayString + '.log'
 			console.log('createWriteStream:', filePath)
@@ -400,7 +424,7 @@ class PolymarketApi {
 
 	async onTradeLog(symbol: string, slug: string, log: string) {
 		if (!this.streams.has(slug)) {
-			const dirPath = ROOT_PATH + 'trades/' + symbol + '/' + this.currentDay.dayString
+			const dirPath = this.rootPath + 'trades/' + symbol + '/' + this.currentDay.dayString
 			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
 			const filePath = dirPath + '/' + slug + '.log'
 			console.log('createWriteStream:', filePath)
@@ -409,6 +433,25 @@ class PolymarketApi {
 
 		this.streams.get(slug)?.write(log + '\n')
 	}
+
+	async saveMarket(market: Market): Promise<void> {
+		let ts = market.startTimestamp
+		let symbol = market.symbol.toLowerCase()
+		const dateObj = new Date(ts)
+		const year = dateObj.getUTCFullYear()
+		const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0')
+		const day = String(dateObj.getUTCDate()).padStart(2, '0')
+		let marketDay = `${year}-${month}-${day}`
+
+		console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
+		const dirPath = this.rootPath + 'markets/' + symbol + '/' + marketDay
+		if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
+		const filePath = dirPath + '/' + market.slug + '.json'
+
+		await fsPromises?.writeFile(filePath, JSON.stringify(market, null, '\t'))
+		console.log('saved market to:', filePath)
+	}
+
 }
 
 export default new PolymarketApi()

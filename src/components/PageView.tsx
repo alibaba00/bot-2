@@ -11,7 +11,7 @@ export default function PageView(props: any) {
 	console.log('PageView selectedNode', selectedNode)
 
 	return (
-		<div className='flex flex-col gap-4'>
+		<div className='page-view flex flex-col gap-4 h-full'>
 			{content.map((node: any, index: number) => {
 				if (!node?.page) return null
 
@@ -21,7 +21,7 @@ export default function PageView(props: any) {
 				return node._selected ||
 					(node._init && (node.autoUnmount !== true || props.autoUnmount !== true)) ||
 					(!node._init && (node.autoMount === true || props.autoMount === true)) ? (
-					<div key={node.id || index} className={node._selected ? 'block' : 'hidden'}>
+					<div key={node.id || index} className={node._selected ? 'page-view-item block flex flex-1 h-full' : 'hidden'}>
 						{typeof node.page === 'function' ? (
 							<node.page selected={node._selected} />
 						) : (

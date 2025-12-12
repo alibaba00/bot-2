@@ -59,7 +59,7 @@ export default function CryptoTickers() {
 				}
 				className='w-full'>
 
-				<div className='flex items-center gap-2'>
+				<div className='flex items-center gap-8'>
 					<MarketTimer />
 					<div className='flex items-center gap-2'>
 						<Button
@@ -77,6 +77,7 @@ export default function CryptoTickers() {
 							{tradingActive ? 'Stop Trading' : 'Start Trading'}
 						</Button>
 					</div>
+					<div className='text-sm text-muted-foreground'>Root: {PolymarketApi.rootPath}</div>
 				</div>
 
 				<TabsList className='text-foreground h-auto w-full rounded-none border-b bg-transparent px-0 py-1'>
@@ -102,14 +103,14 @@ export default function CryptoTickers() {
 	)
 }
 
-// MarketState = 'init' | 'pending' | 'started' | 'running' | 'trading' | 'stopped' | 'closed' | 'failed'
+// MarketState = 'init' | 'pending' | 'started' | 'running' | 'stopped' | 'closed' | 'failed'
 const marketStateColors = {
-	running: '#36f',
+	// trading: '#36f',
+	running: 'green',
 	stopped: 'yellow',
 	pending: 'yellow',
 	started: 'orange',
 	failed: 'red',
-	trading: 'green',
 	init: 'gray',
 	closed: 'gray',
 }

@@ -20,6 +20,7 @@ import StarredPage from './playground/StarredPage'
 import DashboardPage from './polymarket/DashboardPage'
 import MarketsPage from './polymarket/MarketsPage'
 import OrdersPage from './polymarket/OrdersPage'
+import ChartPage from './polymarket/ChartPage'
 import PolymarketHistoryPage from './polymarket/HistoryPage'
 import TickerPage from './polymarket/TickerPage'
 import TickerPage2 from './polymarket/TickerPage2'
@@ -38,7 +39,8 @@ const pages = [
 	{ id: 'polymarket-history', path: '/polymarket/history', page: <PolymarketHistoryPage /> },
 	{ id: 'polymarket-ticker', path: '/polymarket/ticker', page: <TickerPage /> },
 	{ id: 'polymarket-ticker2', path: '/polymarket/ticker2', page: <TickerPage2 /> },
-	{ id: 'polymarket-crypto-tickers', path: '/polymarket/crypto-tickers', page: <CryptoTickers /> }
+	{ id: 'polymarket-crypto-tickers', path: '/polymarket/crypto-tickers', page: <CryptoTickers /> },
+	{ id: 'polymarket-chart', path: '/polymarket/chart', page: <ChartPage /> }
 ]
 
 const data = {
@@ -75,6 +77,10 @@ const data = {
 				{
 					title: 'Crypto Tickers',
 					url: '/polymarket/crypto-tickers'
+				},
+				{
+					title: 'Charts',
+					url: '/polymarket/chart'
 				}
 			]
 		},

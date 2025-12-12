@@ -81,15 +81,6 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	})
 
 	useEffect(() => {
-		if (!market) return;
-		if (clobMarketWsStatus === 'connected') {
-			setMarketState('trading')
-		}else{
-			setMarketState('running')
-		}
-	}, [clobMarketWsStatus])
-
-	useEffect(() => {
 		if (tradeLog && market) {
 			const log = tradeLog.timestamp + ';' + tradeLog.asset + ';' + tradeLog.side + ';' + tradeLog.price + ';' + tradeLog.size;
 			PolymarketApi.onTradeLog(symbol, market.slug, log)
@@ -108,8 +99,14 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 
 
 	useEffect(() => {
-		if (!tradingActive) disconnectMarket()	
-		if (tradingActive && market?.state === 'running') connectMarket()
+		if (!tradingActive){
+			disconnectMarket()	
+			// if (market?.openPrice) setMarketState('running')
+			// else setMarketState('started')
+		} 
+		if (tradingActive && market?.state === 'running'){
+			connectMarket()
+		}
 	}, [tradingActive])
 
 
@@ -172,11 +169,9 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				}
 				return;
 
+			// from marketCompleted
 			case 'running':		//market is running
 				connectMarket() //--> trading
-				return;
-
-			case 'trading':		//market is trading
 				return;
 
 			case 'stopped':		//market is stopped
