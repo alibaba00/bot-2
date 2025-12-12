@@ -142,6 +142,8 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				_marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
 				console.log('marketData:', _marketData)
 				market.marketData = _marketData
+				await PolymarketApi.cacheMarket(market)	//update market cache
+				await PolymarketApi.saveMarket(market)
 
 				const newAssetIds = _marketData?.outcomes.map((outcome) => outcome.id) || []
 				setAssetIds(newAssetIds)

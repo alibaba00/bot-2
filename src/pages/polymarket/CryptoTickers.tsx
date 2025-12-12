@@ -5,6 +5,8 @@ import PolymarketApi from './PolymarketApi'
 import CryptoTickerPage from './CryptoTickerPage'
 import type { Market, MarketState } from '@/lib/polymarket/types'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 
 const content = [
 	{
@@ -36,18 +38,7 @@ export default function CryptoTickers() {
 	// console.log('onTimer', onTimer)
 	const tradingActive = PolymarketApi.use('tradingActive')
 	const tickerActive = PolymarketApi.use('tickerActive')
-
-
-	useEffect(() => {
-	}, [])
-
-
-	useEffect(() => {
-		// PolymarketApi.init().then((result) => {
-		// 	console.log('result', result)
-		// 	setMarkets(result)
-		// })
-	}, [])
+	const isActive = PolymarketApi.use('marketActive')
 
 
 	return (
@@ -59,9 +50,10 @@ export default function CryptoTickers() {
 				}
 				className='w-full'>
 
-				<div className='flex items-center gap-8'>
-					<MarketTimer />
-					<div className='flex items-center gap-2'>
+				<div className='flex items-center gap-2 h-8'>
+					{isActive &&
+					<div className='flex items-center gap-4'>
+						<MarketTimer />
 						<Button
 							onClick={() => PolymarketApi.set('tickerActive', !tickerActive)}
 							variant={tickerActive ? 'destructive' : 'outline'}
@@ -77,9 +69,18 @@ export default function CryptoTickers() {
 							{tradingActive ? 'Stop Trading' : 'Start Trading'}
 						</Button>
 					</div>
-					<div className='text-sm text-muted-foreground'>Root: {PolymarketApi.rootPath}</div>
+					}
+					<div className='text-sm text-muted-foreground ml-auto mr-6'>Root: {PolymarketApi.rootPath}</div>
+					<Label className='text-sm text-muted-foreground'>Market Active</Label>
+					<Switch
+						checked={isActive}
+						onCheckedChange={() => PolymarketApi.set('marketActive', !isActive)}
+						className='ml-0'
+					/>
 				</div>
 
+				{isActive &&
+				<>
 				<TabsList className='text-foreground h-auto w-full rounded-none border-b bg-transparent px-0 py-1'>
 					{content.map((tab) => (
 						<TabsTrigger
@@ -98,6 +99,8 @@ export default function CryptoTickers() {
 					autoMount={true}
 					// autoUnmount={false}
 				/>
+				</>
+				}
 			</Tabs>
 		</div>
 	)

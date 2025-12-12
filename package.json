@@ -69,6 +69,8 @@
 		"dexie": "^4.2.1",
 		"dexie-export-import": "^4.1.4",
 		"dotenv": "^17.2.3",
+		"echarts": "^6.0.0",
+		"echarts-for-react": "^3.0.5",
 		"ethers": "^6.15.0",
 		"localforage": "^1.10.0",
 		"lucide-react": "^0.545.0",

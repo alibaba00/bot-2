@@ -39,7 +39,11 @@ interface MarketsMap {
 // ---------------------------------------------------------------------------- useStore
 export const useStore = create(() => ({
 	isInit: false,
-	status: 'initializing'
+	status: 'initializing',
+	marketActive: false,
+	tradingActive: false,
+	tickerActive: false,
+	marketCompleted: false
 }))
 
 
@@ -51,9 +55,7 @@ class PolymarketApi {
 	polymarketApiBase: string = POLYMARKET_API_BASE
 	markets: MarketsMap = {}
 	currentMarket: Market | null = null
-	tickerActive: boolean = false
-	tradingActive: boolean = false
-
+	
 	set(state: any, value?: any){
 		if (typeof state === 'string') state = { [state]: value }
 		useStore.setState(state)
@@ -72,7 +74,7 @@ class PolymarketApi {
 		)
 	}
 
-
+	// ============================================================================ constructor
 	constructor() {
 		this.init()
 	}
@@ -105,6 +107,7 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- init
 	async init(): Promise<void> {
 		console.log('-----------------------init PolymarketApi-----------------------')
 		this.config = await this.loadConfig()
@@ -112,23 +115,41 @@ class PolymarketApi {
 		console.log('PolymarketApi constructor:', this.rootPath)
 		this.gammaApiBase = GAMMA_API_BASE
 		this.polymarketApiBase = POLYMARKET_API_BASE
+
+		this.set('isInit', true)
 	}
 
 
-	// from CryptoTickerPage
-	// async initMarkets(symbol: string, type: string): Promise<Market[]> {
-	// 	//symbol: btc, type: updown-15m
-	// 	const lastMarket = await this.getMarketFromDate(symbol, type, new Date(Date.now() - 15 * 60000), 15)
-	// 	const currentMarket = await this.getMarketFromDate(symbol, type, new Date(), 15)
-	// 	const nextMarket = await this.getMarketFromDate(symbol, type, new Date(Date.now() + 15 * 60000), 15)
-	// 	return [
-	// 		nextMarket as Market,
-	// 		currentMarket as Market,
-	// 		lastMarket as Market,
-	// 	]
-	// }
+	// ---------------------------------------------------------------------------- getMarketDataFromDate
+	async getMarketDataFromDate(symbol: string, date: Date): Promise<Market[]> {
+		// Path should be like: A:/DATA/polymarket/markets/btc/2025-12-12
+		const pad = (n: number) => n.toString().padStart(2, '0')
+		const year = date.getFullYear()
+		const month = pad(date.getMonth() + 1)
+		const day = pad(date.getDate())
+		const symbolLower = symbol.toLowerCase()
+		const dirPath = `${this.rootPath}/markets/${symbolLower}/${year}-${month}-${day}`
+
+		let fileList: Market[] = []
+
+		// Only works if running in Electron or Node.js (fs available)
+		if (typeof fs !== 'undefined' && fs?.readdirSync) {
+			try {
+				const files = fs.readdirSync(dirPath)
+				// Only include .json files
+				fileList = files.filter((f: string) => f.endsWith('.json')).map((f: string) => `${dirPath}/${f}`)
+			} catch (e) {
+				console.error(`Could not read directory: ${dirPath}`, e)
+			}
+		} else {
+			console.warn('fs not available - cannot list files')
+		}
+
+		return fileList
+	}
 
 
+	// ---------------------------------------------------------------------------- getMarketFromDate
 	async getMarketFromDate(symbol: string, type: string, date: Date, minutes: number): Promise<Market> {
 		const timestamp = this.getUTCTimestamp(date, minutes)
 		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
@@ -155,6 +176,7 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- createMarket
 	createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string): Market {
 		const startTimestamp = timestamp * 1000 // Convert to milliseconds
 		const endTimestamp = startTimestamp + 15 * 60 * 1000 // Add 15 minutes
@@ -183,6 +205,7 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- getUTCTimestamp
 	// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
 	getUTCTimestamp(date: Date | number | null, minutes: number = 15): number {
 		if (!date) date = new Date()
@@ -193,6 +216,7 @@ class PolymarketApi {
 		return Math.floor(dateTimeSeconds / minutesSeconds) * minutesSeconds
 	}
 
+	// ---------------------------------------------------------------------------- getCryptoPrice
 	// Get price to beat for a given symbol, event start time, and end date
 	async getCryptoPrice(market: Market): Promise<CryptoPriceResponse | null> {
 		const symbol = market.symbol
@@ -252,6 +276,7 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- fetchMarketBySlug
 	async fetchMarketBySlug(slug: string): Promise<MarketData | null> {
 		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
 		console.log(`Fetching market by slug from Gamma API: ${url}`)
@@ -269,6 +294,7 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- getMarketState
 	getMarketState(market: Market): MarketState | null {
 		if (!market) return 'failed'
 
@@ -289,6 +315,7 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- onMarketTimer
 	onMarketTimer(endTimestamp: number,
 		onTimer?: (t: { minutes: number; seconds: number; isExpired: boolean }) => void
 	): void {
@@ -316,16 +343,21 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- cacheMarket
 	async cacheMarket(market: Market): Promise<void> {
 		console.log('cacheMarket:', market.slug, market.openPrice, market.closePrice)
 		await cache.setItem(market.slug, market)
 	}
 
 
+	// ---------------------------------------------------------------------------- pollingOpenPrice
 	async pollingOpenPrice(market: Market): Promise<CryptoPriceResponse | null> {
 		const api = this
-		return new Promise((resolve, reject) => {
+		return new Promise(async (resolve, reject) => {
+			if (!api.get('marketActive')) return reject('Market is not active')
+
 			async function _pollingOpenPrice() {
+				if (!api.get('marketActive')) return reject('Market is not active')
 				// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, '...')
 
 				const result = await api.getCryptoPrice(market)
@@ -341,15 +373,21 @@ class PolymarketApi {
 					_pollingOpenPrice()
 				}
 			}
+
+			await new Promise(resolve => setTimeout(resolve, 5000))	//wait 5 seconds before polling
 			_pollingOpenPrice()
 		})
 	}
 
 
+	// ---------------------------------------------------------------------------- pollingClosePrice
 	async pollingClosePrice(market: Market){
 		const api = this
+		if (!api.get('marketActive')) return
 	
 		async function _pollingClosePrice() {
+			if (!api.get('marketActive')) return
+
 			// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, '...')
 			const result = await api.getCryptoPrice(market)
 			if (result && !market.openPrice && result.openPrice){
@@ -359,15 +397,26 @@ class PolymarketApi {
 			if (result?.closePrice) {
 				market.closePrice = result.closePrice
 				market.closePriceTimestamp = result.timestamp || null
-				_pollingClosedMarket()
+				// return _pollingClosedMarket()	//not needed
+
+				market.closeMarketTimestamp = Date.now()
+				market.state = 'closed'
+
+				await api.cacheMarket(market)	//update market cache
+				await api.saveMarket(market)
+				console.log('market closed:', market.slug)
+				return
 
 			}else{
 				await new Promise(resolve => setTimeout(resolve, 15000))
 				_pollingClosePrice()
+				return
 			}
 		}
 
 		async function _pollingClosedMarket() {
+			if (!api.get('marketActive')) return
+
 			const marketData = await fetchMarketBySlugFromGamma(market.slug || '')
 			if (marketData?.closed){
 				market.marketData = marketData
@@ -377,9 +426,13 @@ class PolymarketApi {
 				await api.cacheMarket(market)	//update market cache
 				await api.saveMarket(market)
 				console.log('market closed:', market.slug)
+				return
+
+			}else{
+				await new Promise(resolve => setTimeout(resolve, 15000))	//wait 15 seconds before polling again
+				_pollingClosedMarket()
+				return
 			}
-			await new Promise(resolve => setTimeout(resolve, 15000))	//wait 15 seconds before polling again
-			_pollingClosedMarket()
 		}
 
 		await new Promise(resolve => setTimeout(resolve, 90000))	//wait 1:30 minute before start polling for closed price
@@ -387,6 +440,7 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- setCurrentDay
 	streams: Map<string, import('fs').WriteStream> = new Map()
 	currentDay: {
 		nextDay: number,
@@ -408,6 +462,7 @@ class PolymarketApi {
 		console.log('setCurrentDay:', this.currentDay)
 	}
 
+	// ---------------------------------------------------------------------------- onTickerLog
 	async onTickerLog(symbol: string, timestamp: number, price: number) {
 		if (!this.currentDay || timestamp > this.currentDay.nextDay) this.setCurrentDay(timestamp)
 
@@ -422,6 +477,7 @@ class PolymarketApi {
 		this.streams.get(symbol + '-' + this.currentDay.dayString)?.write(timestamp + ';' + price + '\n')
 	}
 
+	// ---------------------------------------------------------------------------- onTradeLog
 	async onTradeLog(symbol: string, slug: string, log: string) {
 		if (!this.streams.has(slug)) {
 			const dirPath = this.rootPath + 'trades/' + symbol + '/' + this.currentDay.dayString
@@ -434,6 +490,7 @@ class PolymarketApi {
 		this.streams.get(slug)?.write(log + '\n')
 	}
 
+	// ---------------------------------------------------------------------------- saveMarket
 	async saveMarket(market: Market): Promise<void> {
 		let ts = market.startTimestamp
 		let symbol = market.symbol.toLowerCase()
