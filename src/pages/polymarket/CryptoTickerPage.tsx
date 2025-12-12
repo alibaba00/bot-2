@@ -1,17 +1,10 @@
+import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { useEffect, useState } from 'react'
 import MarketItem from './MarketItem'
 import PolymarketApi from './PolymarketApi'
-import type { Market } from '@/lib/polymarket/types'
-import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
-import { Button } from '@/components/ui/button'
-// import PolymarketStore from './PolymarketStore'
 
 
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
-	// const [market, setMarket] = useState<Market | null>(null)
-	// const [markets, setMarkets] = useState<Market[]>([])
-	// const [chainlinkPrice, setChainlinkPrice] = useState<number | null>(null)
-	// const [priceTimestamp, setPriceTimestamp] = useState<number | null>(null)
 	const [tickerPrice, setTickerPrice] = useState<{timestamp: number, price: number} | null>(null)
 	const tradingActive = PolymarketApi.use('tradingActive')
 	const tickerActive = PolymarketApi.use('tickerActive')
@@ -54,9 +47,8 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 	// Format price for display
 	const formatPrice = (price: number | null): string => {
 		if (price === null) return 'Loading...'
-		return new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD',
+		// Format as "12.345,67 USD"
+		return new Intl.NumberFormat('de-DE', {
 			minimumFractionDigits: 2,
 			maximumFractionDigits: 2
 		}).format(price)
@@ -95,8 +87,8 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 			<h2>
 				{formatPrice(tickerPrice?.price ?? null)}
 				{tickerPrice?.timestamp && (
-					<span className='text-sm text-muted-foreground ml-2'>
-						({new Date(tickerPrice.timestamp).toLocaleTimeString()})
+					<span className='text-sm text-muted-foreground ml-1'>
+						USD ({new Date(tickerPrice.timestamp).toLocaleTimeString()})
 					</span>
 				)}
 				{!isConnected && tickerPrice?.price === null && (

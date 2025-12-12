@@ -73,7 +73,6 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 		},
 		onConnect: () => {
 			setClobMarketWsStatus('connected')
-			setMarketState('trading')
 		},
 		onDisconnect: () => {
 			setClobMarketWsStatus('disconnected')
@@ -81,6 +80,14 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 		autoConnect: false
 	})
 
+	useEffect(() => {
+		if (!market) return;
+		if (clobMarketWsStatus === 'connected') {
+			setMarketState('trading')
+		}else{
+			setMarketState('running')
+		}
+	}, [clobMarketWsStatus])
 
 	useEffect(() => {
 		if (tradeLog && market) {
@@ -156,16 +163,20 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 			case 'pending':		//wait till market starts
 				return;
 
+			// from getMarketState
 			case 'started':		//wait till market price is available
 				const result = await PolymarketApi.pollingOpenPrice(market)
 				if (result) {
 					console.log('---started MarketItem:', market.slug, market)
-					setMarketState('running')
+					setMarketState('running') //--> connectMarket
 				}
 				return;
 
 			case 'running':		//market is running
-				connectMarket()
+				connectMarket() //--> trading
+				return;
+
+			case 'trading':		//market is trading
 				return;
 
 			case 'stopped':		//market is stopped

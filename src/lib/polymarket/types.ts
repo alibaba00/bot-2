@@ -15,6 +15,9 @@ export interface Market {
 	marketData: MarketData | null
 	openPrice: number | null	// priceToBeat
 	closePrice: number | null	// finalPrice
+	openPriceTimestamp: number | null
+	closePriceTimestamp: number | null
+	closeMarketTimestamp: number | null
 	trades: any[]
 }
 

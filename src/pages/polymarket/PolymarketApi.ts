@@ -163,8 +163,21 @@ class PolymarketApi {
 	// Get price to beat for a given symbol, event start time, and end date
 	async getCryptoPrice(market: Market): Promise<CryptoPriceResponse | null> {
 		const symbol = market.symbol
-		const eventStartTime = new Date(market.startTimestamp).toISOString()
-		const endDate = new Date(market.endTimestamp).toISOString()
+		
+		// Format dates without milliseconds (API expects format: 2025-12-12T08:45:00Z)
+		const formatDateWithoutMs = (timestamp: number): string => {
+			const date = new Date(timestamp)
+			const year = date.getUTCFullYear()
+			const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+			const day = String(date.getUTCDate()).padStart(2, '0')
+			const hours = String(date.getUTCHours()).padStart(2, '0')
+			const minutes = String(date.getUTCMinutes()).padStart(2, '0')
+			const seconds = String(date.getUTCSeconds()).padStart(2, '0')
+			return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`
+		}
+		
+		const eventStartTime = formatDateWithoutMs(market.startTimestamp)
+		const endDate = formatDateWithoutMs(market.endTimestamp)
 
 		const url = `${POLYMARKET_API_BASE}/crypto/crypto-price`
 		const params = new URLSearchParams({
@@ -175,17 +188,34 @@ class PolymarketApi {
 		})
 
 		const fullUrl = `${url}?${params.toString()}`
-		const response = await fetch(fullUrl, {
-			method: 'GET',
-			headers: {
-				Accept: 'application/json'
-			}
-		})
-
-		if (!response.ok) return null
 		
-		const data = await response.json() as CryptoPriceResponse
-		return data
+		try {
+			const response = await fetch(fullUrl, {
+				method: 'GET',
+				headers: {
+					'Accept': 'application/json',
+					'Accept-Language': 'en-US,en;q=0.9',
+					'Cache-Control': 'no-cache'
+				},
+				credentials: 'omit' // Don't send cookies, but match browser behavior
+			})
+
+			if (!response.ok) {
+				const errorText = await response.text().catch(() => '')
+				console.warn(
+					`❌ getCryptoPrice failed: ${response.status} ${response.statusText}`,
+					`URL: ${fullUrl}`,
+					errorText
+				)
+				return null
+			}
+			
+			const data = await response.json() as CryptoPriceResponse
+			return data
+		} catch (error) {
+			console.error('❌ getCryptoPrice error:', error)
+			return null
+		}
 	}
 
 
@@ -261,7 +291,10 @@ class PolymarketApi {
 
 	async saveMarket(market: Market): Promise<void> {
 		console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
-		await fsPromises?.writeFile(ROOT_PATH + 'markets/' + market.slug + '.json', JSON.stringify(market, null, '\t'))
+		const path = ROOT_PATH + 'markets/' + market.slug + '.json'
+		if (!fs.existsSync(path)) fs.mkdirSync(path, {recursive: true})
+		await fsPromises?.writeFile(path, JSON.stringify(market, null, '\t'))
+		console.log('saved market to:', path)
 	}
 
 	
@@ -274,6 +307,7 @@ class PolymarketApi {
 				const result = await api.getCryptoPrice(market)
 				if (result?.openPrice) {
 					market.openPrice = result.openPrice
+					market.openPriceTimestamp = result.timestamp || null
 
 					await api.cacheMarket(market)	//update market cache
 					resolve(result)
@@ -290,29 +324,41 @@ class PolymarketApi {
 
 	async pollingClosePrice(market: Market){
 		const api = this
+	
 		async function _pollingClosePrice() {
 			// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, '...')
-
 			const result = await api.getCryptoPrice(market)
 			if (result && !market.openPrice && result.openPrice){
-				market.openPrice = result.openPrice //update missing openPrice
+				market.openPrice = result.openPrice 	//update missing openPrice
+				market.openPriceTimestamp = result.timestamp || null
 			}
 			if (result?.closePrice) {
 				market.closePrice = result.closePrice
-
-				const marketData = await fetchMarketBySlugFromGamma(market.slug || '')
-				if (marketData) market.marketData = marketData
-
-				await api.cacheMarket(market)	//update market cache
-
-				await api.saveMarket(market)
+				market.closePriceTimestamp = result.timestamp || null
+				_pollingClosedMarket()
 
 			}else{
 				await new Promise(resolve => setTimeout(resolve, 15000))
 				_pollingClosePrice()
 			}
 		}
-		await new Promise(resolve => setTimeout(resolve, 60000))	//wait 1 minute before polling
+
+		async function _pollingClosedMarket() {
+			const marketData = await fetchMarketBySlugFromGamma(market.slug || '')
+			if (marketData?.closed){
+				market.marketData = marketData
+				market.closeMarketTimestamp = Date.now()
+				market.state = 'closed'
+
+				await api.cacheMarket(market)	//update market cache
+				await api.saveMarket(market)
+				console.log('market closed:', market.slug)
+			}
+			await new Promise(resolve => setTimeout(resolve, 15000))	//wait 15 seconds before polling again
+			_pollingClosedMarket()
+		}
+
+		await new Promise(resolve => setTimeout(resolve, 90000))	//wait 1:30 minute before start polling for closed price
 		_pollingClosePrice()
 	}
 
