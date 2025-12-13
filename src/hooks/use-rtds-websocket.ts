@@ -4,7 +4,9 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
-	RTDSWebSocket,
+	RTDSWebSocket
+} from '@/lib/polymarket/rtds-websocket'
+import type {
 	CryptoPriceUpdate,
 	CryptoPriceSource
 } from '@/lib/polymarket/rtds-websocket'

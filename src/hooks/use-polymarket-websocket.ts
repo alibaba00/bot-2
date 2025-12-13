@@ -4,10 +4,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
-	PolymarketWebSocket,
+	PolymarketWebSocket
+} from '@/lib/polymarket/websocket'
+import type {
 	WebSocketPriceUpdate,
-	WebSocketOrderBookUpdate,
-	WS_URLS
+	WebSocketOrderBookUpdate
 } from '@/lib/polymarket/websocket'
 
 export interface UsePolymarketWebSocketOptions {

@@ -88,7 +88,7 @@ export default function TickerPage2() {
 	const [priceToBeat, setPriceToBeat] = useState<number | null>(null)
 	const [finalPrice, setFinalPrice] = useState<number | null>(null)
 	const [priceToBeatLoading, setPriceToBeatLoading] = useState(false)
-	const [finalPriceLoading, setFinalPriceLoading] = useState(false)
+	const [_finalPriceLoading, setFinalPriceLoading] = useState(false)
 	
 	// Trigger to start polling when market ends (updates when market end time is reached)
 	const [pollingTrigger, setPollingTrigger] = useState(0)
@@ -522,7 +522,8 @@ console.log('🔄 Market is finished, starting polling setup:', {
 			} catch (error) {
 				console.warn('⚠️ Failed to poll final price:', error)
 			} finally {
-				setFinalPriceLoading(false)
+				const setLoading = setFinalPriceLoading
+				setLoading(false)
 			}
 		}
 		

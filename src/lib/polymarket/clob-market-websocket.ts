@@ -287,8 +287,10 @@ export class CLOBMarketWebSocket {
 
 	/**
 	 * Handle price changes from WebSocket message
+	 * @internal
 	 */
-	private handlePriceChanges(message: CLOBMarketMessage): void {
+	// @ts-expect-error - Function is intentionally unused (commented out in code)
+	private _handlePriceChanges(message: CLOBMarketMessage): void {
 		if (!message.price_changes || !Array.isArray(message.price_changes)) {
 			return
 		}

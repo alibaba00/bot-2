@@ -436,8 +436,10 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 
 /**
  * Cache markets in the database
+ * @internal
  */
-async function cacheMarkets(markets: MarketData[]): Promise<void> {
+// @ts-expect-error - Function is intentionally unused (commented out in code)
+async function _cacheMarkets(markets: MarketData[]): Promise<void> {
 	try {
 		const now = Date.now()
 		// Filter out markets with invalid IDs before caching

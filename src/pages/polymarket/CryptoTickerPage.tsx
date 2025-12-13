@@ -6,7 +6,6 @@ import PolymarketApi from './PolymarketApi'
 
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
 	const [tickerPrice, setTickerPrice] = useState<{timestamp: number, price: number} | null>(null)
-	const tradingActive = PolymarketApi.use('tradingActive')
 	const tickerActive = PolymarketApi.use('tickerActive')
 
 
@@ -55,7 +54,6 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 	}
 
 	const isConnected = chainlinkWs.status === 'connected'
-	const isConnecting = chainlinkWs.status === 'connecting'
 
 	return (
 		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>

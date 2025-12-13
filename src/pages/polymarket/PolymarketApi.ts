@@ -383,7 +383,9 @@ class PolymarketApi {
 			}
 		}
 
-		async function _pollingClosedMarket() {
+		// Function is called recursively but initial call is commented out
+		// @ts-expect-error - Function is intentionally unused (initial call commented out)
+		async function _pollingClosedMarket(): Promise<void> {
 			if (!api.get('marketActive')) return
 
 			const marketData = await fetchMarketBySlugFromGamma(market.slug || '')

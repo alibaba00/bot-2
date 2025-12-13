@@ -13,7 +13,6 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/s
 import { Bot, SquareTerminal } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import DemoPage from './playground/DemoPage'
-import EditorPage from './playground/EditorPage'
 import HistoryPage from './playground/HistoryPage'
 import SettingsPage from './playground/SettingsPage'
 import StarredPage from './playground/StarredPage'
@@ -28,7 +27,6 @@ import CryptoTickers from './polymarket/CryptoTickers'
 
 const pages = [
 	{ id: 'demo', path: '/playground/demo', page: <DemoPage /> },
-	{ id: 'editor', path: '/playground/editor', page: EditorPage },
 	{ id: 'history', path: '/playground/history', page: <HistoryPage /> },
 	{ id: 'starred', path: '/playground/starred', page: <StarredPage /> },
 	{ id: 'settings', path: '/playground/settings', page: SettingsPage },

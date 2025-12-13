@@ -48,7 +48,7 @@ export const getMarketDataFromDate = (symbol: string, date: Date) => {
 // 1765497629459;Down;SELL;0.46;6
 // 1765497629467;Up;BUY;0.55;19.581817
 // 1765497629473;Down;SELL;0.45;20
-export const getMarketChartData = async (symbol: string, date: Date) => {
+export const getMarketChartData = async (_symbol: string, _date: Date) => {
 	const filePath = 'A:/DATA/polymarket/trades/btc/2025-12-13/btc-updown-15m-1765584900.log'
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')

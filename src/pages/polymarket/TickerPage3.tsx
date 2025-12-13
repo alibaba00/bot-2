@@ -3,26 +3,17 @@ import MarketItem from './MarketItem'
 import PolymarketApi from './PolymarketApi'
 
 export default function TickerPage3() {
-	const [markets, setMarkets] = useState([])
-	// const [currentMarket, setCurrentMarket] = useState(null)
+	const [markets, setMarkets] = useState<Array<{ symbol: string; type: string }>>([])
 
 	useEffect(() => {
 		console.log('---init TickerPage3---')
 
-		PolymarketApi.init().then((result) => {
-			console.log('result', result)
-			setMarkets(result)
+		PolymarketApi.init().then(() => {
+			console.log('PolymarketApi initialized')
+			// TODO: Load markets from API or state
+			// For now, set empty array or load from somewhere
+			setMarkets([])
 		})
-
-		// setMarkets([<MarketItem market={market} />])
-		// const gammaApiBase = PolymarketApi.getGammaApiBase()
-		// const polymarketApiBase = PolymarketApi.getPolymarketApiBase()
-		// console.log('gammaApiBase', gammaApiBase)
-		// console.log('polymarketApiBase', polymarketApiBase)
-		// const marketSlug = PolymarketApi.getDefaultBTCMarketSlug()
-		// console.log('marketSlug', marketSlug)
-		// const market = await pm.polymarketApi.getMarket(marketSlug)
-		// console.log('market', market)
 	}, [])
 
 	return (
@@ -30,7 +21,7 @@ export default function TickerPage3() {
 			<h1>Ticker Page 3</h1>
 			<div id='marketList'>
 				{markets.map((market, index) => (
-					<MarketItem key={index} market={market} />
+					<MarketItem key={index} symbol={market.symbol} type={market.type} />
 				))}
 			</div>
 		</div>

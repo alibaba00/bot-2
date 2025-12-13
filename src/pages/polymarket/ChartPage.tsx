@@ -27,7 +27,7 @@ const content = [
 	},
 ]
 
-const barChartOptions = {
+const barChartOptions: any = {
 	xAxis: {
 		type: 'category',
 	},
@@ -43,7 +43,7 @@ const barChartOptions = {
 	},
 	series: [
 		{
-			data: [],
+			data: [] as any[],
 			type: 'bar',
 			barGap: 0,
 			barCategoryGap: 0
@@ -58,7 +58,7 @@ const barChartOptions = {
 	}
 }
 
-const lineChartOptions = {
+const lineChartOptions: any = {
 	// Choose axis ticks based on UTC time.
 	useUTC: true,
 	title: {
@@ -77,7 +77,7 @@ const lineChartOptions = {
 				showMinLabel: true,
 				showMaxLabel: true,
 			},
-			data: [],
+			data: [] as any[],
 		}
 	],
 	yAxis: {
@@ -98,7 +98,7 @@ const lineChartOptions = {
 		{
 			type: 'line',
 			symbolSize: 0,
-			data: [],
+			data: [] as any[],
 		}
 	]
 };

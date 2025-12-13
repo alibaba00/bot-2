@@ -3,7 +3,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { RTDSMarketWebSocket, MarketPriceUpdate } from '@/lib/polymarket/rtds-market-websocket'
+import { RTDSMarketWebSocket } from '@/lib/polymarket/rtds-market-websocket'
+import type { MarketPriceUpdate } from '@/lib/polymarket/rtds-market-websocket'
 
 export interface UseRTDSMarketWebSocketOptions {
 	conditionIds?: string[]
