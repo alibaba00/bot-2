@@ -4,7 +4,7 @@
 	"version": "1.0.6",
 	"release": "12.12.2025",
 
-	"userConfig": "c:/jtcore/userConfig.json",
+	"_userConfig": "c:/jtcore/userConfig.json",
 
 	"polymarket": {
 		"rootPath": "A:/DATA/polymarket/"

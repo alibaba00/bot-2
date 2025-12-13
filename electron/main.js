@@ -13,10 +13,10 @@ app.commandLine.appendSwitch('ignore-certificate-errors')
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
 
 // force single instance application
-if (!app.requestSingleInstanceLock()) {
-	console.log('application already running!', process.argv)
-	app.exit(0)
-}
+// if (!app.requestSingleInstanceLock()) {
+// 	console.log('application already running!', process.argv)
+// 	app.exit(0)
+// }
 
 async function createWindow() {
 	const win = new BrowserWindow({

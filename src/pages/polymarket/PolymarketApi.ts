@@ -1,10 +1,8 @@
-import localForage from 'localforage'
-import type { Market, MarketData, MarketState } from '@/lib/polymarket/types'
 import { fetchMarketBySlugFromGamma } from '@/lib/polymarket/markets'
-import { env } from 'node:process'
+import type { Market, MarketData, MarketState } from '@/lib/polymarket/types'
+import localForage from 'localforage'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import Store from '@/Store'
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
 const POLYMARKET_API_BASE = 'https://polymarket.com/api'
@@ -117,35 +115,6 @@ class PolymarketApi {
 		this.polymarketApiBase = POLYMARKET_API_BASE
 
 		this.set('isInit', true)
-	}
-
-
-	// ---------------------------------------------------------------------------- getMarketDataFromDate
-	async getMarketDataFromDate(symbol: string, date: Date): Promise<Market[]> {
-		// Path should be like: A:/DATA/polymarket/markets/btc/2025-12-12
-		const pad = (n: number) => n.toString().padStart(2, '0')
-		const year = date.getFullYear()
-		const month = pad(date.getMonth() + 1)
-		const day = pad(date.getDate())
-		const symbolLower = symbol.toLowerCase()
-		const dirPath = `${this.rootPath}/markets/${symbolLower}/${year}-${month}-${day}`
-
-		let fileList: Market[] = []
-
-		// Only works if running in Electron or Node.js (fs available)
-		if (typeof fs !== 'undefined' && fs?.readdirSync) {
-			try {
-				const files = fs.readdirSync(dirPath)
-				// Only include .json files
-				fileList = files.filter((f: string) => f.endsWith('.json')).map((f: string) => `${dirPath}/${f}`)
-			} catch (e) {
-				console.error(`Could not read directory: ${dirPath}`, e)
-			}
-		} else {
-			console.warn('fs not available - cannot list files')
-		}
-
-		return fileList
 	}
 
 
