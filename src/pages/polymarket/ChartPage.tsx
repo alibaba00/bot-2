@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Button } from "@/components/ui/button";
 import * as PolymarketChart from "./PolymarketChart";
+import PolymarketApi from "./PolymarketApi";
 
 
 const content = [
@@ -170,6 +171,9 @@ export default function ChartPage() {
 					// }]
 				})
 				break
+			case 'update data':
+				PolymarketChart.updateAllMarketData()
+				break
 		}
 	}
 
@@ -182,6 +186,7 @@ export default function ChartPage() {
 						<Button variant='outline' onClick={() => onClick('load-ticker-data')}>load Ticker data</Button>
 						<Button variant='outline' onClick={() => onClick('line')}>Line</Button>
 						<Button variant='outline' onClick={() => onClick('market')}>Market</Button>
+						<Button variant='outline' onClick={() => onClick('update data')}>update data</Button>
 					</ButtonGroup>
 
 					<ReactEcharts

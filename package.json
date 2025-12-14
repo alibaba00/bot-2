@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "1.0.7",
 	"type": "module",
-	"description": "Demo App Template",
+	"description": "Polymarket Bot",
 	"author": "a.lang@jtm.digital",
 	"license": "MIT",
 	"main": "electron/main.js",
@@ -35,11 +35,11 @@
 			"asar": true
 		},
 		"nsis": {
-			"artifactName": "Demo-App-Template-${version}.exe",
+			"artifactName": "Polymarket Bot-${version}.exe",
 			"allowToChangeInstallationDirectory": false,
 			"oneClick": true,
 			"include": "./electron/installer.nsh",
-			"shortcutName": "Demo-App-Template",
+			"shortcutName": "Polymarket Bot",
 			"deleteAppDataOnUninstall": true,
 			"runAfterFinish": true
 		}

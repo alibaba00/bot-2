@@ -3,6 +3,179 @@ import PolymarketApi from './PolymarketApi'
 const isElectron = window?.navigator.userAgent.includes('Electron')
 const fs = isElectron ? (window as any)?.require?.('fs') : null
 const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
+const path = (window as any)?.require?.('path');
+
+
+// ---------------------------------------------------------------------------- getAllMarketLogs
+export const getAllMarketLogs = async (symbol: string | null = null, date: Date | null = null) => {
+	if (!isElectron || !fs || !fsPromises) {
+		// Not running in an Electron context, or fs unavailable
+		return {}
+	}
+
+	const rootPath = PolymarketApi.rootPath + "markets/";
+
+	async function walkDir(currentPath: string, symbol?: string, date?: string) {
+		const result: any = {};
+		let dirList: string[] = [];
+
+		try {
+			dirList = await fsPromises.readdir(currentPath, { withFileTypes: true });
+		} catch (e) {
+			return {};
+		}
+
+		for (const entry of dirList) {
+			if (typeof entry === "string") {
+				// Node < v10 fallback (should not happen)
+				continue;
+			}
+			if ((entry as any).isDirectory()) {
+				const dirName = (entry as any).name;
+				// Symbol layer
+				if (!symbol) {
+					// Drill into the symbol
+					result[dirName] = await walkDir(path.join(currentPath, dirName), dirName, undefined);
+				} else if (!date) {
+					// Date layer inside of Symbol
+					result[dirName] = await walkDir(path.join(currentPath, dirName), symbol, dirName);
+				}
+			} else if ((entry as any).isFile() && (entry as any).name.endsWith('.log') && symbol && date) {
+				// Only files of the relevant Symbol + Date
+				if (!result[date]) result[date] = [];
+				result[date].push((entry as any).name);
+			}
+		}
+
+		// Clean up empty keys
+		if (Object.keys(result).length === 0 && symbol && date) return undefined;
+
+		// On date level, we want an array rather than a subobject
+		if (date && Array.isArray(result[date])) return result[date];
+
+		// Remove keys with undefined values (empty)
+		for (const k of Object.keys(result)) if (typeof result[k] === "undefined") delete result[k];
+
+		return result;
+	}
+
+	let out: any = {};
+	if (!symbol && !date) {
+		// List all symbols and all files
+		out = await walkDir(rootPath);
+	} else if (symbol && !date) {
+		// Only for the given symbol
+		out[symbol] = await walkDir(path.join(rootPath, symbol));
+	} else if (symbol && date) {
+		// Only for given symbol & date
+		const dateString = DateFormat(date)
+		const files = await walkDir(path.join(rootPath, symbol, dateString), symbol, dateString);
+		if (files && Array.isArray(files)) {
+			out[symbol] = { [dateString as string]: files } as any;
+		} else {
+			out[symbol] = {} as any;
+		}
+	}
+	return out;
+}
+
+
+// ---------------------------------------------------------------------------- updateMarketData
+export const updateMarketData = async (symbol: string, date: string, file: string) => {
+	const filePath = `${PolymarketApi.rootPath}markets/${symbol}/${date}/${file}`
+	const fileContent = await fsPromises.readFile(filePath, 'utf8')
+	if (!fileContent) return
+
+	// const lines = fileContent.split('\n')
+	// const data = lines.map((line) => {
+	// 	const [timestamp, direction, type, price, volume] = line.split(';')
+	// 	return { timestamp: parseInt(timestamp), direction, type, price: parseFloat(price), volume: parseFloat(volume) }
+	// }).filter((item) => item.timestamp > 0 && item.price > 0)
+}
+
+
+// ---------------------------------------------------------------------------- updateAllMarketData
+export const updateAllMarketData = async () => {
+	console.log('Updating all market data...')
+
+	const data = await getAllMarketLogs()
+	console.log('data:', data)
+
+	let totalFiles = 0
+	for (const symbol of Object.keys(data)) {
+		for (const date of Object.keys(data[symbol])) {
+			totalFiles += data[symbol][date].length
+		}
+	}
+
+	let updatedFiles = 0
+
+	for (const symbol of Object.keys(data)) {
+		for (const date of Object.keys(data[symbol])) {
+			for (const file of data[symbol][date]) {
+if (updatedFiles > 10) break
+				updatedFiles++
+				console.log('updatedFiles:', updatedFiles, '/', totalFiles, file)
+				// console.log('file:', file)
+				// await updateMarketData(symbol, date, file)
+			}
+		}
+	}
+
+	// PolymarketApi.cache.keys().then(async (keys) => {
+	// 	for (const key of keys) {
+	// 		// console.log('key:', key)
+	// 		const market = await PolymarketApi.cache.getItem(key)
+	// 		const symbol = market?.symbol.toLowerCase()
+	// 		const rootPath = PolymarketApi.rootPath
+	// 		const dateString = DateFormat(new Date(market?.startTimestamp))
+	// 		const marketFilePath = `${rootPath}markets/${symbol}/${dateString}`
+	// 		const marketFile = `${marketFilePath}/${market?.slug}.json`
+	// 		const tradesFile = `${rootPath}markets/${symbol}/${dateString}/${market?.slug}.log`
+	// 		// console.log('filePath:', marketFile, tradesFile)
+
+	// 		if (!market.closePrice){
+	// 			console.log('closedPrice missing:', market.slug)
+	// 			const cryptoPrice = await PolymarketApi.getCryptoPrice(market)
+	// 			console.log('cryptoPrice:', cryptoPrice)
+	// 			// if (cryptoPrice){
+	// 			// 	market.closePrice = cryptoPrice.closePrice
+	// 			// 	market.closePriceTimestamp = cryptoPrice.timestamp || null
+	// 			// 	await PolymarketApi.cacheMarket(market)
+	// 			// 	await PolymarketApi.saveMarket(market)
+	// 			// 	console.log('closedPrice updated:', market.slug)
+	// 			// }
+	// 		}
+	/*			
+				if (!fs.existsSync(marketFile)) {	
+					// console.log('marketFile not found:', marketFile)
+					if (!fs.existsSync(marketFilePath)) {
+						fs.mkdirSync(marketFilePath, {recursive: true})
+					}
+					await fsPromises.writeFile(marketFile, JSON.stringify(market, null, '\t'))
+					console.log('market saved:', marketFile)
+					continue
+				}
+	*/
+
+	// if (!fs.existsSync(tradesFile)) {
+	// 	console.log('tradesFile not found:', tradesFile)
+	// 	continue
+	// }
+
+	// const trades = await fsPromises.readFile(tradesFile, 'utf8')
+	// const tradesData = trades.split('\n')
+	// console.log('tradesData:', tradesData)
+	// const fileContent = await fsPromises.readFile(filePath, 'utf8')
+	// const lines = fileContent.split('\n')
+	// const data = lines.map((line) => {
+	// 	const [timestamp, price] = line.split(';')
+	// 	return { timestamp: parseInt(timestamp), price: parseFloat(price) }
+	// }).filter((item) => item.timestamp > 0 && item.price > 0)
+	// console.log('symbol:', symbol)
+	// }
+	// })
+}
 
 
 // ---------------------------------------------------------------------------- DateFormat
@@ -49,7 +222,7 @@ export const getMarketDataFromDate = (symbol: string, date: Date) => {
 // 1765497629467;Up;BUY;0.55;19.581817
 // 1765497629473;Down;SELL;0.45;20
 export const getMarketChartData = async (_symbol: string, _date: Date) => {
-	const filePath = 'A:/DATA/polymarket/trades/btc/2025-12-13/btc-updown-15m-1765584900.log'
+	const filePath = 'A:/DATA/polymarket/markets/btc/2025-12-13/btc-updown-15m-1765584900.log'
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
 	const lines = fileContent.split('\n')
@@ -82,7 +255,7 @@ export const getChartTickerData = async (symbol: string, date: Date) => {
 
 
 // ---------------------------------------------------------------------------- getChartMinuteData
-export const getChartMinuteData = async (symbol: string, date: Date): Promise<{timestamp: number, price: number}[]> => {
+export const getChartMinuteData = async (symbol: string, date: Date): Promise<{ timestamp: number, price: number }[]> => {
 	const data = await getChartTickerData(symbol, date)
 
 	let currentMinute = Math.floor(data[0].timestamp / 60000) * 60000
@@ -97,7 +270,7 @@ export const getChartMinuteData = async (symbol: string, date: Date): Promise<{t
 		if (item.timestamp < nextMinute) {
 			candle.price += item.price
 			candle.count += 1
-		}else{
+		} else {
 			candle.price /= candle.count
 			candle = {
 				timestamp: nextMinute,
@@ -121,12 +294,12 @@ export const getChartDistributionData = async (symbol: string, date: Date) => {
 	const values = {}
 	for (let i = 0; i < data.length - 15; i++) {
 		const price = data[i].price
-		const price15 = data[i+15].price
+		const price15 = data[i + 15].price
 		const value = Math.floor(((price15 / price) - 1) * 2000)	//price change
 		if (!values[value]) {
 			values[value] = 0
 		}
-		values[value] ++
+		values[value]++
 	}
 	const distribution = Object.entries(values).map(([value, count]) => ({
 		value: parseInt(value),

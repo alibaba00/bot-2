@@ -15,8 +15,7 @@ export interface Market {
 	closePrice: number | null	// finalPrice
 	openPriceTimestamp: number | null
 	closePriceTimestamp: number | null
-	closeMarketTimestamp: number | null
-	trades: any[]
+	closeMarketTimestamp: number | null	
 }
 
 
@@ -38,7 +37,8 @@ export interface MarketData {
 	marketMakerAddress?: string
 	outcomes: MarketOutcome[]
 	createdAt?: string
-	updatedAt?: string
+	updatedAt?: string,
+	sourceData: any
 }
 
 export interface MarketOutcome {

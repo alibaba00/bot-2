@@ -1,10 +1,10 @@
 {
-	"name": "demo",
-	"info": "welcome to the demo app",
-	"version": "1.0.7",
-	"release": "13.12.2025",
+	"name": "polymarket-bot",
+	"info": "welcome to the polymarket bot",
+	"version": "1.0.8",
+	"release": "14.12.2025",
 
-	"_userConfig": "c:/jtcore/userConfig.json",
+	"userConfig": "c:/jtcore/userConfig.json",
 
 	"polymarket": {
 		"rootPath": "A:/DATA/polymarket/"

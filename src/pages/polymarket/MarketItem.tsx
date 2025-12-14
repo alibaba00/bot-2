@@ -135,22 +135,21 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 
 		console.log('updateMarketState:', market?.slug, _state)
 
-		let _marketData: MarketData | null = null
 		switch (_state){
 			case 'init':		//market is initializing
 				console.log('---init MarketItem:', market.slug, market)
-				_marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
-				console.log('marketData:', _marketData)
-				market.marketData = _marketData
-				await PolymarketApi.cacheMarket(market)	//update market cache
-				await PolymarketApi.saveMarket(market)
+				// _marketData = await fetchMarketBySlugFromGamma(market?.slug || '')
+				// console.log('marketData:', _marketData)
+				// market.marketData = _marketData
+				// await PolymarketApi.cacheMarket(market)	//update market cache
+				// await PolymarketApi.saveMarket(market)
 
-				const newAssetIds = _marketData?.outcomes.map((outcome) => outcome.id) || []
+				const newAssetIds = market.marketData?.outcomes.map((outcome) => outcome.id) || []
 				setAssetIds(newAssetIds)
 
 				clobMarketWs.updateAssetIds(newAssetIds)
 
-				_marketData?.outcomes.forEach((outcome) => {
+				market.marketData?.outcomes.forEach((outcome) => {
 					assets.current[outcome.id] = outcome.title
 					// assets.current[outcome.title] = outcome.id
 				})

@@ -48,11 +48,10 @@ export const useStore = create(() => ({
 // ============================================================================ PolymarketApi
 class PolymarketApi {
 	config: any = null
+	cache: any = null
 	rootPath: string = ''
 	gammaApiBase: string = GAMMA_API_BASE
 	polymarketApiBase: string = POLYMARKET_API_BASE
-	markets: MarketsMap = {}
-	currentMarket: Market | null = null
 	
 	set(state: any, value?: any){
 		if (typeof state === 'string') state = { [state]: value }
@@ -74,6 +73,7 @@ class PolymarketApi {
 
 	// ============================================================================ constructor
 	constructor() {
+		this.cache = cache
 		this.init()
 	}
 
@@ -119,34 +119,26 @@ class PolymarketApi {
 
 
 	// ---------------------------------------------------------------------------- getMarketFromDate
+	// symbol: e.g. btc
+	// type: e.g. updown-15m
+	// date: e.g. 2025-12-10
+	// minutes: e.g. 15
+	// return: Market
 	async getMarketFromDate(symbol: string, type: string, date: Date, minutes: number): Promise<Market> {
 		const timestamp = this.getUTCTimestamp(date, minutes)
 		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
 		const marketSlug = `${marketName}-${timestamp}`	//e.g. btc-updown-15m-1765144800
 
-		if (this.markets?.[marketName]?.[marketSlug]) {
-			return this.markets[marketName][marketSlug]
-		}
+		// const cachedMarket = await cache.getItem<Market>(marketSlug)
+		// if (cachedMarket) return cachedMarket
 
-		if (!this.markets?.[marketName]) this.markets[marketName] = {}
-
-		const cachedMarket = await cache.getItem<Market>(marketSlug)
-		if (cachedMarket) {
-			cachedMarket.state = 'init'
-			this.markets[marketName][cachedMarket.slug] = cachedMarket
-			return cachedMarket
-		}
-
-		const market = this.createMarket(symbol, marketName, timestamp, marketSlug)
-		this.markets[marketName][market.slug] = market
-		await this.cacheMarket(market)
-
+		const market = await this.createMarket(symbol, marketName, timestamp, marketSlug)
 		return market as Market
 	}
 
 
 	// ---------------------------------------------------------------------------- createMarket
-	createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string): Market {
+	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string): Promise<Market> {
 		const startTimestamp = timestamp * 1000 // Convert to milliseconds
 		const endTimestamp = startTimestamp + 15 * 60 * 1000 // Add 15 minutes
 
@@ -155,21 +147,24 @@ class PolymarketApi {
 
 		const market: Market = {
 			symbol: symbol.toUpperCase(),
-			marketName: marketName,
-			slug: marketSlug,
-			timestamp,
-			startTimestamp,
-			endTimestamp,
+			marketName: marketName,		//e.g. btc-updown-15m
+			slug: marketSlug,			//e.g. btc-updown-15m-1765584900
+			timestamp,					//e.g. 1765584900
+			startTimestamp,				//e.g. 1765584900000
+			endTimestamp,				//e.g. 1765584900000 + 15 * 60 * 1000
 			state: 'init',	//init, pending, started, running, stopped, completed
-			marketData: null,
-			openPrice: null,	// priceToBeat
-			closePrice: null,	// finalPrice
-			openPriceTimestamp: null,
-			closePriceTimestamp: null,
-			closeMarketTimestamp: null,
-			trades: [],
+			openPrice: null,			// priceToBeat
+			closePrice: null,			// finalPrice
+			openPriceTimestamp: null,	// timestamp of openPrice
+			closePriceTimestamp: null,	// timestamp of closePrice
+			closeMarketTimestamp: null,	// timestamp of closeMarket
+			marketData: await fetchMarketBySlugFromGamma(marketSlug)
 		}
 
+		await this.cacheMarket(market)
+		await this.saveMarket(market)
+
+		console.log('createMarket:', market.slug, market.marketData)
 		return market
 	}
 
@@ -335,6 +330,7 @@ class PolymarketApi {
 					market.openPriceTimestamp = result.timestamp || null
 
 					await api.cacheMarket(market)	//update market cache
+					await api.saveMarket(market)	//save market to file
 					resolve(result)
 
 				}else{
@@ -433,6 +429,7 @@ class PolymarketApi {
 		console.log('setCurrentDay:', this.currentDay)
 	}
 
+	
 	// ---------------------------------------------------------------------------- onTickerLog
 	async onTickerLog(symbol: string, timestamp: number, price: number) {
 		if (!this.currentDay || timestamp > this.currentDay.nextDay) this.setCurrentDay(timestamp)
@@ -448,10 +445,11 @@ class PolymarketApi {
 		this.streams.get(symbol + '-' + this.currentDay.dayString)?.write(timestamp + ';' + price + '\n')
 	}
 
+
 	// ---------------------------------------------------------------------------- onTradeLog
 	async onTradeLog(symbol: string, slug: string, log: string) {
 		if (!this.streams.has(slug)) {
-			const dirPath = this.rootPath + 'trades/' + symbol + '/' + this.currentDay.dayString
+			const dirPath = this.rootPath + 'markets/' + symbol + '/' + this.currentDay.dayString
 			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
 			const filePath = dirPath + '/' + slug + '.log'
 			console.log('createWriteStream:', filePath)
@@ -460,6 +458,7 @@ class PolymarketApi {
 
 		this.streams.get(slug)?.write(log + '\n')
 	}
+
 
 	// ---------------------------------------------------------------------------- saveMarket
 	async saveMarket(market: Market): Promise<void> {

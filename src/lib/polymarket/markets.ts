@@ -163,7 +163,8 @@ console.log('full market data:', marketData)
 				marketData.marketMakerAddress || marketData.market_maker_address || '',
 			outcomes: outcomes,
 			createdAt: marketData.createdAt,
-			updatedAt: marketData.updatedAt
+			updatedAt: marketData.updatedAt,
+			sourceData: marketData
 		}
 
 		// Cache the market
