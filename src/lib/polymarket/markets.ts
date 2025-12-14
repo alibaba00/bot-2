@@ -268,7 +268,8 @@ export async function fetchMarketFromGamma(conditionId: string): Promise<MarketD
 				marketData.marketMakerAddress || marketData.market_maker_address || '',
 			outcomes: outcomes,
 			createdAt: marketData.createdAt,
-			updatedAt: marketData.updatedAt
+			updatedAt: marketData.updatedAt,
+			sourceData: marketData
 		}
 
 		console.log('Parsed market from Gamma API (by ID):', {
@@ -409,7 +410,8 @@ export async function fetchMarket(conditionId: string, useCache = false): Promis
 				volume: parseFloat(o.volume || '0')
 			})),
 			createdAt: marketData.created_at,
-			updatedAt: marketData.updated_at
+			updatedAt: marketData.updated_at,
+			sourceData: marketData
 		}
 
 		// Cache the market

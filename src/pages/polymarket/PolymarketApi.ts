@@ -27,12 +27,6 @@ interface CryptoPriceResponse {
 	cached?: boolean
 }
 
-interface MarketsMap {
-	[marketName: string]: {
-		[slug: string]: Market
-	}
-}
-
 
 // ---------------------------------------------------------------------------- useStore
 export const useStore = create(() => ({

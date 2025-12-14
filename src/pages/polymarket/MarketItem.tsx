@@ -1,8 +1,7 @@
-import { useEffect, useState, useRef } from "react";
-import PolymarketApi from "./PolymarketApi";
-import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
-import type { Market, MarketData, MarketState } from "@/lib/polymarket/types";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
+import type { Market, MarketState } from "@/lib/polymarket/types";
+import { useEffect, useRef, useState } from "react";
+import PolymarketApi from "./PolymarketApi";
 
 
 

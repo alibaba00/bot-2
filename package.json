@@ -1,7 +1,7 @@
 {
-	"name": "demo-app-template",
+	"name": "polymarket-bot",
 	"private": true,
-	"version": "1.0.7",
+	"version": "1.0.8",
 	"type": "module",
 	"description": "Polymarket Bot",
 	"author": "a.lang@jtm.digital",
@@ -18,8 +18,8 @@
 		"lint": "eslint ."
 	},
 	"build": {
-		"appId": "com.demo.app.template",
-		"productName": "Demo App Template",
+		"appId": "com.polymarket.bot",
+		"productName": "Polymarket Bot",
 		"directories": {
 			"output": "dist",
 			"buildResources": "build"

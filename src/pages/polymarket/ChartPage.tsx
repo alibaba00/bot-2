@@ -1,12 +1,10 @@
-import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
-import { ResizablePanelGroup } from "@/components/ui/resizable";
+import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { Button } from "@/components/ui/button";
 import * as PolymarketChart from "./PolymarketChart";
-import PolymarketApi from "./PolymarketApi";
 
 
 const content = [

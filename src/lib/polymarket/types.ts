@@ -38,7 +38,7 @@ export interface MarketData {
 	outcomes: MarketOutcome[]
 	createdAt?: string
 	updatedAt?: string,
-	sourceData: any
+	sourceData: any | null
 }
 
 export interface MarketOutcome {
