@@ -11,12 +11,14 @@ export interface Market {
 	endTimestamp: number
 	state: MarketState
 	marketData: MarketData | null
+	closed: boolean
 	openPrice: number | null	// priceToBeat
 	closePrice: number | null	// finalPrice
 	openPriceTimestamp: number | null
 	closePriceTimestamp: number | null
 	closeMarketTimestamp: number | null	
 	chartData: any | null
+	outcome: 'up' | 'down' | null
 }
 
 

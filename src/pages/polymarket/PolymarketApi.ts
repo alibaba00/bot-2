@@ -163,16 +163,19 @@ class PolymarketApi {
 			startTimestamp,				//e.g. 1765584900000
 			endTimestamp,				//e.g. 1765584900000 + 15 * 60 * 1000
 			state: 'init',				//init, pending, started, running, stopped, closed, failed
+			closed: false,				//false: market is not closed, true: market is closed
 			openPrice: null,			// priceToBeat
 			closePrice: null,			// finalPrice
 			openPriceTimestamp: null,	// timestamp of openPrice
 			closePriceTimestamp: null,	// timestamp of closePrice
 			closeMarketTimestamp: null,	// timestamp of closeMarket
 			marketData: await fetchMarketBySlugFromGamma(marketSlug),
-			chartData: null
+			chartData: null,
+			outcome: null
 		}
 
 		if (market.marketData?.closed) {
+			market.closed = true
 			const priceData = await this.getCryptoPrice(market)
 			console.log('priceData:', priceData)
 			if (priceData?.openPrice) {
@@ -182,6 +185,10 @@ class PolymarketApi {
 			if (priceData?.closePrice) {
 				market.closePrice = priceData.closePrice
 				market.closePriceTimestamp = priceData.timestamp || null
+			}
+			const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
+			if (outcome !== market.outcome) {
+				market.outcome = outcome
 			}
 		}
 
@@ -333,7 +340,7 @@ class PolymarketApi {
 
 	// ---------------------------------------------------------------------------- cacheMarket
 	async cacheMarket(market: Market): Promise<void> {
-		console.log('cacheMarket:', market.slug, market.openPrice, market.closePrice)
+		console.log('market cached:', market.slug, market.openPrice, market.closePrice)
 		await cache.setItem(market.slug, market)
 	}
 
@@ -390,6 +397,7 @@ class PolymarketApi {
 
 				market.closeMarketTimestamp = Date.now()
 				market.state = 'closed'
+				market.closed = true
 
 				await api.cacheMarket(market)	//update market cache
 				await api.saveMarket(market)
@@ -494,13 +502,13 @@ class PolymarketApi {
 		const day = String(dateObj.getUTCDate()).padStart(2, '0')
 		let marketDay = `${year}-${month}-${day}`
 
-		console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
+		// console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
 		const dirPath = this.rootPath + 'markets/' + symbol + '/' + marketDay
 		if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
 		const filePath = dirPath + '/' + market.slug + '.json'
 
 		await fsPromises?.writeFile(filePath, JSON.stringify(market, null, '\t'))
-		console.log('saved market to:', filePath)
+		console.log('market saved to:', filePath)
 	}
 
 }

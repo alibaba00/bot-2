@@ -100,7 +100,7 @@ export const updateAllMarketData = async () => {
 	for (const symbol of Object.keys(data)) {
 		for (const date of Object.keys(data[symbol])) {
 			for (const file of data[symbol][date]) {
-if (updatedFiles > 3) break
+// if (updatedFiles >= 100) break
 				updatedFiles++
 				console.log('updatedFiles:', updatedFiles, '/', totalFiles, file)
 				await updateMarketData(symbol, date, file)
@@ -133,9 +133,16 @@ export const updateMarketData = async (symbol: string, date: string, file: strin
 	if (!market) return
 	// console.log('market:', market)
 
+	if (!market.marketData
+		|| (!market.marketData.closed && Date.parse(market.marketData.endDate || '') < Date.parse(date))) {
+		console.log('update marketData:', slug)
+		market.marketData = await PolymarketApi.fetchMarketBySlug(slug)
+		updated = true
+	}
+
 	if (market.marketData?.closed && (!market.openPrice || !market.closePrice)) {
 		const priceData = await PolymarketApi.getCryptoPrice(market)
-		console.log('priceData:', priceData)
+		console.log('update priceData:', priceData)
 		if (priceData?.openPrice) {
 			market.openPrice = priceData.openPrice
 			market.openPriceTimestamp = priceData.timestamp || null
@@ -147,13 +154,25 @@ export const updateMarketData = async (symbol: string, date: string, file: strin
 		updated = true
 	}
 
-	if (!market.chartData) {
-		market.chartData = await getChartData(market, logFilePath)
-		updated = true
+	if (market.openPrice && market.closePrice) {
+		if (!market.closed){
+			console.log('update market closed:', market.slug)
+			market.closed = true
+			updated = true
+		}
+		const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
+		if (outcome !== market.outcome) {
+			console.log('update outcome:', outcome)
+			market.outcome = outcome
+			updated = true
+		}
 	}
-	
-	/// update chart data here
 
+	// if (!market.chartData?.price.length) {
+	// 	market.chartData = await getChartData(market, logFilePath)
+	// 	updated = true
+	// }
+	
 	if (updated) {
 		await PolymarketApi.cacheMarket(market)
 		await PolymarketApi.saveMarket(market)
@@ -163,6 +182,13 @@ export const updateMarketData = async (symbol: string, date: string, file: strin
 
 
 // ---------------------------------------------------------------------------- getChartData
+// data sample: {
+//     "timestamp": 1765406957241,
+//     "direction": "Up",
+//     "type": "SELL",
+//     "price": 0.36,
+//     "volume": 15
+// }
 export const getChartData = async (market: Market, logFilePath: string) => {
 	console.log('getChartData:', market, logFilePath)
 	const logData = await fsPromises.readFile(logFilePath, 'utf8')
@@ -172,15 +198,28 @@ export const getChartData = async (market: Market, logFilePath: string) => {
 		const [timestamp, direction, type, price, volume] = line.split(';')
 		return { timestamp: parseInt(timestamp), direction, type, price: parseFloat(price), volume: parseFloat(volume) }
 	}).filter((item) => item.timestamp > 0 && item.price > 0)
-	console.log('data:', data)
 
-	const chartData = {
-		up: [],
-		down: [],
-		price: [],
-	}
-	return chartData
-// return null
+	const up: any = []
+	const down: any = []
+	const price: any = []
+	const last: any = {up: null, down: null, price: null}
+
+	data.forEach((item) => {
+		if (item.direction === 'Up') {
+			if (last.up !== item.price) {
+				last.up = item.price
+				up.push([item.timestamp, item.price] as any)
+			}
+		} else {
+			if (last.down !== item.price) {
+				last.down = item.price
+				down.push([item.timestamp, item.price] as any)
+			}
+		}
+		// price.push([item.timestamp, item.price])
+	})
+
+	return {up, down, price} as any
 }
 
 
