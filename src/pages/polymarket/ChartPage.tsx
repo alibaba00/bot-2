@@ -155,7 +155,7 @@ export default function ChartPage() {
 			case 'market':
 				// const markets = await PolymarketChart.getMarketDataFromDate(activeNode?.value, selectedDate)
 				// console.log('markets:', markets)
-				let marketData = await PolymarketChart.getMarketChartData(activeNode?.value, selectedDate)
+				let marketData = await PolymarketChart.getMarketChartData(null, activeNode?.value, selectedDate)
 				marketData = marketData.filter((item) => item.direction === 'Up')
 				setChartOptions({
 					...lineChartOptions,

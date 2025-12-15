@@ -118,9 +118,9 @@ class PolymarketApi {
 	// date: e.g. 2025-12-10
 	// minutes: e.g. 15
 	// return: Market
-	async getMarketFromDate(symbol: string, type: string, date: Date, minutes: number): Promise<Market> {
-		const timestamp = this.getUTCTimestamp(date, minutes)
+	async createMarketFromDate(symbol: string, type: string, date: Date, minutes: number): Promise<Market> {
 		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
+		const timestamp = this.getUTCTimestamp(date, minutes)	//e.g. 1765584900
 		const marketSlug = `${marketName}-${timestamp}`	//e.g. btc-updown-15m-1765144800
 
 		// const cachedMarket = await cache.getItem<Market>(marketSlug)
@@ -131,13 +131,29 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- createMarketFromSlug
+	// slug: e.g. btc-updown-15m-1765584900
+	// return: Market
+	async createMarketFromSlug(slug: string): Promise<Market | null> {
+		const symbol = slug.split('-')[0]		//e.g. btc
+		const split = slug.split('-')
+		const marketName = split[1] + '-' + split[2]	//e.g. updown-15m
+		const timestamp = parseInt(split[3])	//e.g. 1765584900
+		const marketSlug = split.join('-')	//e.g. btc-updown-15m-1765584900
+		console.log('createMarketFromSlug:', symbol, marketName, timestamp, marketSlug)
+		return await this.createMarket(symbol, marketName, timestamp, marketSlug)
+	}
+
+	
 	// ---------------------------------------------------------------------------- createMarket
+	// symbol: e.g. btc
+	// marketName: e.g. btc-updown-15m
+	// timestamp: e.g. 1765584900
+	// marketSlug: e.g. btc-updown-15m-1765584900
+	// return: Market
 	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string): Promise<Market> {
 		const startTimestamp = timestamp * 1000 // Convert to milliseconds
 		const endTimestamp = startTimestamp + 15 * 60 * 1000 // Add 15 minutes
-
-		// console.log('startTimestamp', new Date(startTimestamp).toISOString())
-		// console.log('endTimestamp', new Date(endTimestamp).toISOString())
 
 		const market: Market = {
 			symbol: symbol.toUpperCase(),
@@ -146,13 +162,27 @@ class PolymarketApi {
 			timestamp,					//e.g. 1765584900
 			startTimestamp,				//e.g. 1765584900000
 			endTimestamp,				//e.g. 1765584900000 + 15 * 60 * 1000
-			state: 'init',	//init, pending, started, running, stopped, completed
+			state: 'init',				//init, pending, started, running, stopped, closed, failed
 			openPrice: null,			// priceToBeat
 			closePrice: null,			// finalPrice
 			openPriceTimestamp: null,	// timestamp of openPrice
 			closePriceTimestamp: null,	// timestamp of closePrice
 			closeMarketTimestamp: null,	// timestamp of closeMarket
-			marketData: await fetchMarketBySlugFromGamma(marketSlug)
+			marketData: await fetchMarketBySlugFromGamma(marketSlug),
+			chartData: null
+		}
+
+		if (market.marketData?.closed) {
+			const priceData = await this.getCryptoPrice(market)
+			console.log('priceData:', priceData)
+			if (priceData?.openPrice) {
+				market.openPrice = priceData.openPrice
+				market.openPriceTimestamp = priceData.timestamp || null
+			}
+			if (priceData?.closePrice) {
+				market.closePrice = priceData.closePrice
+				market.closePriceTimestamp = priceData.timestamp || null
+			}
 		}
 
 		await this.cacheMarket(market)

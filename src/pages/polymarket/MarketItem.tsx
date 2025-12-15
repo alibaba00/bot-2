@@ -89,7 +89,7 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 
 	useEffect(() => {
 		console.log('---init MarketItem:', symbol, type)
-		PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
+		PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
 		.then((market) => {
 			console.log('market:', market)
 			setMarket(market)
@@ -98,14 +98,8 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 
 
 	useEffect(() => {
-		if (!tradingActive){
-			disconnectMarket()	
-			// if (market?.openPrice) setMarketState('running')
-			// else setMarketState('started')
-		} 
-		if (tradingActive && market?.state === 'running'){
-			connectMarket()
-		}
+		if (!tradingActive) disconnectMarket()	
+		if (tradingActive) connectMarket()
 	}, [tradingActive])
 
 
@@ -153,15 +147,18 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 					// assets.current[outcome.title] = outcome.id
 				})
 
-				let _state = PolymarketApi.getMarketState(market) as MarketState
+				let _state = PolymarketApi.getMarketState(market) as MarketState	//-> pending | started
 				setMarketState(_state)
 				return;
 
+			// from getMarketState
 			case 'pending':		//wait till market starts
 				return;
 
 			// from getMarketState
 			case 'started':		//wait till market price is available
+				connectMarket() //--> start trading
+
 				const result = await PolymarketApi.pollingOpenPrice(market)
 				if (result) {
 					console.log('---started MarketItem:', market.slug, market)
@@ -171,15 +168,16 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 
 			// from marketCompleted
 			case 'running':		//market is running
-				connectMarket() //--> trading
+				// connectMarket() //--> trading
 				return;
 
 			case 'stopped':		//market is stopped
 				disconnectMarket()
 
-				PolymarketApi.pollingClosePrice(market)
+				PolymarketApi.pollingClosePrice(market)	//polling for final price in the background
 
-				PolymarketApi.getMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
+				// create next market
+				PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
 				.then((nextMarket) => {
 					console.log('next market:', nextMarket)
 					setMarket(nextMarket)	//-> 
@@ -199,7 +197,8 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	}
 
 	function connectMarket() {
-		if (!tradingActive || !market || clobMarketWs.status === 'connected' || market.state !== 'running') return;
+		if (!tradingActive || !market || clobMarketWs.status === 'connected'
+			|| (market.state !== 'running' && market.state !== 'started')) return;
 		clobMarketWs.connect()
 		console.log('clobMarketWs status', clobMarketWs.status)
 	}

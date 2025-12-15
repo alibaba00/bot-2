@@ -1,3 +1,4 @@
+import type { Market } from '@/lib/polymarket/types';
 import PolymarketApi from './PolymarketApi'
 
 const isElectron = window?.navigator.userAgent.includes('Electron')
@@ -80,20 +81,6 @@ export const getAllMarketLogs = async (symbol: string | null = null, date: Date 
 }
 
 
-// ---------------------------------------------------------------------------- updateMarketData
-export const updateMarketData = async (symbol: string, date: string, file: string) => {
-	const filePath = `${PolymarketApi.rootPath}markets/${symbol}/${date}/${file}`
-	const fileContent = await fsPromises.readFile(filePath, 'utf8')
-	if (!fileContent) return
-
-	// const lines = fileContent.split('\n')
-	// const data = lines.map((line) => {
-	// 	const [timestamp, direction, type, price, volume] = line.split(';')
-	// 	return { timestamp: parseInt(timestamp), direction, type, price: parseFloat(price), volume: parseFloat(volume) }
-	// }).filter((item) => item.timestamp > 0 && item.price > 0)
-}
-
-
 // ---------------------------------------------------------------------------- updateAllMarketData
 export const updateAllMarketData = async () => {
 	console.log('Updating all market data...')
@@ -113,68 +100,87 @@ export const updateAllMarketData = async () => {
 	for (const symbol of Object.keys(data)) {
 		for (const date of Object.keys(data[symbol])) {
 			for (const file of data[symbol][date]) {
-if (updatedFiles > 10) break
+if (updatedFiles > 3) break
 				updatedFiles++
 				console.log('updatedFiles:', updatedFiles, '/', totalFiles, file)
-				// console.log('file:', file)
-				// await updateMarketData(symbol, date, file)
+				await updateMarketData(symbol, date, file)
 			}
 		}
 	}
 
-	// PolymarketApi.cache.keys().then(async (keys) => {
-	// 	for (const key of keys) {
-	// 		// console.log('key:', key)
-	// 		const market = await PolymarketApi.cache.getItem(key)
-	// 		const symbol = market?.symbol.toLowerCase()
-	// 		const rootPath = PolymarketApi.rootPath
-	// 		const dateString = DateFormat(new Date(market?.startTimestamp))
-	// 		const marketFilePath = `${rootPath}markets/${symbol}/${dateString}`
-	// 		const marketFile = `${marketFilePath}/${market?.slug}.json`
-	// 		const tradesFile = `${rootPath}markets/${symbol}/${dateString}/${market?.slug}.log`
-	// 		// console.log('filePath:', marketFile, tradesFile)
+	console.log('complete!')
+}
 
-	// 		if (!market.closePrice){
-	// 			console.log('closedPrice missing:', market.slug)
-	// 			const cryptoPrice = await PolymarketApi.getCryptoPrice(market)
-	// 			console.log('cryptoPrice:', cryptoPrice)
-	// 			// if (cryptoPrice){
-	// 			// 	market.closePrice = cryptoPrice.closePrice
-	// 			// 	market.closePriceTimestamp = cryptoPrice.timestamp || null
-	// 			// 	await PolymarketApi.cacheMarket(market)
-	// 			// 	await PolymarketApi.saveMarket(market)
-	// 			// 	console.log('closedPrice updated:', market.slug)
-	// 			// }
-	// 		}
-	/*			
-				if (!fs.existsSync(marketFile)) {	
-					// console.log('marketFile not found:', marketFile)
-					if (!fs.existsSync(marketFilePath)) {
-						fs.mkdirSync(marketFilePath, {recursive: true})
-					}
-					await fsPromises.writeFile(marketFile, JSON.stringify(market, null, '\t'))
-					console.log('market saved:', marketFile)
-					continue
-				}
-	*/
 
-	// if (!fs.existsSync(tradesFile)) {
-	// 	console.log('tradesFile not found:', tradesFile)
-	// 	continue
-	// }
+// ---------------------------------------------------------------------------- updateMarketData
+export const updateMarketData = async (symbol: string, date: string, file: string) => {
+	const logFilePath = `${PolymarketApi.rootPath}markets/${symbol}/${date}/${file}`
+	const jsonFilePath = `${PolymarketApi.rootPath}markets/${symbol}/${date}/${file.replace('.log', '.json')}`
 
-	// const trades = await fsPromises.readFile(tradesFile, 'utf8')
-	// const tradesData = trades.split('\n')
-	// console.log('tradesData:', tradesData)
-	// const fileContent = await fsPromises.readFile(filePath, 'utf8')
-	// const lines = fileContent.split('\n')
-	// const data = lines.map((line) => {
-	// 	const [timestamp, price] = line.split(';')
-	// 	return { timestamp: parseInt(timestamp), price: parseFloat(price) }
-	// }).filter((item) => item.timestamp > 0 && item.price > 0)
-	// console.log('symbol:', symbol)
-	// }
-	// })
+	const slug = file.replace('.log', '')
+	let updated = false
+	let market: Market | null = null
+	// console.log('jsonFilePath:', jsonFilePath)
+
+	if (!fs.existsSync(jsonFilePath)) {
+		console.log('jsonFile not found:', jsonFilePath)
+		market = await PolymarketApi.createMarketFromSlug(slug)
+
+	}else{
+		const jsonFileContent = await fsPromises.readFile(jsonFilePath, 'utf8')
+		market = JSON.parse(jsonFileContent) as Market
+	}
+	if (!market) return
+	// console.log('market:', market)
+
+	if (market.marketData?.closed && (!market.openPrice || !market.closePrice)) {
+		const priceData = await PolymarketApi.getCryptoPrice(market)
+		console.log('priceData:', priceData)
+		if (priceData?.openPrice) {
+			market.openPrice = priceData.openPrice
+			market.openPriceTimestamp = priceData.timestamp || null
+		}
+		if (priceData?.closePrice) {
+			market.closePrice = priceData.closePrice
+			market.closePriceTimestamp = priceData.timestamp || null
+		}
+		updated = true
+	}
+
+	if (!market.chartData) {
+		market.chartData = await getChartData(market, logFilePath)
+		updated = true
+	}
+	
+	/// update chart data here
+
+	if (updated) {
+		await PolymarketApi.cacheMarket(market)
+		await PolymarketApi.saveMarket(market)
+	}
+
+}
+
+
+// ---------------------------------------------------------------------------- getChartData
+export const getChartData = async (market: Market, logFilePath: string) => {
+	console.log('getChartData:', market, logFilePath)
+	const logData = await fsPromises.readFile(logFilePath, 'utf8')
+	const lines = logData.split('\n')
+
+	const data = lines.map((line) => {
+		const [timestamp, direction, type, price, volume] = line.split(';')
+		return { timestamp: parseInt(timestamp), direction, type, price: parseFloat(price), volume: parseFloat(volume) }
+	}).filter((item) => item.timestamp > 0 && item.price > 0)
+	console.log('data:', data)
+
+	const chartData = {
+		up: [],
+		down: [],
+		price: [],
+	}
+	return chartData
+// return null
 }
 
 
@@ -221,8 +227,9 @@ export const getMarketDataFromDate = (symbol: string, date: Date) => {
 // 1765497629459;Down;SELL;0.46;6
 // 1765497629467;Up;BUY;0.55;19.581817
 // 1765497629473;Down;SELL;0.45;20
-export const getMarketChartData = async (_symbol: string, _date: Date) => {
-	const filePath = 'A:/DATA/polymarket/markets/btc/2025-12-13/btc-updown-15m-1765584900.log'
+export const getMarketChartData = async (filePath: string | null = null,
+	 _symbol: string | null = null, _date: Date | null = null) => {
+	filePath = filePath || 'A:/DATA/polymarket/markets/btc/2025-12-13/btc-updown-15m-1765584900.log'
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
 	const lines = fileContent.split('\n')

@@ -16,6 +16,7 @@ export interface Market {
 	openPriceTimestamp: number | null
 	closePriceTimestamp: number | null
 	closeMarketTimestamp: number | null	
+	chartData: any | null
 }
 
 
