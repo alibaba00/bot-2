@@ -172,6 +172,9 @@ export default function ChartPage() {
 			case 'update data':
 				PolymarketChart.updateAllMarketData()
 				break
+			case 'test data':
+				PolymarketChart.testData()
+				break
 		}
 	}
 
@@ -185,6 +188,7 @@ export default function ChartPage() {
 						<Button variant='outline' onClick={() => onClick('line')}>Line</Button>
 						<Button variant='outline' onClick={() => onClick('market')}>Market</Button>
 						<Button variant='outline' onClick={() => onClick('update data')}>update data</Button>
+						<Button variant='outline' onClick={() => onClick('test data')}>test data</Button>
 					</ButtonGroup>
 
 					<ReactEcharts
