@@ -7,6 +7,7 @@ export interface Market {
 	marketName: string
 	slug: string
 	timestamp: number
+	dayString: string
 	startTimestamp: number
 	endTimestamp: number
 	state: MarketState

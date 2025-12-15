@@ -160,6 +160,7 @@ class PolymarketApi {
 			marketName: marketName,		//e.g. btc-updown-15m
 			slug: marketSlug,			//e.g. btc-updown-15m-1765584900
 			timestamp,					//e.g. 1765584900
+			dayString: this.getUTCDateFormat(new Date(timestamp * 1000)),	//e.g. 2025-12-10
 			startTimestamp,				//e.g. 1765584900000
 			endTimestamp,				//e.g. 1765584900000 + 15 * 60 * 1000
 			state: 'init',				//init, pending, started, running, stopped, closed, failed
@@ -202,6 +203,7 @@ class PolymarketApi {
 
 	// ---------------------------------------------------------------------------- getUTCTimestamp
 	// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
+	// date: e.g. 2025-12-10
 	getUTCTimestamp(date: Date | number | null, minutes: number = 15): number {
 		if (!date) date = new Date()
 		const dateTime = date instanceof Date ? date.getTime() : date
@@ -219,13 +221,11 @@ class PolymarketApi {
 		// Format dates without milliseconds (API expects format: 2025-12-12T08:45:00Z)
 		const formatDateWithoutMs = (timestamp: number): string => {
 			const date = new Date(timestamp)
-			const year = date.getUTCFullYear()
-			const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-			const day = String(date.getUTCDate()).padStart(2, '0')
 			const hours = String(date.getUTCHours()).padStart(2, '0')
 			const minutes = String(date.getUTCMinutes()).padStart(2, '0')
 			const seconds = String(date.getUTCSeconds()).padStart(2, '0')
-			return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`
+			const dayString = this.getUTCDateFormat(date)
+			return `${dayString}T${hours}:${minutes}:${seconds}Z`
 		}
 		
 		const eventStartTime = formatDateWithoutMs(market.startTimestamp)
@@ -448,11 +448,8 @@ class PolymarketApi {
 
 	setCurrentDay(timestamp: number) {
 		const dateObj = new Date(timestamp)
-		const year = dateObj.getUTCFullYear()
-		const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0')
-		const day = String(dateObj.getUTCDate()).padStart(2, '0')
 		const nextDay = Date.UTC(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate() + 1, 0, 0, 0, 0)
-		const dayString = `${year}-${month}-${day}`
+		const dayString = this.getUTCDateFormat(dateObj)
 
 		this.currentDay = {
 			nextDay,
@@ -464,7 +461,7 @@ class PolymarketApi {
 	
 	// ---------------------------------------------------------------------------- onTickerLog
 	async onTickerLog(symbol: string, timestamp: number, price: number) {
-		if (!this.currentDay || timestamp > this.currentDay.nextDay) this.setCurrentDay(timestamp)
+		if (!this.currentDay || timestamp >= this.currentDay.nextDay) this.setCurrentDay(timestamp)
 
 		if (!this.streams.has(symbol + '-' + this.currentDay.dayString)){
 			const dirPath = this.rootPath + 'tickers/' + symbol
@@ -494,16 +491,10 @@ class PolymarketApi {
 
 	// ---------------------------------------------------------------------------- saveMarket
 	async saveMarket(market: Market): Promise<void> {
-		let ts = market.startTimestamp
 		let symbol = market.symbol.toLowerCase()
-		const dateObj = new Date(ts)
-		const year = dateObj.getUTCFullYear()
-		const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0')
-		const day = String(dateObj.getUTCDate()).padStart(2, '0')
-		let marketDay = `${year}-${month}-${day}`
 
 		// console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
-		const dirPath = this.rootPath + 'markets/' + symbol + '/' + marketDay
+		const dirPath = this.rootPath + 'markets/' + symbol + '/' + market.dayString
 		if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
 		const filePath = dirPath + '/' + market.slug + '.json'
 
@@ -511,6 +502,16 @@ class PolymarketApi {
 		console.log('market saved to:', filePath)
 	}
 
+
+	// ---------------------------------------------------------------------------- getDateFormat
+	// Format date to yyyy-mm-dd
+	getUTCDateFormat(date: Date): string {
+		const pad = (n: number) => n.toString().padStart(2, '0')
+		const year = date.getUTCFullYear()
+		const month = pad(date.getUTCMonth() + 1)
+		const day = pad(date.getUTCDate())
+		return `${year}-${month}-${day}`
+	}
 }
 
 export default new PolymarketApi()

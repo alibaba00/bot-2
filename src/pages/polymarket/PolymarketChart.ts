@@ -69,7 +69,7 @@ export const getAllMarketLogs = async (symbol: string | null = null, date: Date 
 		out[symbol] = await walkDir(path.join(rootPath, symbol));
 	} else if (symbol && date) {
 		// Only for given symbol & date
-		const dateString = DateFormat(date)
+		const dateString = PolymarketApi.getUTCDateFormat(date)
 		const files = await walkDir(path.join(rootPath, symbol, dateString), symbol, dateString);
 		if (files && Array.isArray(files)) {
 			out[symbol] = { [dateString as string]: files } as any;
@@ -100,7 +100,7 @@ export const updateAllMarketData = async () => {
 	for (const symbol of Object.keys(data)) {
 		for (const date of Object.keys(data[symbol])) {
 			for (const file of data[symbol][date]) {
-// if (updatedFiles >= 100) break
+if (updatedFiles >= 120) break
 				updatedFiles++
 				console.log('updatedFiles:', updatedFiles, '/', totalFiles, file)
 				await updateMarketData(symbol, date, file)
@@ -114,13 +114,13 @@ export const updateAllMarketData = async () => {
 
 // ---------------------------------------------------------------------------- updateMarketData
 export const updateMarketData = async (symbol: string, date: string, file: string) => {
-	const logFilePath = `${PolymarketApi.rootPath}markets/${symbol}/${date}/${file}`
 	const jsonFilePath = `${PolymarketApi.rootPath}markets/${symbol}/${date}/${file.replace('.log', '.json')}`
 
 	const slug = file.replace('.log', '')
 	let updated = false
 	let market: Market | null = null
 	// console.log('jsonFilePath:', jsonFilePath)
+
 
 	if (!fs.existsSync(jsonFilePath)) {
 		console.log('jsonFile not found:', jsonFilePath)
@@ -132,6 +132,12 @@ export const updateMarketData = async (symbol: string, date: string, file: strin
 	}
 	if (!market) return
 	// console.log('market:', market)
+
+	if (!market.dayString) {
+		market.dayString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
+		updated = true
+		console.log('update dayString:', market.startTimestamp, market.dayString)
+	}
 
 	if (!market.marketData
 		|| (!market.marketData.closed && Date.parse(market.marketData.endDate || '') < Date.parse(date))) {
@@ -168,10 +174,11 @@ export const updateMarketData = async (symbol: string, date: string, file: strin
 		}
 	}
 
-	// if (!market.chartData?.price.length) {
-	// 	market.chartData = await getChartData(market, logFilePath)
-	// 	updated = true
-	// }
+	if (!market.chartData?.ticker.length) {
+		const logFilePath = `${PolymarketApi.rootPath}markets/${symbol}/${date}/${file}`
+		market.chartData = await getChartData(market, logFilePath)
+		updated = true
+	}
 	
 	if (updated) {
 		await PolymarketApi.cacheMarket(market)
@@ -201,9 +208,12 @@ export const getChartData = async (market: Market, logFilePath: string) => {
 
 	const up: any = []
 	const down: any = []
-	const price: any = []
-	const last: any = {up: null, down: null, price: null}
-
+	const last: any = {up: null, down: null, ticker: null}
+	const tickerData = await getChartTickerData(market.symbol, new Date(market.startTimestamp))
+	const ticker = tickerData
+		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
+		.map((item) => [item.timestamp, item.price] as any)
+	
 	data.forEach((item) => {
 		if (item.direction === 'Up') {
 			if (last.up !== item.price) {
@@ -216,28 +226,27 @@ export const getChartData = async (market: Market, logFilePath: string) => {
 				down.push([item.timestamp, item.price] as any)
 			}
 		}
-		// price.push([item.timestamp, item.price])
 	})
 
-	return {up, down, price} as any
+	return {up, down, ticker} as any
 }
 
 
 // ---------------------------------------------------------------------------- DateFormat
 // Format date to yyyy-mm-dd
-const DateFormat = (date: Date) => {
-	const pad = (n: number) => n.toString().padStart(2, '0')
-	const year = date.getFullYear()
-	const month = pad(date.getMonth() + 1)
-	const day = pad(date.getDate())
-	return `${year}-${month}-${day}`
-}
+// const DateFormat = (date: Date) => {
+// 	const pad = (n: number) => n.toString().padStart(2, '0')
+// 	const year = date.getFullYear()
+// 	const month = pad(date.getMonth() + 1)
+// 	const day = pad(date.getDate())
+// 	return `${year}-${month}-${day}`
+// }
 
 
 // ---------------------------------------------------------------------------- getMarketDataFromDate
 // Path should be like: A:/DATA/polymarket/markets/btc/2025-12-12
 export const getMarketDataFromDate = (symbol: string, date: Date) => {
-	const dateString = DateFormat(date)
+	const dateString = PolymarketApi.getUTCDateFormat(date)
 	const rootPath = PolymarketApi.rootPath
 	const symbolLower = symbol.toLowerCase()
 	const dirPath = `${rootPath}/markets/${symbolLower}/${dateString}`
@@ -284,10 +293,11 @@ export const getMarketChartData = async (filePath: string | null = null,
 // ---------------------------------------------------------------------------- getChartData
 // const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
 export const getChartTickerData = async (symbol: string, date: Date) => {
-	const dateString = DateFormat(date)
+	const dateString = PolymarketApi.getUTCDateFormat(date)
 	const rootPath = PolymarketApi.rootPath
 	const dirPath = `${rootPath}/tickers/${symbol}`
 	const filePath = `${dirPath}/${symbol}-${dateString}.log`
+	console.log('getChartTickerData:', symbol, dateString, filePath)
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
 	const lines = fileContent.split('\n')
