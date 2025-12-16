@@ -4,7 +4,9 @@ import PolymarketApi from './PolymarketApi'
 const isElectron = window?.navigator.userAgent.includes('Electron')
 const fs = isElectron ? (window as any)?.require?.('fs') : null
 const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
-const path = (window as any)?.require?.('path');
+// const path = (window as any)?.require?.('path');
+
+const tickerData = {} // ticker data cache
 
 
 // ---------------------------------------------------------------------------- 
@@ -21,29 +23,102 @@ export const testData = async () => {
 	const data = await getAllMarkets()
 	console.log('data:', data)
 
-	const results: any = {}
+	const results: any = {hit:0, ups:0, dns:0}
+	let count = 0
+	const up = {}
+
+	const keys = {}
+	for (const key of await PolymarketApi.cache.keys()) keys[key] = key
 
 	for (const symbol of Object.keys(data)) {
 		for (const date of Object.keys(data[symbol])) {
 			for (const node of data[symbol][date]) {
-				// console.log('market:', market)
-				const data = await fsPromises.readFile(node.filePath, 'utf8')
-				const market = JSON.parse(data) as Market
+// if (count ++ >= 100) break
+				let market = await PolymarketApi.cache.getItem(node.slug)
+				if (!market) {
+					const marketData = await fsPromises.readFile(node.filePath, 'utf8')
+					market = JSON.parse(marketData) as Market
+					await PolymarketApi.cacheMarket(market)
+				}
+				if (!market){
+					console.log('market not loaded:', node.slug)
+					continue
+				}
 
-				if (market.closed) {
-					// console.log('market:', node.slug, node.filePath, Date.parse(market.marketData?.endDate || ''))
-
+				if (market.chartData && market.chartData.grid === undefined && market.closed && market.outcome) {
+					market.chartData.grid = getGridData(market) as any
+					console.log('market.chartData.grid:', market.chartData.grid)
+					await PolymarketApi.cacheMarket(market)
 				}
 			}
 		}
 	}
+
+	console.log('complete!')
 }
 
 
+// ---------------------------------------------------------------------------- getGrid
+const getGridData = (market: Market): any => {
+	const tickerData = market.chartData.ticker
+	const upData = market.chartData.up
+	const downData = market.chartData.down
+	if (!upData?.length || !downData?.length || !tickerData?.length) return null
 
-// const getGrid() {
-// 	return []
+	const startTime = market.startTimestamp
+	const grid = {
+		up: [] as any[],
+		down: [] as any[],
+	}
+	let price: number
+	let nextUp: number = parseNumber(Math.ceil(upData[0][1] * 10) / 10)
+	let nextDown: number = parseNumber(nextUp - 0.1)
+	let tickerIndex = 0
+
+	for (const item of upData) {
+		if (item[1] >= nextUp) {
+			price = nextUp
+			nextUp = parseNumber(nextUp + 0.1)
+		}else if (item[1] <= nextDown) {
+			price = nextDown
+			nextDown = parseNumber(nextDown - 0.1)
+		}else continue
+
+		while (tickerData[tickerIndex][0] < item[0] && tickerIndex < tickerData.length-1) tickerIndex++
+
+		grid.up.push([item[0] - startTime, parseNumber(price), tickerData[tickerIndex][1]] as any)
+	}
+
+	nextUp = parseNumber(Math.ceil(downData[0][1] * 10) / 10)
+	nextDown = parseNumber(nextUp - 0.1)
+	tickerIndex = 0
+
+	for (const item of downData) {
+		if (item[1] >= nextUp) {
+			price = nextUp
+			nextUp = parseNumber(nextUp + 0.1)
+		}else if (item[1] <= nextDown) {
+			price = nextDown
+			nextDown = parseNumber(nextDown - 0.1)
+		}else continue
+
+		while (tickerData[tickerIndex][0] < item[0] && tickerIndex < tickerData.length-1) tickerIndex++
+
+		grid.down.push([item[0] - startTime, parseNumber(price), tickerData[tickerIndex][1]] as any)
+	}
+
+	return grid
+}
+
+
+// ------------------------------------------------------------------------ parseNumber
+// const parseNumber = (num: number, float: number | null = null) => {
+// 	if (float) num = parseFloat(num.toFixed(float))
+// 	return parseFloat(num.toPrecision(12))
 // }
+const parseNumber = (num: number) => {
+	return parseFloat(num.toFixed(12))
+}
 
 
 // ---------------------------------------------------------------------------- getAllMarketLogs
@@ -53,7 +128,7 @@ export const getAllMarkets = async (symbol: string | null = null, date: Date | n
 		return {}
 	}
 
-	const rootPath = PolymarketApi.rootPath + "markets/";
+	const rootPath = PolymarketApi.rootPath + "markets";
 
 	async function walkDir(currentPath: string, symbol?: string, date?: string) {
 		const result: any = {};
@@ -243,7 +318,7 @@ export const updateMarketData = async (date: string, filePath: string, slug: str
 //     "volume": 15
 // }
 export const getChartData = async (market: Market, logFilePath: string) => {
-	console.log('getChartData:', market, logFilePath)
+	console.log('getChartData from', logFilePath)
 	if (!fs.existsSync(logFilePath)) {
 		console.log('logFile not exists:', logFilePath)
 		return {up: [], down: [], ticker: []}
@@ -347,6 +422,11 @@ export const getMarketChartData = async (filePath: string | null = null,
 // const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
 export const getChartTickerData = async (symbol: string, date: Date) => {
 	const dateString = PolymarketApi.getUTCDateFormat(date)
+	if (tickerData[symbol]?.[dateString]) {
+		// console.log('getChartTickerData from cache:', symbol, dateString)
+		return tickerData[symbol][dateString]
+	}
+
 	const rootPath = PolymarketApi.rootPath
 	const dirPath = `${rootPath}tickers/${symbol}`
 	const filePath = `${dirPath}/${symbol}-${dateString}.log`
@@ -358,6 +438,9 @@ export const getChartTickerData = async (symbol: string, date: Date) => {
 		const [timestamp, price] = line.split(';')
 		return { timestamp: parseInt(timestamp), price: parseFloat(price) }
 	}).filter((item) => item.timestamp > 0 && item.price > 0)
+
+	tickerData[symbol] = tickerData[symbol] || {} as any
+	tickerData[symbol][dateString] = data
 
 	return data
 }

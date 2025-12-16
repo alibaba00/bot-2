@@ -274,7 +274,7 @@ class PolymarketApi {
 	// ---------------------------------------------------------------------------- fetchMarketBySlug
 	async fetchMarketBySlug(slug: string): Promise<MarketData | null> {
 		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
-		console.log(`Fetching market by slug from Gamma API: ${url}`)
+		// console.log(`Fetching market by slug from Gamma API: ${url}`)
 
 		const response = await fetch(url, {
 			method: 'GET',
