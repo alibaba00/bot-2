@@ -121,6 +121,10 @@ export default function ChartPage() {
 
 	const onClick = async (type: string) => {
 		switch (type) {
+			case 'load-full-ticker-data':
+				// PolymarketChart.testData()
+				break
+
 			case 'load-ticker-data':
 				// if (!activeNode?.value || !selectedDate) return
 				// const markets = PolymarketChart.getMarketDataFromDate(activeNode?.value, selectedDate)
@@ -184,6 +188,7 @@ export default function ChartPage() {
 			<ResizablePanel defaultSize={50}>
 				<div className='flex h-full items-center justify-center p-6 flex-col gap-4'>
 					<ButtonGroup>
+						<Button variant='outline' onClick={() => onClick('load-full-ticker-data')}>load full Ticker data</Button>
 						<Button variant='outline' onClick={() => onClick('load-ticker-data')}>load Ticker data</Button>
 						<Button variant='outline' onClick={() => onClick('line')}>Line</Button>
 						<Button variant='outline' onClick={() => onClick('market')}>Market</Button>

@@ -23,10 +23,6 @@ export const testData = async () => {
 	const data = await getAllMarkets()
 	console.log('data:', data)
 
-	const results: any = {hit:0, ups:0, dns:0}
-	let count = 0
-	const up = {}
-
 	const keys = {}
 	for (const key of await PolymarketApi.cache.keys()) keys[key] = key
 
@@ -47,7 +43,7 @@ export const testData = async () => {
 
 				if (market.chartData && market.chartData.grid === undefined && market.closed && market.outcome) {
 					market.chartData.grid = getGridData(market) as any
-					console.log('market.chartData.grid:', market.chartData.grid)
+					console.log('get-grid-data:', market.slug, market.chartData.grid)
 					await PolymarketApi.cacheMarket(market)
 				}
 			}
@@ -458,7 +454,19 @@ export const getChartMinuteData = async (symbol: string, date: Date): Promise<{ 
 		count: 0,
 	}
 	let chart = [candle]
+	let lastTimestamp = data[0].timestamp
+
 	data.forEach((item) => {
+		const diff = item.timestamp - lastTimestamp
+		if (diff > 60000) {		//there is a gap of 1 minute
+			console.log('gap:',
+				new Date(lastTimestamp).toISOString(),
+				'to',
+				new Date(item.timestamp).toISOString(),
+				(diff / 60000).toFixed(2), 'minutes')
+		}
+		lastTimestamp = item.timestamp
+
 		if (item.timestamp < nextMinute) {
 			candle.price += item.price
 			candle.count += 1
