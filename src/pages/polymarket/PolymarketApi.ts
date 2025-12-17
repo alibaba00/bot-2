@@ -340,7 +340,7 @@ class PolymarketApi {
 
 	// ---------------------------------------------------------------------------- cacheMarket
 	async cacheMarket(market: Market): Promise<void> {
-		console.log('market cached:', market.slug, market.openPrice, market.closePrice)
+		console.log('market cached:', market.slug, 'openPrice:', market.openPrice, 'closePrice:', market.closePrice)
 		await cache.setItem(market.slug, market)
 	}
 
@@ -461,6 +461,7 @@ class PolymarketApi {
 	
 	// ---------------------------------------------------------------------------- onTickerLog
 	async onTickerLog(symbol: string, timestamp: number, price: number) {
+		if (!this.get('loggingActive')) return
 		if (!this.currentDay || timestamp >= this.currentDay.nextDay) this.setCurrentDay(timestamp)
 
 		if (!this.streams.has(symbol + '-' + this.currentDay.dayString)){
@@ -477,6 +478,7 @@ class PolymarketApi {
 
 	// ---------------------------------------------------------------------------- onTradeLog
 	async onTradeLog(symbol: string, slug: string, log: string) {
+		if (!this.get('loggingActive')) return
 		if (!this.streams.has(slug)) {
 			const dirPath = this.rootPath + 'markets/' + symbol + '/' + this.currentDay.dayString
 			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
@@ -490,7 +492,8 @@ class PolymarketApi {
 
 
 	// ---------------------------------------------------------------------------- saveMarket
-	async saveMarket(market: Market): Promise<void> {
+	async saveMarket(market: Market, force: boolean = false): Promise<void> {
+		if (!force && !this.get('loggingActive')) return
 		let symbol = market.symbol.toLowerCase()
 
 		// console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)

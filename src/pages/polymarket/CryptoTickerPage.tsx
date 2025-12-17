@@ -1,14 +1,16 @@
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import MarketItem from './MarketItem'
 import PolymarketApi from './PolymarketApi'
+import { beep } from '@/lib/utils'
 
+
+var timeoutId: NodeJS.Timeout | null = null
 
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
 	const [tickerPrice, setTickerPrice] = useState<{timestamp: number, price: number} | null>(null)
 	const tickerActive = PolymarketApi.use('tickerActive')
-
-
+	
 	// Convert symbol to Chainlink format (e.g., "btc" -> "btc/usd")
 	const chainlinkSymbol = `${symbol.toLowerCase()}/usd`
 
@@ -31,6 +33,14 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 
 
 	useEffect(() => {
+		if (timeoutId) clearTimeout(timeoutId)
+		timeoutId = setTimeout(async () => {	//30 seconds timeout of missing ticker price
+			beep()
+			chainlinkWs.disconnect()	//disconnect and reconnect to force a new connection
+			await new Promise(resolve => setTimeout(resolve, 1000))	//wait 1 second before reconnecting
+			if (tickerActive) chainlinkWs.connect()		//connect to get a new price
+		}, 30000)
+
 		if (tickerPrice) {
 			PolymarketApi.onTickerLog(symbol.toLowerCase(), tickerPrice.timestamp, tickerPrice.price)
 		}
@@ -38,6 +48,7 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 
 
 	useEffect(() => {
+		if (timeoutId) clearTimeout(timeoutId)
 		if (!tickerActive) chainlinkWs.disconnect()
 		if (tickerActive && chainlinkWs.status === 'disconnected') chainlinkWs.connect()
 	}, [tickerActive])
@@ -48,8 +59,8 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		if (price === null) return 'Loading...'
 		// Format as "12.345,67 USD"
 		return new Intl.NumberFormat('de-DE', {
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 2
+			minimumFractionDigits: price >= 100 ? 2 : 4,
+			maximumFractionDigits: price >= 100 ? 2 : 4
 		}).format(price)
 	}
 

@@ -5,6 +5,32 @@ const os = (window as any).require?.('os')
 const process = (window as any).process
 const navigator = (window as any).navigator
 
+const audioCtx = new (window as any).AudioContext();
+// https://stackoverflow.com/questions/879152/how-do-i-make-javascript-beep
+
+
+// ---------------------------------------------------------------------------- beep
+export const beep = (duration:number=60, frequency:number=745, volume:number=0.5, type:string='sine', callback?:() => void) => {
+	if (!audioCtx) return null;
+	
+	var oscillator: OscillatorNode = audioCtx.createOscillator();
+	var gainNode: GainNode = audioCtx.createGain();
+
+	oscillator.connect(gainNode);
+	gainNode.connect(audioCtx.destination);
+
+	gainNode.gain.value = volume;
+	oscillator.frequency.value = frequency;
+	oscillator.type = type as OscillatorType;
+	oscillator.onended = callback ? () => callback() : null;
+
+	oscillator.start(audioCtx.currentTime);
+	oscillator.stop(audioCtx.currentTime + duration / 1000);
+
+	return oscillator;
+};
+
+
 //----------------------------------------------------------------------------- cn
 export const cn = (...inputs: ClassValue[]) => {
 	return twMerge(clsx(inputs))

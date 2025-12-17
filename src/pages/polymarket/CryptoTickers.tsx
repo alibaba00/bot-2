@@ -39,6 +39,8 @@ export default function CryptoTickers() {
 	const tradingActive = PolymarketApi.use('tradingActive')
 	const tickerActive = PolymarketApi.use('tickerActive')
 	const isActive = PolymarketApi.use('marketActive')
+	const isLogging = PolymarketApi.use('loggingActive')
+	const pollingActive = PolymarketApi.use('pollingActive')
 
 
 	return (
@@ -62,6 +64,13 @@ export default function CryptoTickers() {
 							{tickerActive ? 'Stop Ticker' : 'Start Ticker'}
 						</Button>
 						<Button
+							onClick={() => PolymarketApi.set('pollingActive', !pollingActive)}
+							variant={pollingActive ? 'destructive' : 'outline'}
+							size='sm'
+							>
+							{pollingActive ? 'Stop Polling' : 'Start Polling'}
+						</Button>
+						<Button
 							onClick={() => PolymarketApi.set('tradingActive', !tradingActive)}
 							variant={tradingActive ? 'destructive' : 'outline'}
 							size='sm'
@@ -71,10 +80,16 @@ export default function CryptoTickers() {
 					</div>
 					}
 					<div className='text-sm text-muted-foreground ml-auto mr-6'>Root: {PolymarketApi.rootPath}</div>
-					<Label className='text-sm text-muted-foreground'>Market Active</Label>
+					<Label className='text-sm text-muted-foreground'>Activ</Label>
 					<Switch
 						checked={isActive}
 						onCheckedChange={() => PolymarketApi.set('marketActive', !isActive)}
+						className='ml-0'
+					/>
+					<Label className='text-sm text-muted-foreground ml-4'>Logging</Label>
+					<Switch
+						checked={isLogging}
+						onCheckedChange={() => PolymarketApi.set('loggingActive', !isLogging)}
 						className='ml-0'
 					/>
 				</div>

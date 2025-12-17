@@ -1,5 +1,6 @@
 import type { Market } from '@/lib/polymarket/types';
 import PolymarketApi from './PolymarketApi'
+import { beep } from '@/lib/utils';
 
 const isElectron = window?.navigator.userAgent.includes('Electron')
 const fs = isElectron ? (window as any)?.require?.('fs') : null
@@ -22,30 +23,15 @@ export const testData = async () => {
 	console.log('testing data...')
 	const data = await getAllMarkets()
 	console.log('data:', data)
+	beep()
 
-	const keys = {}
-	for (const key of await PolymarketApi.cache.keys()) keys[key] = key
+	// const keys = {}
+	// for (const key of await PolymarketApi.cache.keys()) keys[key] = key
 
 	for (const symbol of Object.keys(data)) {
 		for (const date of Object.keys(data[symbol])) {
 			for (const node of data[symbol][date]) {
-// if (count ++ >= 100) break
-				let market = await PolymarketApi.cache.getItem(node.slug)
-				if (!market) {
-					const marketData = await fsPromises.readFile(node.filePath, 'utf8')
-					market = JSON.parse(marketData) as Market
-					await PolymarketApi.cacheMarket(market)
-				}
-				if (!market){
-					console.log('market not loaded:', node.slug)
-					continue
-				}
-
-				if (market.chartData && market.chartData.grid === undefined && market.closed && market.outcome) {
-					market.chartData.grid = getGridData(market) as any
-					console.log('get-grid-data:', market.slug, market.chartData.grid)
-					await PolymarketApi.cacheMarket(market)
-				}
+				///
 			}
 		}
 	}
@@ -219,11 +205,28 @@ export const updateAllMarketData = async () => {
 
 	for (const symbol of Object.keys(data)) {
 		for (const date of Object.keys(data[symbol])) {
-			for (const file of data[symbol][date]) {
+			for (const node of data[symbol][date]) {
 // if (updatedFiles >= 120) break
 				updatedFiles++
 				// console.log('updatedFiles:', updatedFiles, '/', totalFiles, file)
-				await updateMarketData(date, file.filePath, file.slug)
+				await updateMarketData(node.filePath, node.slug)	//update market data if closed
+
+				let market = await PolymarketApi.cache.getItem(node.slug)
+				if (!market) {		//load market from file if not in cache
+					const marketData = await fsPromises.readFile(node.filePath, 'utf8')
+					market = JSON.parse(marketData) as Market
+					await PolymarketApi.cacheMarket(market)
+				}
+				if (!market){
+					console.log('market not loaded:', node.slug)
+					continue
+				}
+
+				if (market.chartData && market.chartData.grid === undefined && market.closed && market.outcome) {
+					market.chartData.grid = getGridData(market) as any
+					console.log('get-grid-data:', market.slug, market.chartData.grid)
+					await PolymarketApi.cacheMarket(market)
+				}
 			}
 		}
 	}
@@ -233,7 +236,7 @@ export const updateAllMarketData = async () => {
 
 
 // ---------------------------------------------------------------------------- updateMarketData
-export const updateMarketData = async (date: string, filePath: string, slug: string) => {
+export const updateMarketData = async (filePath: string, slug: string) => {
 	let updated = false
 	let market: Market | null = null
 	// console.log('jsonFilePath:', jsonFilePath)
@@ -247,7 +250,6 @@ export const updateMarketData = async (date: string, filePath: string, slug: str
 		market = JSON.parse(jsonFileContent) as Market
 	}
 	if (!market) return
-	// console.log('market:', market)
 
 	if (!market.dayString) {
 		market.dayString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
@@ -257,8 +259,8 @@ export const updateMarketData = async (date: string, filePath: string, slug: str
 
 	if (!market.marketData
 		|| (!market.marketData.closed && Date.parse(market.marketData.endDate || '') < Date.now())) {
-		console.log('update marketData:', slug)
 		market.marketData = await PolymarketApi.fetchMarketBySlug(slug)
+		console.log('* update marketData:', slug, 'closed:', market.marketData?.closed)
 		updated = true
 	}
 
@@ -299,7 +301,7 @@ export const updateMarketData = async (date: string, filePath: string, slug: str
 	
 	if (updated) {
 		await PolymarketApi.cacheMarket(market)
-		await PolymarketApi.saveMarket(market)
+		await PolymarketApi.saveMarket(market, true)
 	}
 
 }
@@ -458,20 +460,22 @@ export const getChartMinuteData = async (symbol: string, date: Date): Promise<{ 
 
 	data.forEach((item) => {
 		const diff = item.timestamp - lastTimestamp
-		if (diff > 60000) {		//there is a gap of 1 minute
+		if (diff > 30000) {		//there is a gap of 30 seconds
 			console.log('gap:',
-				new Date(lastTimestamp).toISOString(),
+				chart.length - 1,
+				new Date(lastTimestamp).toISOString().substring(11, 19),
 				'to',
-				new Date(item.timestamp).toISOString(),
+				new Date(item.timestamp).toISOString().substring(11, 19),
 				(diff / 60000).toFixed(2), 'minutes')
 		}
 		lastTimestamp = item.timestamp
 
 		if (item.timestamp < nextMinute) {
 			candle.price += item.price
-			candle.count += 1
+			candle.count ++
 		} else {
 			candle.price /= candle.count
+			nextMinute = Math.floor(item.timestamp / 60000) * 60000
 			candle = {
 				timestamp: nextMinute,
 				price: item.price,
