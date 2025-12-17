@@ -115,7 +115,11 @@ export class CryptoPricePoller {
 		const promises = this.symbols.map(async (symbol) => {
 			try {
 				// Ensure symbol is in correct format (uppercase, no separator)
-				const formattedSymbol = symbol.toUpperCase().replace('/', '').replace('USD', 'USDT')
+				let formattedSymbol = symbol.toUpperCase().replace('/', '')
+				// Only replace USD with USDT if it doesn't already contain USDT
+				if (!formattedSymbol.includes('USDT')) {
+					formattedSymbol = formattedSymbol.replace('USD', 'USDT')
+				}
 				const url = `https://api.binance.com/api/v3/ticker/price?symbol=${formattedSymbol}`
 
 				const response = await fetch(url, {
@@ -161,7 +165,12 @@ export class CryptoPricePoller {
 		// We'll use Binance as a proxy, but convert symbols to Chainlink format
 		const binanceSymbols = this.symbols.map((symbol) => {
 			// Convert "btc/usd" to "btcusdt" for Binance
-			return symbol.toLowerCase().replace('/', '').replace('usd', 'usdt')
+			let formatted = symbol.toLowerCase().replace('/', '')
+			// Only replace usd with usdt if it doesn't already contain usdt
+			if (!formatted.includes('usdt')) {
+				formatted = formatted.replace('usd', 'usdt')
+			}
+			return formatted
 		})
 
 		const promises = binanceSymbols.map(async (binanceSymbol, index) => {
