@@ -509,11 +509,15 @@ class PolymarketApi {
 	// ---------------------------------------------------------------------------- getDateFormat
 	// Format date to yyyy-mm-dd
 	getUTCDateFormat(date: Date): string {
-		const pad = (n: number) => n.toString().padStart(2, '0')
-		const year = date.getUTCFullYear()
-		const month = pad(date.getUTCMonth() + 1)
-		const day = pad(date.getUTCDate())
-		return `${year}-${month}-${day}`
+		return date.toISOString().substring(0, 10)		//yyyy-mm-dd
+	}
+
+	getUTCDateTime(date: Date): string {
+		return date.toISOString().substring(0, 19)		//yyyy-mm-dd HH:MM:SS
+	}
+
+	getUTCTime(date: Date): string {
+		return date.toISOString().substring(11, 19)		//HH:MM:SS
 	}
 }
 

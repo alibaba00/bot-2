@@ -5,12 +5,12 @@ import PolymarketApi from './PolymarketApi'
 import { beep } from '@/lib/utils'
 
 
-var timeoutId: NodeJS.Timeout | null = null
-
 export default function CryptoTickerPage({ symbol, type }: { symbol: string, type: string }) {
 	const [tickerPrice, setTickerPrice] = useState<{timestamp: number, price: number} | null>(null)
 	const tickerActive = PolymarketApi.use('tickerActive')
-	
+	const timeoutId = useRef<NodeJS.Timeout | null>(null)
+
+
 	// Convert symbol to Chainlink format (e.g., "btc" -> "btc/usd")
 	const chainlinkSymbol = `${symbol.toLowerCase()}/usd`
 
@@ -20,8 +20,6 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		symbols: [chainlinkSymbol],
 		onPriceUpdate: (update) => {
 			if (update.symbol.toLowerCase() === chainlinkSymbol.toLowerCase()) {
-				// setChainlinkPrice(update.value)
-				// setPriceTimestamp(update.timestamp)
 				setTickerPrice({timestamp: update.timestamp, price: update.value})
 			}
 		},
@@ -31,24 +29,37 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		autoConnect: false
 	})
 
+	const resetTimer = () => {
+		if (timeoutId.current) clearTimeout(timeoutId.current as any)
+		if (!tickerActive) return
+
+		timeoutId.current = setTimeout(async () => {	//15 seconds timeout of missing ticker price
+			onTimeoutExpired()
+		}, 15000)
+	}
+
+	const onTimeoutExpired = async () => {
+		beep()
+		chainlinkWs.disconnect()	//disconnect and reconnect to force a new connection
+		await new Promise(resolve => setTimeout(resolve, 1000))	//wait 2 second before reconnecting
+		chainlinkWs.connect()		//connect to get a new price
+		resetTimer()
+	}
 
 	useEffect(() => {
-		if (timeoutId) clearTimeout(timeoutId)
-		timeoutId = setTimeout(async () => {	//30 seconds timeout of missing ticker price
-			beep()
-			chainlinkWs.disconnect()	//disconnect and reconnect to force a new connection
-			await new Promise(resolve => setTimeout(resolve, 1000))	//wait 1 second before reconnecting
-			if (tickerActive) chainlinkWs.connect()		//connect to get a new price
-		}, 30000)
-
+		resetTimer()
 		if (tickerPrice) {
 			PolymarketApi.onTickerLog(symbol.toLowerCase(), tickerPrice.timestamp, tickerPrice.price)
+		}
+		return () => {	//cleanup timeout id on unmount
+			if (timeoutId.current) clearTimeout(timeoutId.current as any)
 		}
 	}, [tickerPrice])
 
 
 	useEffect(() => {
-		if (timeoutId) clearTimeout(timeoutId)
+if (symbol === 'btc') console.log('---------------------useEffect tickerActive:', symbol, timeoutId)
+		resetTimer()
 		if (!tickerActive) chainlinkWs.disconnect()
 		if (tickerActive && chainlinkWs.status === 'disconnected') chainlinkWs.connect()
 	}, [tickerActive])
@@ -68,31 +79,7 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 
 	return (
 		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>
-			<div className='flex items-center justify-between'>
 			<h1>Market {symbol.toUpperCase()}</h1>
-
-				{/* <div className='flex items-center gap-2'>
-					<Button
-						onClick={toggleTicker}
-						disabled={isConnecting}
-						variant={isConnected ? 'destructive' : 'outline'}
-						size='sm'>
-						{isConnecting
-							? 'Connecting...'
-							: isConnected
-								? 'Stop Ticker'
-								: 'Start Ticker'}
-					</Button>
-					<Button
-						onClick={() => PolymarketApi.set('tradingActive_' + symbol, !tradingActive)}
-						disabled={isConnecting}
-						variant={PolymarketApi.get('tradingActive_' + symbol) ? 'destructive' : 'outline'}
-						size='sm'>
-						{tradingActive ? 'Stop Trading' : 'Start Trading'}
-					</Button>
-				</div> */}
-
-			</div>
 			<h2>
 				{formatPrice(tickerPrice?.price ?? null)}
 				{tickerPrice?.timestamp && (

@@ -11,3 +11,27 @@ https://docs.polymarket.com/developers/RTDS/RTDS-crypto-prices
  * Handles real-time crypto price data via WebSocket
  * Documentation: https://docs.polymarket.com/developers/RTDS/RTDS-overview
 
+
+init:
+-> createMarketFromDate
+	-> createMarket
+		-> fetchMarketBySlugFromGamma
+		-> cacheMarket
+		-> saveMarket
+
+-> setMarketState
+		-> cacheMarket
+
+-> connectMarket
+-> pollingOpenPrice
+		-> getCryptoPrice
+		-> cacheMarket
+		-> saveMarket
+
+-> disconnectMarket
+-> pollingClosePrice
+		-> getCryptoPrice
+		-> cacheMarket
+		-> saveMarket
+
+-> marketCompleted

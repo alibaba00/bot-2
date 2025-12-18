@@ -10,36 +10,6 @@ const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 const tickerData = {} // ticker data cache
 
 
-// ---------------------------------------------------------------------------- 
-// {
-//     "file": "btc-updown-15m-1765406700.json",
-//     "filePath": "A:/DATA/polymarket/markets//btc/2025-12-10/btc-updown-15m-1765406700.json",
-//     "slug": "btc-updown-15m-1765406700",
-//     "timestamp": 1765406700,
-//     "date": "2025-12-10",
-//     "symbol": "btc"
-// }
-export const testData = async () => {
-	console.log('testing data...')
-	const data = await getAllMarkets()
-	console.log('data:', data)
-	beep()
-
-	// const keys = {}
-	// for (const key of await PolymarketApi.cache.keys()) keys[key] = key
-
-	for (const symbol of Object.keys(data)) {
-		for (const date of Object.keys(data[symbol])) {
-			for (const node of data[symbol][date]) {
-				///
-			}
-		}
-	}
-
-	console.log('complete!')
-}
-
-
 // ---------------------------------------------------------------------------- getGrid
 const getGridData = (market: Market): any => {
 	const tickerData = market.chartData.ticker
@@ -349,7 +319,8 @@ export const getChartData = async (market: Market, logFilePath: string) => {
 		}
 	})
 
-	const tickerData = await getChartTickerData(market.symbol.toLowerCase(), new Date(market.startTimestamp))
+	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
+	const tickerData = await getChartTickerData(market.symbol.toLowerCase(), dateString)
 	const ticker = tickerData
 		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
 		.map((item) => [item.timestamp, item.price] as any)
@@ -402,9 +373,9 @@ export const getMarketDataFromDate = (symbol: string, date: Date) => {
 // 1765497629467;Up;BUY;0.55;19.581817
 // 1765497629473;Down;SELL;0.45;20
 export const getMarketChartData = async (filePath: string | null = null,
-	 _symbol: string | null = null, _date: Date | null = null) => {
+	 _symbol: string | null = null, _date: string | null = null) => {
 	filePath = filePath || 'A:/DATA/polymarket/markets/btc/2025-12-13/btc-updown-15m-1765584900.log'
-
+		
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
 	const lines = fileContent.split('\n')
 	const data = lines.map((line) => {
@@ -418,16 +389,13 @@ export const getMarketChartData = async (filePath: string | null = null,
 
 // ---------------------------------------------------------------------------- getChartData
 // const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
-export const getChartTickerData = async (symbol: string, date: Date) => {
-	const dateString = PolymarketApi.getUTCDateFormat(date)
-	if (tickerData[symbol]?.[dateString]) {
-		// console.log('getChartTickerData from cache:', symbol, dateString)
-		return tickerData[symbol][dateString]
-	}
+export const getChartTickerData = async (symbol: string, dateString: string) => {
+	const dataString = symbol.toLowerCase() + '-' + dateString
+	if (tickerData[dataString]) return tickerData[dataString]
 
 	const rootPath = PolymarketApi.rootPath
 	const dirPath = `${rootPath}tickers/${symbol}`
-	const filePath = `${dirPath}/${symbol}-${dateString}.log`
+	const filePath = `${dirPath}/${dataString}.log`
 	console.log('getChartTickerData:', symbol, dateString, filePath)
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
@@ -437,17 +405,14 @@ export const getChartTickerData = async (symbol: string, date: Date) => {
 		return { timestamp: parseInt(timestamp), price: parseFloat(price) }
 	}).filter((item) => item.timestamp > 0 && item.price > 0)
 
-	tickerData[symbol] = tickerData[symbol] || {} as any
-	tickerData[symbol][dateString] = data
+	tickerData[dataString] = data
 
 	return data
 }
 
 
 // ---------------------------------------------------------------------------- getChartMinuteData
-export const getChartMinuteData = async (symbol: string, date: Date): Promise<{ timestamp: number, price: number }[]> => {
-	const data = await getChartTickerData(symbol, date)
-
+export const getChartMinuteData = async (data: { timestamp: number, price: number }[]): Promise<{ timestamp: number, price: number }[]> => {
 	let currentMinute = Math.floor(data[0].timestamp / 60000) * 60000
 	let nextMinute = currentMinute + 60000
 	let candle = {
@@ -491,24 +456,113 @@ export const getChartMinuteData = async (symbol: string, date: Date): Promise<{ 
 }
 
 
-// ---------------------------------------------------------------------------- getChartDistributionData
-export const getChartDistributionData = async (symbol: string, date: Date) => {
-	const data = await getChartMinuteData(symbol, date)
+// ---------------------------------------------------------------------------- 
+// {
+//     "file": "btc-updown-15m-1765406700.json",
+//     "filePath": "A:/DATA/polymarket/markets//btc/2025-12-10/btc-updown-15m-1765406700.json",
+//     "slug": "btc-updown-15m-1765406700",
+//     "timestamp": 1765406700,
+//     "date": "2025-12-10",
+//     "symbol": "btc"
+// }
+export const testData = async (symbol: string) => {
+	console.log('testing data...', symbol)
 
-	const values = {}
-	for (let i = 0; i < data.length - 15; i++) {
-		const price = data[i].price
-		const price15 = data[i + 15].price
-		const value = Math.floor(((price15 / price) - 1) * 2000)	//price change
-		if (!values[value]) {
-			values[value] = 0
+	// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
+	// console.log('dirList:', dirList)
+
+	// const chartData: any[] = []
+	// for (const entry of dirList) {
+	// 	if (entry.isDirectory()) continue
+	// 	const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
+	// 	const data = await getChartTickerData(symbol, dateString)
+	// 	chartData.push(...data as any)
+	// }
+	// chartData.sort((a, b) => a.timestamp - b.timestamp)
+	// console.log('chartData:', chartData.length)
+
+	// const minuteData = await getChartMinuteData(chartData)
+	// const normalizedData = normalizeData(minuteData, 60)
+	// console.log('normalizedData:', normalizedData.length)
+
+	console.log('complete!')
+}
+
+
+// ---------------------------------------------------------------------------- getChartDistributionData
+export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
+	let data: any[] = []
+	if (dateString) {
+		data = await getChartTickerData(symbol, dateString)
+
+	} else {
+		const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
+		console.log('dirList:', dirList)
+	
+		for (const entry of dirList) {
+			if (entry.isDirectory()) continue
+			const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
+			const data_ = await getChartTickerData(symbol, dateString)
+			data.push(...data_ as any)
 		}
-		values[value]++
+		data.sort((a, b) => a.timestamp - b.timestamp)
+		console.log('chartData:', data.length)
 	}
-	const distribution = Object.entries(values).map(([value, count]) => ({
+
+	const minuteData = await getChartMinuteData(data)
+	const normalizedData = normalizeData(minuteData)
+
+	const values: number[] = []
+	const ranges: number[] = []
+
+	for (let i = 0; i < normalizedData.length - 15; i++) {
+		if (!normalizedData[i].valid || !normalizedData[i + 15].valid) continue
+		
+		const price = normalizedData[i].price
+		const price15 = normalizedData[i + 15].price
+		values.push(price15 / price)
+		const value = Math.floor(((price15 / price) - 1) * 2000)	//price change 2000 = 200%
+		if (!ranges[value]) ranges[value] = 0
+		ranges[value]++
+	}
+
+	values.sort((a, b) => a - b)
+	const len = values.length
+	const seg = [
+		Math.floor(len / 4),
+		Math.floor(len / 2),
+		Math.floor(len * 3 / 4),
+	]
+	const pos = [
+		((values[seg[0]] - 1) * 100).toFixed(2),
+		((values[seg[1]] - 1) * 100).toFixed(2),
+		((values[seg[2]] - 1) * 100).toFixed(2),
+	]
+	console.log('values:', values.length, seg, pos)
+
+	const distribution = Object.entries(ranges).map(([value, count]) => ({
 		value: parseInt(value),
 		count: count,
 	})).sort((a, b) => a.value - b.value)
 
 	return distribution
+}
+
+
+// ---------------------------------------------------------------------------- normalizeData
+export const normalizeData = (data: { timestamp: number, price: number }[], timeFrame:number = 60) => {	//size: 60000 = 1 minute
+	const newData: { timestamp: number, price: number, valid: boolean }[] = []
+	const timeFrameSize = timeFrame * 1000
+	let nextTimestamp = data[0].timestamp
+
+	data.forEach((item) => {
+		while (nextTimestamp < item.timestamp) {
+			newData.push({ timestamp: nextTimestamp, price: item.price, valid: false })
+			nextTimestamp += timeFrameSize
+		}
+		newData.push({ timestamp: item.timestamp, price: item.price, valid: true })
+		nextTimestamp += timeFrameSize
+	})
+
+	return newData
 }

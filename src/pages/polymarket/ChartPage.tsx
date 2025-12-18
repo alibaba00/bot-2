@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import * as PolymarketChart from "./PolymarketChart";
+import PolymarketApi from "./PolymarketApi";
 
 
 const content = [
@@ -122,7 +123,7 @@ export default function ChartPage() {
 	const onClick = async (type: string) => {
 		switch (type) {
 			case 'load-full-ticker-data':
-				// PolymarketChart.testData()
+				PolymarketChart.testData(activeNode?.value)
 				break
 
 			case 'load-ticker-data':
@@ -131,7 +132,10 @@ export default function ChartPage() {
 				// console.log('markets:', markets)
 
 				if (!activeNode?.value || !selectedDate) return
-				const chartData = await PolymarketChart.getChartMinuteData(activeNode?.value, selectedDate)
+				const dateString = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
+				const data1 = await PolymarketChart.getChartTickerData(activeNode?.value, dateString)
+				const chartData = await PolymarketChart.getChartMinuteData(data1)
+				// const normalizedData = PolymarketChart.normalizeData(chartData, 60)
 				// For time axis, data must be in format [timestamp, value] pairs
 				setChartOptions({
 					...lineChartOptions,
@@ -145,9 +149,11 @@ export default function ChartPage() {
 					}]
 				})
 				break
+
 			case 'line':
-				const data = await PolymarketChart.getChartDistributionData(activeNode?.value, selectedDate)
-				console.log('data:', data)
+				// const dateString1 = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
+				const data = await PolymarketChart.getChartDistributionData(activeNode?.value.toLowerCase())
+				// console.log('data:', data)
 				setChartOptions({
 					...barChartOptions,
 					series: [{
@@ -159,7 +165,8 @@ export default function ChartPage() {
 			case 'market':
 				// const markets = await PolymarketChart.getMarketDataFromDate(activeNode?.value, selectedDate)
 				// console.log('markets:', markets)
-				let marketData = await PolymarketChart.getMarketChartData(null, activeNode?.value, selectedDate)
+				const dateString2 = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
+				let marketData = await PolymarketChart.getMarketChartData(null, activeNode?.value.toLowerCase(), dateString2)
 				marketData = marketData.filter((item) => item.direction === 'Up')
 				setChartOptions({
 					...lineChartOptions,
@@ -177,7 +184,7 @@ export default function ChartPage() {
 				PolymarketChart.updateAllMarketData()
 				break
 			case 'test data':
-				PolymarketChart.testData()
+				PolymarketChart.testData(activeNode?.value)
 				break
 		}
 	}

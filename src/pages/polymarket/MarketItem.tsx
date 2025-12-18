@@ -223,8 +223,8 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 
 			<div className='flex flex-col gap-2'>
 				<div className='text-sm text-muted-foreground'>{clobMarketWsStatus}</div>
-				<div className='text-sm text-muted-foreground'>{'Up (' + lastTradePrices[assetIds[0]]?.side + '): ' + lastTradePrices[assetIds[0]]?.price}</div>
-				<div className='text-sm text-muted-foreground'>{'Down (' + lastTradePrices[assetIds[1]]?.side + '): ' + lastTradePrices[assetIds[1]]?.price}</div>
+				<h2 className='text-sm text-muted-foreground'>{'Up (' + lastTradePrices[assetIds[0]]?.side + '): ' + lastTradePrices[assetIds[0]]?.price}</h2>
+				<h2 className='text-sm text-muted-foreground'>{'Down (' + lastTradePrices[assetIds[1]]?.side + '): ' + lastTradePrices[assetIds[1]]?.price}</h2>
 			</div>
 		</div>
 	)
