@@ -6,7 +6,6 @@ import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import * as PolymarketChart from "./PolymarketChart";
 import PolymarketApi from "./PolymarketApi";
-import type { MarketData } from "@/lib/polymarket/types";
 
 
 const content = [

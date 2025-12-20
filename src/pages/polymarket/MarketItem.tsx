@@ -187,9 +187,10 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 			case 'completed':		//market is completed
 				disconnectMarket()
 
+				const currentTicker = PolymarketApi.tickerPrices.get(symbol) || null
 				if (marketCloseTimeoutId.current) clearTimeout(marketCloseTimeoutId.current)
 
-				if (market) market.closeTicker = PolymarketApi.tickerPrices.get(symbol) || null
+				if (market) market.closeTicker = currentTicker
 				if (market?.closeTicker) {	//placeholder till final price from ticker is available
 					market.closePrice = market.closeTicker.price
 					market.closePriceTimestamp = market.closeTicker.timestamp
@@ -199,13 +200,12 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				marketCloseTimeoutId.current = setTimeout(() => {
 					PolymarketApi.closeMarket(market as unknown as Market)
 				}, 60000 * 5)	//wait 5 minutes before closing market
-
+				
 				// create next market
-				PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
-				.then((nextMarket) => {
-					console.log('next market:', nextMarket)
-					setMarket(nextMarket)	//-> init market
-				})
+				const nextMarket = await PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
+				console.log('next market:', nextMarket)
+				if (nextMarket) nextMarket.openTicker = currentTicker
+				setMarket(nextMarket)	//-> init market
 				return;
 
 			case 'closed':		//market is closed

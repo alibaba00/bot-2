@@ -162,6 +162,10 @@ const MarketTimer = () => {
 }
 
 
+// ---------------------------------------------------------------------------- useMarketTimer
+// minutes: 15
+// onExpired: () => void
+// return: {minutes: number, seconds: number, timeString: string}
 const useMarketTimer = (minutes: number = 15, onExpired?: () => void) => {
 	const [timer, setTimer] = useState<{minutes: number, seconds: number, timeString: string}>({
 		minutes: 0,

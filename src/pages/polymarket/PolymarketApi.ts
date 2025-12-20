@@ -167,7 +167,9 @@ class PolymarketApi {
 			state: 'init',				//init, pending, started, running, completed, closed, failed
 			closed: false,				//false: market is not closed, true: market is closed
 			openPrice: null,			// priceToBeat
+			openTicker: null,			// priceToBeat from ticker
 			closePrice: null,			// finalPrice
+			closeTicker: null,			// finalPrice from ticker
 			openPriceTimestamp: null,	// timestamp of openPrice
 			closePriceTimestamp: null,	// timestamp of closePrice
 			closeMarketTimestamp: null,	// timestamp of closeMarket

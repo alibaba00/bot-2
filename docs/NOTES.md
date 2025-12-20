@@ -52,9 +52,9 @@ updateAllMarketData
 ---------
 TODOS:
 
-- pending only till market ends
+✔️ pending only till market ends
 - add hours & daily markets
 - add binance price polling
-- update data when market is finished (alle 15 min)
-- add openTickerPrice, closeTickerPrice
+✔️ update data when market is finished (alle 15 min)
+- add openTicker, closeTicker
 - caching chart & strategy data
