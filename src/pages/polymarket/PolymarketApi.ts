@@ -46,6 +46,7 @@ class PolymarketApi {
 	rootPath: string = ''
 	gammaApiBase: string = GAMMA_API_BASE
 	polymarketApiBase: string = POLYMARKET_API_BASE
+	tickerPrices: Map<string, {timestamp: number, price: number}> = new Map()
 	
 	set(state: any, value?: any){
 		if (typeof state === 'string') state = { [state]: value }
@@ -163,7 +164,7 @@ class PolymarketApi {
 			dayString: this.getUTCDateFormat(new Date(timestamp * 1000)),	//e.g. 2025-12-10
 			startTimestamp,				//e.g. 1765584900000
 			endTimestamp,				//e.g. 1765584900000 + 15 * 60 * 1000
-			state: 'init',				//init, pending, started, running, stopped, closed, failed
+			state: 'init',				//init, pending, started, running, completed, closed, failed
 			closed: false,				//false: market is not closed, true: market is closed
 			openPrice: null,			// priceToBeat
 			closePrice: null,			// finalPrice
@@ -294,14 +295,14 @@ class PolymarketApi {
 		if (!market) return 'failed'
 
 		if (market.closePrice) {
-			market.state = 'closed'
+			market.state = 'closed'	
 			return market.state
 		}
 		const startTime = new Date(market.startTimestamp || '')
 		const endTime = new Date(market.endTimestamp || '')
 		const now = new Date()
 		if (now > endTime) {		//polling for final price
-			market.state = 'stopped'
+			market.state = 'completed'
 			return market.state
 		}
 		if (now < startTime) return 'pending'
@@ -345,6 +346,22 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- openMarket
+	async openMarket(market: Market): Promise<CryptoPriceResponse | null> {
+		if (!this.get('marketActive')) return null
+
+		const result = await this.getCryptoPrice(market)
+		if (result?.openPrice) {
+			market.openPrice = result.openPrice
+			market.openPriceTimestamp = result.timestamp || null
+
+			await this.cacheMarket(market)	//update market cache
+			await this.saveMarket(market)	//save market to file
+		}
+		return result
+	}
+
+
 	// ---------------------------------------------------------------------------- pollingOpenPrice
 	async pollingOpenPrice(market: Market): Promise<CryptoPriceResponse | null> {
 		const api = this
@@ -373,6 +390,31 @@ class PolymarketApi {
 			await new Promise(resolve => setTimeout(resolve, 5000))	//wait 5 seconds before polling
 			_pollingOpenPrice()
 		})
+	}
+
+
+	// ---------------------------------------------------------------------------- closeMarket
+	async closeMarket(market: Market): Promise<void> {
+		if (!this.get('marketActive')) return
+
+		const result = await this.getCryptoPrice(market)
+		if (result?.openPrice){
+			market.openPrice = result.openPrice 	//update missing openPrice
+			market.openPriceTimestamp = result.timestamp || null
+		}
+		if (result?.closePrice) {
+			market.closePrice = result.closePrice
+			market.closePriceTimestamp = result.timestamp || null
+			// return _pollingClosedMarket()	//not needed
+
+			market.closeMarketTimestamp = Date.now()
+			market.state = 'closed'
+			market.closed = true
+
+			console.log('market closed:', market.slug)
+		}
+		await this.cacheMarket(market)	//update market cache
+		await this.saveMarket(market)
 	}
 
 

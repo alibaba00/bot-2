@@ -12,7 +12,11 @@ https://docs.polymarket.com/developers/RTDS/RTDS-crypto-prices
  * Documentation: https://docs.polymarket.com/developers/RTDS/RTDS-overview
 
 
+----------------------------
+market trading process:
+
 init:
+
 -> createMarketFromDate
 	-> createMarket
 		-> fetchMarketBySlugFromGamma
@@ -35,3 +39,22 @@ init:
 		-> saveMarket
 
 -> marketCompleted
+
+
+----------------------------
+update process:
+
+updateAllMarketData
+	-> getAllMarkets
+	updateMarketData
+		-> createMarketFromSlug
+		-> fetchMarketBySlug
+---------
+TODOS:
+
+- pending only till market ends
+- add hours & daily markets
+- add binance price polling
+- update data when market is finished (alle 15 min)
+- add openTickerPrice, closeTickerPrice
+- caching chart & strategy data

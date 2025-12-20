@@ -121,11 +121,11 @@ export default function CryptoTickers() {
 	)
 }
 
-// MarketState = 'init' | 'pending' | 'started' | 'running' | 'stopped' | 'closed' | 'failed'
+// MarketState = 'init' | 'pending' | 'started' | 'running' | 'completed' | 'closed' | 'failed'
 const marketStateColors = {
 	// trading: '#36f',
 	running: 'green',
-	stopped: 'yellow',
+	completed: 'yellow',
 	pending: 'yellow',
 	started: 'orange',
 	failed: 'red',

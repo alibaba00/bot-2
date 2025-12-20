@@ -17,8 +17,9 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	const [state, setState] = useState<MarketState>()
 	// const state = PolymarketApi.use('marketState_' + symbol)
 	const tradingActive = PolymarketApi.use('tradingActive')
-	const marketCompleted = PolymarketApi.use('marketCompleted')
-
+	const marketCompleted = PolymarketApi.use('marketCompleted')	//market is completed from CryptoTickers.tsx
+	const marketCloseTimeoutId = useRef<NodeJS.Timeout | null>(null)
+	const marketOpenTimeoutId = useRef<NodeJS.Timeout | null>(null)
 
 	const [tradeLog, setTradeLog] = useState<{
 		asset: string
@@ -89,11 +90,16 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 
 	useEffect(() => {
 		console.log('---init MarketItem:', symbol, type)
-		PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
+		PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)		
 		.then((market) => {
 			console.log('market:', market)
 			setMarket(market)
 		})
+
+		return () => {
+			if (marketCloseTimeoutId.current) clearTimeout(marketCloseTimeoutId.current)
+			if (marketOpenTimeoutId.current) clearTimeout(marketOpenTimeoutId.current)
+		}
 	}, [])
 
 
@@ -107,13 +113,17 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 		if (market?.state) updateMarketState(market.state || 'init')
 	}, [market?.state])
 
+
 	useEffect(() => {
 		if (marketCompleted) {
-			setMarketState('stopped')
+			if (marketOpenTimeoutId.current) clearTimeout(marketOpenTimeoutId.current)
+			setMarketState('completed')
 		}
 	}, [marketCompleted])
 
+
 	if (!market) return null;
+
 
 	const setMarketState = (state: MarketState) => {
 		console.log('---setMarketState:', market?.slug, state)
@@ -122,6 +132,7 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 		PolymarketApi.set('marketState_' + symbol, state)	//update tab indicator
 		PolymarketApi.cacheMarket(market as unknown as Market)
 	}
+
 
 	const updateMarketState = async (_state: MarketState) => {
 		if (!market) return;
@@ -159,11 +170,13 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 			case 'started':		//wait till market price is available
 				connectMarket() //--> start trading
 
-				const result = await PolymarketApi.pollingOpenPrice(market)
-				if (result) {
-					console.log('---started MarketItem:', market.slug, market)
-					setMarketState('running') //--> connectMarket
-				}
+				marketOpenTimeoutId.current = setInterval(async () => {
+					await PolymarketApi.openMarket(market as unknown as Market)
+					if (market.openPrice) {
+						if (marketOpenTimeoutId.current) clearInterval(marketOpenTimeoutId.current)
+						setMarketState('running') //--> connectMarket
+					}
+				}, 5000)	//check every second if market price is available
 				return;
 
 			// from marketCompleted
@@ -171,16 +184,27 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				// connectMarket() //--> trading
 				return;
 
-			case 'stopped':		//market is stopped
+			case 'completed':		//market is completed
 				disconnectMarket()
 
-				PolymarketApi.pollingClosePrice(market)	//polling for final price in the background
+				if (marketCloseTimeoutId.current) clearTimeout(marketCloseTimeoutId.current)
+
+				if (market) market.closeTicker = PolymarketApi.tickerPrices.get(symbol) || null
+				if (market?.closeTicker) {	//placeholder till final price from ticker is available
+					market.closePrice = market.closeTicker.price
+					market.closePriceTimestamp = market.closeTicker.timestamp
+				}
+
+				// PolymarketApi.pollingClosePrice(market)	//polling for final price in the background
+				marketCloseTimeoutId.current = setTimeout(() => {
+					PolymarketApi.closeMarket(market as unknown as Market)
+				}, 60000 * 5)	//wait 5 minutes before closing market
 
 				// create next market
 				PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
 				.then((nextMarket) => {
 					console.log('next market:', nextMarket)
-					setMarket(nextMarket)	//-> 
+					setMarket(nextMarket)	//-> init market
 				})
 				return;
 

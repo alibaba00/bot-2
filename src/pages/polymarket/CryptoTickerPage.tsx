@@ -21,6 +21,7 @@ export default function CryptoTickerPage({ symbol, type }: { symbol: string, typ
 		onPriceUpdate: (update) => {
 			if (update.symbol.toLowerCase() === chainlinkSymbol.toLowerCase()) {
 				setTickerPrice({timestamp: update.timestamp, price: update.value})
+				PolymarketApi.tickerPrices.set(symbol, {timestamp: update.timestamp, price: update.value})
 			}
 		},
 		onError: (err) => {

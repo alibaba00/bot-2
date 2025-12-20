@@ -14,7 +14,9 @@ export interface Market {
 	marketData: MarketData | null
 	closed: boolean
 	openPrice: number | null	// priceToBeat
+	openTicker: {timestamp: number, price: number} | null	// priceToBeat from ticker
 	closePrice: number | null	// finalPrice
+	closeTicker: {timestamp: number, price: number} | null	// finalPrice from ticker
 	openPriceTimestamp: number | null
 	closePriceTimestamp: number | null
 	closeMarketTimestamp: number | null	
@@ -23,7 +25,7 @@ export interface Market {
 }
 
 
-export type MarketState = 'init' | 'pending' | 'started' | 'running' | 'stopped' | 'closed' | 'failed'
+export type MarketState = 'init' | 'pending' | 'started' | 'running' | 'completed' | 'closed' | 'failed'
 
 export interface MarketData {
 	id: string

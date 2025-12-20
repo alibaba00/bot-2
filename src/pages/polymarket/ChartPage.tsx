@@ -6,6 +6,7 @@ import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import * as PolymarketChart from "./PolymarketChart";
 import PolymarketApi from "./PolymarketApi";
+import type { MarketData } from "@/lib/polymarket/types";
 
 
 const content = [
@@ -123,7 +124,7 @@ export default function ChartPage() {
 	const onClick = async (type: string) => {
 		switch (type) {
 			case 'load-full-ticker-data':
-				PolymarketChart.testData(activeNode?.value)
+				// PolymarketChart.testData(activeNode?.value)
 				break
 
 			case 'load-ticker-data':
@@ -239,13 +240,25 @@ export default function ChartPage() {
 								value={selectedDate ? selectedDate.toISOString().slice(0, 10) : ''}
 							/>
 						</TabsList>
-						<div className='flex flex-col gap-4 h-full'>
-							{activeNode?.label} Chart
-
-						</div>
+						<MarketList symbol={activeNode?.value} selectedDate={selectedDate} />
 					</Tabs>
 				</div>
 			</ResizablePanel>
 		</ResizablePanelGroup>
+	)
+}
+
+
+const MarketList = ({ symbol, selectedDate }: { symbol: string, selectedDate: Date }) => {
+	// const [markets, setMarkets] = useState<MarketData[]>([])
+	
+	useEffect(() => {
+	}, [symbol, selectedDate])
+
+	return (
+		<div className='flex flex-col gap-4 h-full'>
+			{symbol} Chart {selectedDate.toISOString().slice(0, 10)}
+
+		</div>
 	)
 }

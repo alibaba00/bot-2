@@ -1,6 +1,5 @@
 import type { Market } from '@/lib/polymarket/types';
 import PolymarketApi from './PolymarketApi'
-import { beep } from '@/lib/utils';
 
 const isElectron = window?.navigator.userAgent.includes('Electron')
 const fs = isElectron ? (window as any)?.require?.('fs') : null
@@ -163,75 +162,88 @@ export const updateAllMarketData = async () => {
 	const data = await getAllMarkets()
 	console.log('data:', data)
 
-	let totalFiles = 0
+	const stat = {
+		totalFiles: 0,
+		updatedFiles: 0,
+	}
 	for (const symbol of Object.keys(data)) {
 		for (const date of Object.keys(data[symbol])) {
-			totalFiles += data[symbol][date].length
+			stat.totalFiles += data[symbol][date].length
 		}
 	}
 
-	let updatedFiles = 0
-	console.log('checking data of', totalFiles, 'markets ...')
+	console.log('checking data of', stat.totalFiles, 'markets ...')
 
 	for (const symbol of Object.keys(data)) {
 		for (const date of Object.keys(data[symbol])) {
 			for (const node of data[symbol][date]) {
 // if (updatedFiles >= 120) break
-				updatedFiles++
-				// console.log('updatedFiles:', updatedFiles, '/', totalFiles, file)
-				await updateMarketData(node.filePath, node.slug)	//update market data if closed
-
-				let market = await PolymarketApi.cache.getItem(node.slug)
-				if (!market) {		//load market from file if not in cache
-					const marketData = await fsPromises.readFile(node.filePath, 'utf8')
-					market = JSON.parse(marketData) as Market
-					await PolymarketApi.cacheMarket(market)
-				}
-				if (!market){
-					console.log('market not loaded:', node.slug)
-					continue
-				}
-
-				if (market.chartData && market.chartData.grid === undefined && market.closed && market.outcome) {
-					market.chartData.grid = getGridData(market) as any
-					console.log('get-grid-data:', market.slug, market.chartData.grid)
-					await PolymarketApi.cacheMarket(market)
-				}
+				if (await updateMarketData(node.filePath, node.slug)) stat.updatedFiles++
 			}
 		}
 	}
 
-	console.log('complete!')
+	console.log('complete!', stat)
 }
 
 
 // ---------------------------------------------------------------------------- updateMarketData
-export const updateMarketData = async (filePath: string, slug: string) => {
-	let updated = false
+export const updateMarketData = async (filePath: string, slug: string): Promise<boolean> => {
+	let updated:boolean = false
 	let market: Market | null = null
-	// console.log('jsonFilePath:', jsonFilePath)
 
-	if (!fs.existsSync(filePath)) {
-		console.log('jsonFile not found:', filePath)
-		market = await PolymarketApi.createMarketFromSlug(slug)
-
-	}else{
-		const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
-		market = JSON.parse(jsonFileContent) as Market
+	market = await PolymarketApi.cache.getItem(slug)
+	if (!market) {		//market not cached! load market from file
+		if (fs.existsSync(filePath)) {
+			const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
+			market = JSON.parse(jsonFileContent) as Market
+	
+		}else{
+			console.log('market file not found:', filePath)
+			market = await PolymarketApi.createMarketFromSlug(slug)
+		}
+		updated = true
 	}
-	if (!market) return
+
+	if (!market){
+		console.log('market not exists!', slug)
+		return false
+	}
+
+	if (market.state === 'failed') return false
+
+	if (!fs.existsSync(filePath)) updated = true	//market file not saved
 
 	if (!market.dayString) {
 		market.dayString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
-		updated = true
 		console.log('update dayString:', market.startTimestamp, market.dayString)
+		updated = true
+	}
+
+	if (!market.marketData){
+		market.marketData = await PolymarketApi.fetchMarketBySlug(slug)
+		updated = true
+
+	}else if (!market.marketData.closed && Date.parse(market.marketData.endDate || '') < Date.now()){
+		market.marketData = await PolymarketApi.fetchMarketBySlug(slug)
+		if (!market.marketData?.closed) return false
 	}
 
 	if (!market.marketData
 		|| (!market.marketData.closed && Date.parse(market.marketData.endDate || '') < Date.now())) {
-		market.marketData = await PolymarketApi.fetchMarketBySlug(slug)
-		console.log('* update marketData:', slug, 'closed:', market.marketData?.closed)
-		updated = true
+
+		const marketData = await PolymarketApi.fetchMarketBySlug(slug)
+		if (marketData){
+			if (!market.marketData){
+				market.marketData = marketData
+				updated = true
+			}else if (!marketData.closed) return false
+
+		}else{
+			console.log('marketData not found:', slug, market)
+			market.state = 'failed'
+			updated = true
+		}
 	}
 
 	if (market.marketData?.closed && (!market.openPrice || !market.closePrice)) {
@@ -249,9 +261,10 @@ export const updateMarketData = async (filePath: string, slug: string) => {
 	}
 
 	if (market.openPrice && market.closePrice) {
-		if (!market.closed){
+		if (!market.closed || market.state !== 'closed'){
 			console.log('update market closed:', market.slug)
 			market.closed = true
+			market.state = 'closed'
 			updated = true
 		}
 		const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
@@ -262,10 +275,15 @@ export const updateMarketData = async (filePath: string, slug: string) => {
 		}
 	}
 
-	// if (!market.chartData || !market.chartData.ticker.length || !market.chartData.up.length || !market.chartData.down.length) {
 	if (!market.chartData) {
 		const logFilePath = filePath.replace('.json', '.log')
 		market.chartData = await getChartData(market, logFilePath)
+		updated = true
+	}
+
+	if (market.chartData && market.chartData.grid === undefined && market.closed && market.outcome) {
+		market.chartData.grid = getGridData(market) as any
+		console.log('get-grid-data:', market.slug, market.chartData.grid)
 		updated = true
 	}
 	
@@ -274,6 +292,7 @@ export const updateMarketData = async (filePath: string, slug: string) => {
 		await PolymarketApi.saveMarket(market, true)
 	}
 
+	return updated
 }
 
 
@@ -413,8 +432,9 @@ export const getChartTickerData = async (symbol: string, dateString: string) => 
 
 // ---------------------------------------------------------------------------- getChartMinuteData
 export const getChartMinuteData = async (data: { timestamp: number, price: number }[]): Promise<{ timestamp: number, price: number }[]> => {
-	let currentMinute = Math.floor(data[0].timestamp / 60000) * 60000
-	let nextMinute = currentMinute + 60000
+	let min = 60000
+	let currentMinute = Math.floor(data[0].timestamp / min) * min
+	let nextMinute = currentMinute + min
 	let candle = {
 		timestamp: currentMinute,
 		price: 0,
@@ -431,7 +451,7 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 				new Date(lastTimestamp).toISOString().substring(11, 19),
 				'to',
 				new Date(item.timestamp).toISOString().substring(11, 19),
-				(diff / 60000).toFixed(2), 'minutes')
+				(diff / min).toFixed(2), 'minutes')
 		}
 		lastTimestamp = item.timestamp
 
@@ -440,14 +460,14 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 			candle.count ++
 		} else {
 			candle.price /= candle.count
-			nextMinute = Math.floor(item.timestamp / 60000) * 60000
+			nextMinute = Math.floor(item.timestamp / min) * min
 			candle = {
 				timestamp: nextMinute,
 				price: item.price,
 				count: 1,
 			}
 			chart.push(candle)
-			nextMinute += 60000
+			nextMinute += min
 		}
 	})
 	candle.price /= candle.count
@@ -468,29 +488,22 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 export const testData = async (symbol: string) => {
 	console.log('testing data...', symbol)
 
-	// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
-	// console.log('dirList:', dirList)
+	const keys = await PolymarketApi.cache.keys()	//e.g. [btc-updown-15m-1765406700, ...]
 
-	// const chartData: any[] = []
-	// for (const entry of dirList) {
-	// 	if (entry.isDirectory()) continue
-	// 	const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
-	// 	const data = await getChartTickerData(symbol, dateString)
-	// 	chartData.push(...data as any)
-	// }
-	// chartData.sort((a, b) => a.timestamp - b.timestamp)
-	// console.log('chartData:', chartData.length)
+	for (const key of keys) {
+		const market = await PolymarketApi.cache.getItem(key)
 
-	// const minuteData = await getChartMinuteData(chartData)
-	// const normalizedData = normalizeData(minuteData, 60)
-	// console.log('normalizedData:', normalizedData.length)
+		if (market?.closed && market.chartData?.grid?.length) {
+			///
+		}
+	}
 
 	console.log('complete!')
 }
 
 
 // ---------------------------------------------------------------------------- getChartDistributionData
-export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
+export const getChartDistributionData = async (symbol: string, dateString: string | null = null, range: number = 15) => {
 	let data: any[] = []
 	if (dateString) {
 		data = await getChartTickerData(symbol, dateString)
@@ -515,13 +528,13 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 	const values: number[] = []
 	const ranges: number[] = []
 
-	for (let i = 0; i < normalizedData.length - 15; i++) {
-		if (!normalizedData[i].valid || !normalizedData[i + 15].valid) continue
+	for (let i = 0; i < normalizedData.length - range; i++) {
+		if (!normalizedData[i].valid || !normalizedData[i + range].valid) continue
 		
 		const price = normalizedData[i].price
-		const price15 = normalizedData[i + 15].price
-		values.push(price15 / price)
-		const value = Math.floor(((price15 / price) - 1) * 2000)	//price change 2000 = 200%
+		const priceRange = normalizedData[i + range].price
+		values.push(priceRange / price)
+		const value = Math.floor(((priceRange / price) - 1) * 60000 / range)	//price change 2000 = 200%
 		if (!ranges[value]) ranges[value] = 0
 		ranges[value]++
 	}
@@ -533,11 +546,14 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 		Math.floor(len / 2),
 		Math.floor(len * 3 / 4),
 	]
+
+	// (Math.pow((values[seg[0]] - 1), 1 / range) * 10000),
 	const pos = [
-		((values[seg[0]] - 1) * 100).toFixed(2),
-		((values[seg[1]] - 1) * 100).toFixed(2),
-		((values[seg[2]] - 1) * 100).toFixed(2),
+		values[seg[0]],
+		values[seg[1]],
+		values[seg[2]],
 	]
+
 	console.log('values:', values.length, seg, pos)
 
 	const distribution = Object.entries(ranges).map(([value, count]) => ({
