@@ -12,22 +12,22 @@ const content = [
 	{
 		label: 'BTC',
 		value: 'btc',
-		page: <CryptoTickerPage symbol='btc' type='updown-15m' />
+		page: <CryptoTickerPage symbol='btc' />
 	},
 	{
 		label: 'ETH',
 		value: 'eth',
-		page: <CryptoTickerPage symbol='eth' type='updown-15m' />,
+		page: <CryptoTickerPage symbol='eth' />,
 	},
 	{
 		label: 'SOL',
 		value: 'sol',
-		page: <CryptoTickerPage symbol='sol' type='updown-15m' />,
+		page: <CryptoTickerPage symbol='sol' />,
 	},
 	{
 		label: 'XRP',
 		value: 'xrp',
-		page: <CryptoTickerPage symbol='xrp' type='updown-15m' />,
+		page: <CryptoTickerPage symbol='xrp' />,
 	}
 ]
 
@@ -55,7 +55,11 @@ export default function CryptoTickers() {
 				<div className='flex items-center gap-2 h-8'>
 					{isActive &&
 					<div className='flex items-center gap-4'>
-						<MarketTimer />
+						<MarketTimer minutes={15} type={'updown-15m'} />
+						{/* <MarketTimer minutes={60} type={type} /> */}
+						{/* https://polymarket.com/_next/data/FT6aYvzrNjMngWuxKlVC4/event/bitcoin-up-or-down-december-21-7pm-et.json?slug=bitcoin-up-or-down-december-21-7pm-et */}
+						<MarketTimer minutes={60 * 4} type={'updown-4h'} offset={-3600} />
+						
 						<Button
 							onClick={() => PolymarketApi.set('tickerActive', !tickerActive)}
 							variant={tickerActive ? 'destructive' : 'outline'}
@@ -144,13 +148,13 @@ const MarketStateIndicator = ({ symbol }: { symbol: string }) => {
 }
 
 
-const MarketTimer = () => {
-	const timer = useMarketTimer(15, () => {
+const MarketTimer = ({minutes, type, offset = 0}: {minutes: number, type: string, offset?: number}) => {
+	const timer = useMarketTimer(minutes, offset, () => {
 		console.log('timer expired!')
 		// PolymarketApi.set('tradingActive', false)
-		PolymarketApi.set('marketCompleted', true)
+		PolymarketApi.set('marketCompleted-' + type, true)
 		setTimeout(() => {
-			PolymarketApi.set('marketCompleted', false)
+			PolymarketApi.set('marketCompleted-' + type, false)
 		}, 1000)	//wait 1 seconds before resetting marketCompleted
 	})
 	
@@ -166,7 +170,7 @@ const MarketTimer = () => {
 // minutes: 15
 // onExpired: () => void
 // return: {minutes: number, seconds: number, timeString: string}
-const useMarketTimer = (minutes: number = 15, onExpired?: () => void) => {
+const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: () => void) => {
 	const [timer, setTimer] = useState<{minutes: number, seconds: number, timeString: string}>({
 		minutes: 0,
 		seconds: 0,
@@ -175,7 +179,7 @@ const useMarketTimer = (minutes: number = 15, onExpired?: () => void) => {
 
 	useEffect(() => {
 		let interval: NodeJS.Timeout | null = null
-		const now = Date.now()
+		const now = Date.now() + offset * 1000
 		const past = now % (minutes * 60 * 1000)
 		const diffToNextSecond = 1000 - past % 1000
 		const maxTime = Math.ceil(minutes * 60)

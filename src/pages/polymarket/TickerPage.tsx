@@ -30,7 +30,7 @@ const DEFAULT_BTC_MARKET_CONDITION_IDS = ['1764256500'] // Try both in case
 // + 900 = 15min
 
 // Default Bitcoin market slugs to try
-const DEFAULT_BTC_MARKET_SLUGS = ['btc-updown-15m-1764256500']
+const DEFAULT_BTC_MARKET_SLUGS = []		//btc-updown-15m-1764256500
 
 export default function TickerPage() {
 	const [market, setMarket] = useState<MarketData | null>(null)

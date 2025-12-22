@@ -7,7 +7,7 @@ import PolymarketApi from "./PolymarketApi";
 
 // export default function MarketItem(props: { market: Market }) {
 	// const market = props.market
-export default function MarketItem({ symbol, type }: { symbol: string, type: string }) {
+export default function MarketItem({ symbol, type, minutes, offset }: { symbol: string, type: string, minutes: number, offset: number }) {
 	const [market, setMarket] = useState<Market | null>(null)
 	
 	const [assetIds, setAssetIds] = useState<string[]>([])
@@ -17,7 +17,7 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	const [state, setState] = useState<MarketState>()
 	// const state = PolymarketApi.use('marketState_' + symbol)
 	const tradingActive = PolymarketApi.use('tradingActive')
-	const marketCompleted = PolymarketApi.use('marketCompleted')	//market is completed from CryptoTickers.tsx
+	const marketCompleted = PolymarketApi.use('marketCompleted-' + type)	//market is completed from CryptoTickers.tsx
 	const marketCloseTimeoutId = useRef<NodeJS.Timeout | null>(null)
 	const marketOpenTimeoutId = useRef<NodeJS.Timeout | null>(null)
 
@@ -46,7 +46,6 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	const clobMarketWs = useCLOBMarketWebSocket({
 		assetIds: assetIds,
 		onLastTradePriceUpdate: (update) => {
-			// console.log('clobMarketWs last trade price update', update)
 			// setLastMarketLastTradePriceUpdate(update)
 			setLastTradePrices((prev) => ({
 				...prev,
@@ -88,9 +87,10 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 	}, [tradeLog])
 
 
+	// 1766408400 - 1766404800
 	useEffect(() => {
-		console.log('---init MarketItem:', symbol, type)
-		PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)		
+		console.log('---init MarketItem:', symbol, type, minutes)
+		PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), minutes, offset)		
 		.then((market) => {
 			console.log('market:', market)
 			setMarket(market)
@@ -202,7 +202,7 @@ export default function MarketItem({ symbol, type }: { symbol: string, type: str
 				}, 60000 * 5)	//wait 5 minutes before closing market
 				
 				// create next market
-				const nextMarket = await PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), 15)
+				const nextMarket = await PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), minutes)
 				console.log('next market:', nextMarket)
 				if (nextMarket) nextMarket.openTicker = currentTicker
 				setMarket(nextMarket)	//-> init market

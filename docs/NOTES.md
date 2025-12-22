@@ -17,6 +17,9 @@ market trading process:
 
 init:
 
+CryptoTicker:
+CryptoTickersPage:
+marketItem:
 -> createMarketFromDate
 	-> createMarket
 		-> fetchMarketBySlugFromGamma
@@ -27,18 +30,18 @@ init:
 		-> cacheMarket
 
 -> connectMarket
--> pollingOpenPrice
+-> openMarket
 		-> getCryptoPrice
 		-> cacheMarket
 		-> saveMarket
 
 -> disconnectMarket
--> pollingClosePrice
+-> closeMarket
 		-> getCryptoPrice
 		-> cacheMarket
 		-> saveMarket
 
--> marketCompleted
+-> marketCompleted-type
 
 
 ----------------------------

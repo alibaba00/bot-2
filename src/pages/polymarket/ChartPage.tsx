@@ -6,6 +6,7 @@ import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import * as PolymarketChart from "./PolymarketChart";
 import PolymarketApi from "./PolymarketApi";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 
 const content = [
@@ -27,7 +28,89 @@ const content = [
 	},
 ]
 
-const barChartOptions: any = {
+const heatmapChartOptions = {
+	tooltip: {
+		show: false,
+		trigger: 'axis'
+	},
+	xAxis: {
+		type: 'category',
+		data: ['0-3', '3-6', '6-9', '9-12', '12-15'],
+	},
+	yAxis: {
+		type: 'category',
+		data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
+	},
+	visualMap: {
+		min: 0,
+		max: 1,
+		calculable: true,
+		orient: 'horizontal',
+		left: 'center',
+		// bottom: '15%',
+		inRange: {
+			color: [
+			  '#3f00',
+			  '#3f0c'
+			]
+		  }
+	  
+	  },	
+	series: [
+		{
+			type: 'heatmap',
+			data: [
+				[0, 0, 0.1], [0, 1, 0.2], [0, 2, 0.3], [0, 3, 0.4], [0, 4, 0.5], [0, 5, 0.6], [0, 6, 0.7], [0, 7, 0.8], [0, 8, 0.9],
+				[1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 3, 0], [1, 4, 0], [1, 5, 0], [1, 6, 0], [1, 7, 0], [1, 8, 0],
+				[2, 0, 0], [2, 1, 0], [2, 2, 0], [2, 3, 0], [2, 4, 0], [2, 5, 0], [2, 6, 0], [2, 7, 0], [2, 8, 0],
+				[3, 0, 0], [3, 1, 0], [3, 2, 0], [3, 3, 0], [3, 4, 0], [3, 5, 0], [3, 6, 0], [3, 7, 0], [3, 8, 0],
+				[3, 0, 0], [3, 1, 0], [3, 2, 0], [3, 3, 0], [3, 4, 0], [3, 5, 0], [3, 6, 0], [3, 7, 0], [3, 8, 0],
+			]	as any
+		}
+	],
+	grid: {
+		top: 0,
+		bottom: 0,
+		left: 0,
+		right: 0,
+		containLabel: true
+	}
+} as any
+
+const scatterChartOptions = {
+	xAxis: {
+		type: 'value',
+		min: 0,
+		max: 15,
+		name: 'Minuten',
+	},
+
+	yAxis: {
+		type: 'value',
+	},
+	series: [
+		{
+			type: 'scatter',
+			name: 'Up',
+			data: [] as any[],
+			itemStyle: {
+				color: 'green'
+			},
+			symbolSize: 5,
+		},
+		{
+			type: 'scatter',
+			name: 'Down',
+			data: [] as any[],
+			itemStyle: {
+				color: 'red'
+			},
+			symbolSize: 5,
+		}
+	],
+} as any
+
+const barChartOptions = {
 	xAxis: {
 		type: 'category',
 	},
@@ -56,9 +139,9 @@ const barChartOptions: any = {
 		right: 0,
 		containLabel: true
 	}
-}
+} as any
 
-const lineChartOptions: any = {
+const lineChartOptions = {
 	// Choose axis ticks based on UTC time.
 	useUTC: true,
 	title: {
@@ -84,16 +167,16 @@ const lineChartOptions: any = {
 		type: 'value',
 		min: 'dataMin'
 	},
-	dataZoom: [
-		{
-			type: 'inside',
-			xAxisIndex: 0
-		},
-		{
-			type: 'slider',
-			xAxisIndex: 0
-		}
-	],
+	// dataZoom: [
+	// 	{
+	// 		type: 'inside',
+	// 		xAxisIndex: 0
+	// 	},
+	// 	{
+	// 		type: 'slider',
+	// 		xAxisIndex: 0
+	// 	}
+	// ],
 	series: [
 		{
 			type: 'line',
@@ -101,15 +184,16 @@ const lineChartOptions: any = {
 			data: [] as any[],
 		}
 	]
-};
+} as any
 
 
 export default function ChartPage() {
 	const [activeNode, setActiveNode] = useState(content[0])
 	const [selectedDate, setSelectedDate] = useState(new Date())
-	const [chartOptions, setChartOptions] = useState(barChartOptions)
-	useEffect(() => {
+	const [chartOptions, setChartOptions] = useState({line: lineChartOptions, bar: barChartOptions, heatmap: heatmapChartOptions})
+	const [chartType, setChartType] = useState('line')
 
+	useEffect(() => {
 	}, [])
 
 
@@ -184,7 +268,24 @@ export default function ChartPage() {
 				PolymarketChart.updateAllMarketData()
 				break
 			case 'test data':
-				PolymarketChart.testData(activeNode?.value)
+				const data2 = await PolymarketChart.testData(activeNode?.value)
+				console.log('data:', data2)
+				setChartOptions({
+					...scatterChartOptions,
+					xAxis: {
+						...scatterChartOptions.xAxis,
+					},
+					series: [
+						{
+							...scatterChartOptions.series[0],
+							data: data2[activeNode?.value]?.up.map((item) => [item[0], item[1]]) || [],
+						},
+						{
+							...scatterChartOptions.series[1],
+							data: data2[activeNode?.value]?.down.map((item) => [item[0], item[1]]) || [],
+						}
+					],
+				})
 				break
 		}
 	}
@@ -203,8 +304,14 @@ export default function ChartPage() {
 						<Button variant='outline' onClick={() => onClick('test data')}>test data</Button>
 					</ButtonGroup>
 
-					<ReactEcharts
-						option={{ ...chartOptions }}
+					<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
+						<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
+						<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
+						<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
+					</ToggleGroup>
+
+					<ReactEcharts	
+						option={{ ...chartOptions[chartType] }}
 						style={{ height: '100%', width: '100%' }}
 						notMerge={false}
 						lazyUpdate={false}

@@ -17,6 +17,10 @@ const cache = localForage.createInstance({
 	name: 'polymarket',
 	storeName: 'polymarket-cache'
 })
+const store = localForage.createInstance({
+	name: 'polymarket',
+	storeName: 'polymarket-store'
+})
 
 interface CryptoPriceResponse {
 	openPrice?: number
@@ -43,6 +47,7 @@ export const useStore = create(() => ({
 class PolymarketApi {
 	config: any = null
 	cache: any = null
+	store: any = null
 	rootPath: string = ''
 	gammaApiBase: string = GAMMA_API_BASE
 	polymarketApiBase: string = POLYMARKET_API_BASE
@@ -69,6 +74,7 @@ class PolymarketApi {
 	// ============================================================================ constructor
 	constructor() {
 		this.cache = cache
+		this.store = store
 		this.init()
 	}
 
@@ -119,15 +125,16 @@ class PolymarketApi {
 	// date: e.g. 2025-12-10
 	// minutes: e.g. 15
 	// return: Market
-	async createMarketFromDate(symbol: string, type: string, date: Date, minutes: number): Promise<Market> {
+	async createMarketFromDate(symbol: string, type: string, date: Date, minutes: number, offset: number = 0): Promise<Market> {
 		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
-		const timestamp = this.getUTCTimestamp(date, minutes)	//e.g. 1765584900
+		const timestamp = this.getUTCTimestamp(date, minutes) + offset	//e.g. 1765584900
 		const marketSlug = `${marketName}-${timestamp}`	//e.g. btc-updown-15m-1765144800
+		// const marketSlug = `btc-updown-4h-1766365200`	//e.g. btc-updown-15m-1765144800-15
 
 		// const cachedMarket = await cache.getItem<Market>(marketSlug)
 		// if (cachedMarket) return cachedMarket
 
-		const market = await this.createMarket(symbol, marketName, timestamp, marketSlug)
+		const market = await this.createMarket(symbol, marketName, timestamp, marketSlug, minutes)
 		return market as Market
 	}
 
@@ -152,12 +159,12 @@ class PolymarketApi {
 	// timestamp: e.g. 1765584900
 	// marketSlug: e.g. btc-updown-15m-1765584900
 	// return: Market
-	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string): Promise<Market> {
+	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string, minutes: number = 15): Promise<Market> {
 		const startTimestamp = timestamp * 1000 // Convert to milliseconds
-		const endTimestamp = startTimestamp + 15 * 60 * 1000 // Add 15 minutes
+		const endTimestamp = startTimestamp + minutes * 60 * 1000 // Add minutes
 
 		const market: Market = {
-			symbol: symbol.toUpperCase(),
+			symbol: symbol.toLowerCase(),
 			marketName: marketName,		//e.g. btc-updown-15m
 			slug: marketSlug,			//e.g. btc-updown-15m-1765584900
 			timestamp,					//e.g. 1765584900

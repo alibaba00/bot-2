@@ -20,7 +20,7 @@ export default function DemoTab2() {
 				<Button>Button 7</Button>
 			</ButtonGroup>
 
-			<ToggleGroup type='single' defaultValue='1'>
+			<ToggleGroup type='single' defaultValue='1' onValueChange={e => console.log('selected:', e)}>
 				<ToggleGroupItem value='1' variant='outline'>
 					Toggle 1
 				</ToggleGroupItem>

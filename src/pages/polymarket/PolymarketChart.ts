@@ -220,6 +220,16 @@ export const updateMarketData = async (filePath: string, slug: string): Promise<
 		updated = true
 	}
 
+	if (market.marketName === 'updown-15m') {		//old version
+		market.marketName = market.symbol.toLowerCase() + '-updown-15m'
+		updated = true
+	}
+
+	if (market.symbol === 'BTC' || market.symbol === 'ETH' || market.symbol === 'SOL' || market.symbol === 'XRP') {
+		market.symbol = market.symbol.toLowerCase()
+		updated = true
+	}
+
 	if (!market.marketData){
 		market.marketData = await PolymarketApi.fetchMarketBySlug(slug)
 		updated = true
@@ -488,17 +498,80 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 export const testData = async (symbol: string) => {
 	console.log('testing data...', symbol)
 
+	let data = await PolymarketApi.store.getItem('chartData') || await initData()
+	// let data = await initData()
+	// data = data[symbol]
+	// console.log('data:', data)
+
+	const results = {} as any
+	const count = {total:0, trades: 0, up: 0, down: 0, value: 0}
+
+	for (const symbol of Object.keys(data)) {
+		results[symbol] = {up: [], down: []} as any
+		// console.log('symbol:', symbol, data[symbol].length)
+		for (const item of data[symbol]) {
+			if (!item.marketName.endsWith('-updown-15m')) continue
+			
+			item.hits = {up: {}, down: {}}
+			count.total++
+
+			item.grid.up.forEach((el: any) => {
+				el[0] = parseNumber(el[0] / 60000)
+				el[3] = parseNumber(((el[2] / item.openPrice) - 1) * 100)
+				if (!item.hits.up[el[1]]) item.hits.up[el[1]] = el
+			})
+			item.grid.down.forEach((el: any) => {
+				el[0] = parseNumber(el[0] / 60000)
+				el[3] = parseNumber(((el[2] / item.openPrice) - 1) * 100)
+				if (!item.hits.down[el[1]]) item.hits.down[el[1]] = el
+			})
+
+			// const el = item.grid.up.find((el_: any) => el_[1] === 0.8)
+			const outcome = item.outcome as 'up' | 'down'
+			// const el = item.hits[outcome][0.8]
+			const el = item.hits.up[0.6]
+			if (el && el[0] > 0 && el[0] <= 3){
+				count.trades++
+				count[outcome]++
+				results[symbol][outcome].push([el[0], el[3]] as any[])
+			}
+		}
+	}
+
+	// count.value = (count.up / 0.8 - count.down) / count.trades
+	// count.value = ((count.down / (0.8 * count.trades)) - 1) * 100
+	count.value = ((count.up / (0.6 * count.trades)) - 1) * 100
+
+	// await PolymarketApi.store.setItem('chartData', data)
+	console.log('complete!', data, results, count)
+	return results
+}
+
+
+// ---------------------------------------------------------------------------- initData
+const initData = async () => {
+	const data = {}
 	const keys = await PolymarketApi.cache.keys()	//e.g. [btc-updown-15m-1765406700, ...]
 
 	for (const key of keys) {
 		const market = await PolymarketApi.cache.getItem(key)
 
-		if (market?.closed && market.chartData?.grid?.length) {
-			///
+		if (market?.closed && market.chartData?.grid) {
+			const symbol = market.symbol.toLowerCase()
+			data[symbol] = data[symbol] || []
+			data[symbol].push({
+				symbol: symbol,
+				marketName: market.marketName,
+				slug: market.slug,
+				grid: market.chartData?.grid,
+				openPrice: market.openPrice,
+				closePrice: market.closePrice,
+				outcome: market.outcome,
+			})
 		}
 	}
-
-	console.log('complete!')
+	await PolymarketApi.store.setItem('chartData', data)
+	return data
 }
 
 
