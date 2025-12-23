@@ -503,7 +503,9 @@ export const testData = async (symbol: string) => {
 	// data = data[symbol]
 	// console.log('data:', data)
 
-	const results = {} as any
+	const results = {
+		all: {up: [], down: []} as any,
+	} as any
 	const count = {total:0, trades: 0, up: 0, down: 0, value: 0}
 
 	for (const symbol of Object.keys(data)) {
@@ -526,24 +528,66 @@ export const testData = async (symbol: string) => {
 				if (!item.hits.down[el[1]]) item.hits.down[el[1]] = el
 			})
 
-			// const el = item.grid.up.find((el_: any) => el_[1] === 0.8)
 			const outcome = item.outcome as 'up' | 'down'
-			// const el = item.hits[outcome][0.8]
-			const el = item.hits.up[0.6]
-			if (el && el[0] > 0 && el[0] <= 3){
-				count.trades++
-				count[outcome]++
-				results[symbol][outcome].push([el[0], el[3]] as any[])
-			}
+			// const el = item.hits.up[0.6]
+			// if (el && el[0] > 0 && el[0] < 3){
+			// 	count.trades++
+			// 	count[outcome]++
+			// 	results[symbol][outcome].push([el[0], el[3]] as any[])		//time, price
+			// }
+
+			Object.entries(item.hits.up).forEach(([price_, el]: [string, any]) => {
+				if (el[0] > 0 && el[0] < 15){
+					const price = parseFloat(price_)
+					const row = price * 10 - 1 //0 - 8
+					const col = Math.floor(el[0] / 3) //0 - 4
+					const index = col * 9 + row
+					const value = 0
+
+					results[symbol].up[index] = results[symbol].up[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					results[symbol].up[index][outcome]++
+					results[symbol].up[index].total++
+
+					results.all.up[index] = results.all.up[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					results.all.up[index][outcome]++
+					results.all.up[index].total++
+				}
+			})
+			Object.entries(item.hits.down).forEach(([price_, el]: [string, any]) => {
+				if (el[0] > 0 && el[0] < 15){
+					const price = parseFloat(price_)
+					const row = price * 10 - 1 //0 - 8
+					const col = Math.floor(el[0] / 3) //0 - 4
+					const index = col * 9 + row
+					const value = 0
+
+					results[symbol].down[index] = results[symbol].down[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					results[symbol].down[index][outcome]++
+					results[symbol].down[index].total++
+
+					results.all.down[index] = results.all.down[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					results.all.down[index][outcome]++
+					results.all.down[index].total++
+				}
+			})
 		}
+
+		results[symbol].up.forEach((item: any) => {
+			item.value = (item.up / (item.total * item.price) - 1) * 100
+		})
+		results[symbol].down.forEach((item: any) => {
+			item.value = (item.down / (item.total * item.price) - 1) * 100
+		})
 	}
 
-	// count.value = (count.up / 0.8 - count.down) / count.trades
-	// count.value = ((count.down / (0.8 * count.trades)) - 1) * 100
-	count.value = ((count.up / (0.6 * count.trades)) - 1) * 100
+	results.all.up.forEach((item: any) => {
+		item.value = (item.up / (item.total * item.price) - 1) * 100
+	})
+
+	// count.value = ((count.up / (0.6 * count.trades)) - 1) * 100
 
 	// await PolymarketApi.store.setItem('chartData', data)
-	console.log('complete!', data, results, count)
+	console.log('complete! data:', data, 'results:', results, 'count:', count)
 	return results
 }
 

@@ -42,16 +42,17 @@ const heatmapChartOptions = {
 		data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
 	},
 	visualMap: {
-		min: 0,
-		max: 1,
+		min: -50,
+		max: 50,
 		calculable: true,
 		orient: 'horizontal',
 		left: 'center',
 		// bottom: '15%',
 		inRange: {
 			color: [
-			  '#3f00',
-			  '#3f0c'
+			'#f00c',
+			'#3303',
+			'#3f0c',
 			]
 		  }
 	  
@@ -59,13 +60,7 @@ const heatmapChartOptions = {
 	series: [
 		{
 			type: 'heatmap',
-			data: [
-				[0, 0, 0.1], [0, 1, 0.2], [0, 2, 0.3], [0, 3, 0.4], [0, 4, 0.5], [0, 5, 0.6], [0, 6, 0.7], [0, 7, 0.8], [0, 8, 0.9],
-				[1, 0, 0], [1, 1, 0], [1, 2, 0], [1, 3, 0], [1, 4, 0], [1, 5, 0], [1, 6, 0], [1, 7, 0], [1, 8, 0],
-				[2, 0, 0], [2, 1, 0], [2, 2, 0], [2, 3, 0], [2, 4, 0], [2, 5, 0], [2, 6, 0], [2, 7, 0], [2, 8, 0],
-				[3, 0, 0], [3, 1, 0], [3, 2, 0], [3, 3, 0], [3, 4, 0], [3, 5, 0], [3, 6, 0], [3, 7, 0], [3, 8, 0],
-				[3, 0, 0], [3, 1, 0], [3, 2, 0], [3, 3, 0], [3, 4, 0], [3, 5, 0], [3, 6, 0], [3, 7, 0], [3, 8, 0],
-			]	as any
+			data: []	as any
 		}
 	],
 	grid: {
@@ -167,16 +162,16 @@ const lineChartOptions = {
 		type: 'value',
 		min: 'dataMin'
 	},
-	// dataZoom: [
-	// 	{
-	// 		type: 'inside',
-	// 		xAxisIndex: 0
-	// 	},
-	// 	{
-	// 		type: 'slider',
-	// 		xAxisIndex: 0
-	// 	}
-	// ],
+	dataZoom: [
+		{
+			type: 'inside',
+			xAxisIndex: 0
+		},
+		{
+			type: 'slider',
+			xAxisIndex: 0
+		}
+	],
 	series: [
 		{
 			type: 'line',
@@ -190,7 +185,8 @@ const lineChartOptions = {
 export default function ChartPage() {
 	const [activeNode, setActiveNode] = useState(content[0])
 	const [selectedDate, setSelectedDate] = useState(new Date())
-	const [chartOptions, setChartOptions] = useState({line: lineChartOptions, bar: barChartOptions, heatmap: heatmapChartOptions})
+	// const [chartOptions, setChartOptions] = useState({line: lineChartOptions, bar: barChartOptions, heatmap: heatmapChartOptions})
+	const [chartOptions, setChartOptions] = useState({})
 	const [chartType, setChartType] = useState('line')
 
 	useEffect(() => {
@@ -247,45 +243,65 @@ export default function ChartPage() {
 				})
 				break
 			case 'market':
+				// setChartOptions(null)
+
 				// const markets = await PolymarketChart.getMarketDataFromDate(activeNode?.value, selectedDate)
 				// console.log('markets:', markets)
 				const dateString2 = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
 				let marketData = await PolymarketChart.getMarketChartData(null, activeNode?.value.toLowerCase(), dateString2)
 				marketData = marketData.filter((item) => item.direction === 'Up')
-				setChartOptions({
-					...lineChartOptions,
-					series: [{
-						...lineChartOptions.series[0],
-						data: marketData.map((item) => [item.timestamp, item.price])
-					}],
-					// xAxis: [{
-					// 	...lineChartOptions.xAxis[0],
-					// 	// Remove data property for time axis - it's not needed
-					// }]
-				})
+				// setTimeout(() => {
+					setChartOptions({
+						...lineChartOptions,
+						series: [{
+							...lineChartOptions.series[0],
+							data: marketData.map((item) => [item.timestamp, item.price])
+						}],
+					})
+				// }, 1000)
 				break
+
 			case 'update data':
 				PolymarketChart.updateAllMarketData()
 				break
+
 			case 'test data':
 				const data2 = await PolymarketChart.testData(activeNode?.value)
 				console.log('data:', data2)
+
+				const map = data2[activeNode?.value]?.up.map((item) => [item.col, item.row, item.value]) || []
+				console.log('map:', map)
 				setChartOptions({
-					...scatterChartOptions,
-					xAxis: {
-						...scatterChartOptions.xAxis,
-					},
-					series: [
-						{
-							...scatterChartOptions.series[0],
-							data: data2[activeNode?.value]?.up.map((item) => [item[0], item[1]]) || [],
-						},
-						{
-							...scatterChartOptions.series[1],
-							data: data2[activeNode?.value]?.down.map((item) => [item[0], item[1]]) || [],
-						}
-					],
+					...heatmapChartOptions,
+					series: [{
+						...heatmapChartOptions.series[0],
+						data: map,
+					}],
 				})
+				// setChartOptions({
+				// 	...scatterChartOptions,
+				// 	xAxis: {
+				// 		...scatterChartOptions.xAxis,
+				// 	},
+				// 	series: [
+				// 		{
+				// 			...scatterChartOptions.series[0],
+				// 			data: data2[activeNode?.value]?.up.map((item) => [item[0], item[1]]) || [],
+				// 		},
+				// 		{
+				// 			...scatterChartOptions.series[1],
+				// 			data: data2[activeNode?.value]?.down.map((item) => [item[0], item[1]]) || [],
+				// 		}
+				// 	],
+				// })
+				break
+			case 'heatmap':
+				// setChartOptions(null)
+				// setTimeout(() => {
+					setChartOptions({
+						...heatmapChartOptions,
+					})
+				// }, 1000)
 				break
 		}
 	}
@@ -302,6 +318,7 @@ export default function ChartPage() {
 						<Button variant='outline' onClick={() => onClick('market')}>Market</Button>
 						<Button variant='outline' onClick={() => onClick('update data')}>update data</Button>
 						<Button variant='outline' onClick={() => onClick('test data')}>test data</Button>
+						<Button variant='outline' onClick={() => onClick('heatmap')}>heatmap</Button>
 					</ButtonGroup>
 
 					<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
@@ -310,13 +327,12 @@ export default function ChartPage() {
 						<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
 					</ToggleGroup>
 
-					<ReactEcharts	
-						option={{ ...chartOptions[chartType] }}
+					<ReactEcharts
+						option={chartOptions}
 						style={{ height: '100%', width: '100%' }}
-						notMerge={false}
-						lazyUpdate={false}
+						notMerge={true}
+						lazyUpdate={true}
 					/>
-
 				</div>
 			</ResizablePanel>
 			<ResizableHandle />
