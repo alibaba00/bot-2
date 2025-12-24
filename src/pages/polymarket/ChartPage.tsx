@@ -35,15 +35,17 @@ const heatmapChartOptions = {
 	},
 	xAxis: {
 		type: 'category',
-		data: ['0-3', '3-6', '6-9', '9-12', '12-15'],
+		// data: ['0-3', '3-6', '6-9', '9-12', '12-15'],
+		data: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'],
 	},
 	yAxis: {
 		type: 'category',
+		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
 		data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
 	},
 	visualMap: {
-		min: -50,
-		max: 50,
+		min: -100,
+		max: 100,
 		calculable: true,
 		orient: 'horizontal',
 		left: 'center',
@@ -269,13 +271,15 @@ export default function ChartPage() {
 				const data2 = await PolymarketChart.testData(activeNode?.value)
 				console.log('data:', data2)
 
-				const map = data2[activeNode?.value]?.up.map((item) => [item.col, item.row, item.value]) || []
-				console.log('map:', map)
+				// let data3 = data2[activeNode?.value]?.up.map((item) => [item.col, item.row, item.value]) || []
+				let data3 = data2.all.up.map((item) => [item.col, item.row, item.value]) || []
+				console.log('data3:', data3[0], data3[1], data3[2])
+data3 = data3.slice(1, 1000)
 				setChartOptions({
 					...heatmapChartOptions,
 					series: [{
 						...heatmapChartOptions.series[0],
-						data: map,
+						data: data3,
 					}],
 				})
 				// setChartOptions({

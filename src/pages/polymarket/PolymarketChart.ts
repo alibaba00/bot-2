@@ -498,20 +498,27 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 export const testData = async (symbol: string) => {
 	console.log('testing data...', symbol)
 
-	let data = await PolymarketApi.store.getItem('chartData') || await initData()
-	// let data = await initData()
-	// data = data[symbol]
-	// console.log('data:', data)
+	// const data_ = await getAllMarkets()
+	// let length = 0
+	// for (const symbol of Object.keys(data_)) {
+	// 	for (const date of Object.keys(data_[symbol])) {
+	// 		length += data_[symbol][date].length
+	// 	}
+	// }
+	// console.log('length:', length)
+
+	const data_ = await PolymarketApi.store.getItem('chartData') || await initData()
+	// const data_ = await initData()
 
 	const results = {
-		all: {up: [], down: []} as any,
+		all: createMapData(),
 	} as any
 	const count = {total:0, trades: 0, up: 0, down: 0, value: 0}
 
-	for (const symbol of Object.keys(data)) {
-		results[symbol] = {up: [], down: []} as any
+	for (const symbol of Object.keys(data_)) {
+		results[symbol] = createMapData()
 		// console.log('symbol:', symbol, data[symbol].length)
-		for (const item of data[symbol]) {
+		for (const item of data_[symbol]) {
 			if (!item.marketName.endsWith('-updown-15m')) continue
 			
 			item.hits = {up: {}, down: {}}
@@ -540,15 +547,18 @@ export const testData = async (symbol: string) => {
 				if (el[0] > 0 && el[0] < 15){
 					const price = parseFloat(price_)
 					const row = price * 10 - 1 //0 - 8
-					const col = Math.floor(el[0] / 3) //0 - 4
+					// const col = Math.floor(el[0] / 3) //0 - 4
+					const col = Math.floor(el[0] / 1) //0 - 4
 					const index = col * 9 + row
-					const value = 0
+					// const value = 0
 
-					results[symbol].up[index] = results[symbol].up[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					// results[symbol].up[index] = results[symbol].up[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					results[symbol].up[index].price = price
 					results[symbol].up[index][outcome]++
 					results[symbol].up[index].total++
 
-					results.all.up[index] = results.all.up[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					// results.all.up[index] = results.all.up[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					results.all.up[index].price = price
 					results.all.up[index][outcome]++
 					results.all.up[index].total++
 				}
@@ -559,13 +569,15 @@ export const testData = async (symbol: string) => {
 					const row = price * 10 - 1 //0 - 8
 					const col = Math.floor(el[0] / 3) //0 - 4
 					const index = col * 9 + row
-					const value = 0
+					// const value = 0
 
-					results[symbol].down[index] = results[symbol].down[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					// results[symbol].down[index] = results[symbol].down[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					results[symbol].down[index].price = price
 					results[symbol].down[index][outcome]++
 					results[symbol].down[index].total++
 
-					results.all.down[index] = results.all.down[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					// results.all.down[index] = results.all.down[index] || {row, col, price, up: 0, down: 0, total: 0, value}
+					results.all.down[index].price = price
 					results.all.down[index][outcome]++
 					results.all.down[index].total++
 				}
@@ -587,8 +599,19 @@ export const testData = async (symbol: string) => {
 	// count.value = ((count.up / (0.6 * count.trades)) - 1) * 100
 
 	// await PolymarketApi.store.setItem('chartData', data)
-	console.log('complete! data:', data, 'results:', results, 'count:', count)
+	console.log('complete! data:', data_, 'results:', results, 'count:', count)
 	return results
+}
+
+const createMapData = () => {
+	const map = {up: [], down: []} as any
+	for (let col = 0; col < 15; col++) {
+		for (let row = 0; row < 9; row++) {
+			map.up.push({col, row, value: 0, up: 0, down: 0, price: 1, total: 0} as any)
+			map.down.push({col, row, value: 0, up: 0, down: 0, price: 1, total: 0} as any)
+		}
+	}
+	return map
 }
 
 
