@@ -603,6 +603,8 @@ export const testData = async (symbol: string) => {
 	return results
 }
 
+
+// ---------------------------------------------------------------------------- createMapData
 const createMapData = () => {
 	const map = {up: [], down: []} as any
 	for (let col = 0; col < 15; col++) {

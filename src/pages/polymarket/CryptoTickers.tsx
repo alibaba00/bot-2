@@ -107,7 +107,8 @@ export default function CryptoTickers() {
 							value={tab.value}
 							className='flex-1 hover:bg-accent hover:text-foreground data-[state=active]:after:bg-primary data-[state=active]:hover:bg-accent relative after:absolute after:inset-x-0 after:bottom-0 after:-mb-1 after:h-0.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none'>
 							{tab.label}
-							<MarketStateIndicator symbol={tab.value} />
+							<MarketStateIndicator type={'updown-15m'} symbol={tab.value} />
+							<MarketStateIndicator type={'updown-4h'} symbol={tab.value} />
 						</TabsTrigger>
 					))}
 				</TabsList>
@@ -127,7 +128,6 @@ export default function CryptoTickers() {
 
 // MarketState = 'init' | 'pending' | 'started' | 'running' | 'completed' | 'closed' | 'failed'
 const marketStateColors = {
-	// trading: '#36f',
 	running: 'green',
 	completed: 'yellow',
 	pending: 'yellow',
@@ -135,13 +135,14 @@ const marketStateColors = {
 	failed: 'red',
 	init: 'gray',
 	closed: 'gray',
+	undefined: 'gray',
 }
-const MarketStateIndicator = ({ symbol }: { symbol: string }) => {
-	const marketState = PolymarketApi.use('marketState_' + symbol)
+const MarketStateIndicator = ({ type, symbol }: { type: string, symbol: string }) => {
+	const marketState = PolymarketApi.use('marketState-' + type + '-' + symbol)
 
 	return (
 		<div className='flex flex-col items-center justify-center'>
-			<div className='text-2xl font-bold rounded-full w-3 h-3 bg-green-500 ml-2 mt-0.5'
+			<div className='text-2xl font-bold rounded-full w-3 h-3 bg-gray-600 ml-2 mt-0.5'
 			style={{backgroundColor: marketStateColors[marketState as MarketState]}}></div>
 		</div>
 	)

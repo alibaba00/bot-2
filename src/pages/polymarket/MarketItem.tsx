@@ -13,9 +13,7 @@ export default function MarketItem({ symbol, type, minutes, offset }: { symbol: 
 	const [assetIds, setAssetIds] = useState<string[]>([])
 	const assets = useRef<any>({})
 	const [clobMarketWsStatus, setClobMarketWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
-	// const [lastMarketLastTradePriceUpdate, setLastMarketLastTradePriceUpdate] = useState<CLOBLastTradePriceUpdate | null>(null)
 	const [state, setState] = useState<MarketState>()
-	// const state = PolymarketApi.use('marketState_' + symbol)
 	const tradingActive = PolymarketApi.use('tradingActive')
 	const marketCompleted = PolymarketApi.use('marketCompleted-' + type)	//market is completed from CryptoTickers.tsx
 	const marketCloseTimeoutId = useRef<NodeJS.Timeout | null>(null)
@@ -129,7 +127,7 @@ export default function MarketItem({ symbol, type, minutes, offset }: { symbol: 
 		console.log('---setMarketState:', market?.slug, state)
 		market.state = state
 		setState(state)
-		PolymarketApi.set('marketState_' + symbol, state)	//update tab indicator
+		PolymarketApi.set('marketState-' + type + '-' + symbol, state)	//update tab indicator
 		PolymarketApi.cacheMarket(market as unknown as Market)
 	}
 
@@ -184,6 +182,7 @@ export default function MarketItem({ symbol, type, minutes, offset }: { symbol: 
 				// connectMarket() //--> trading
 				return;
 
+			// from marketCompleted
 			case 'completed':		//market is completed
 				disconnectMarket()
 
@@ -197,9 +196,9 @@ export default function MarketItem({ symbol, type, minutes, offset }: { symbol: 
 				}
 
 				// PolymarketApi.pollingClosePrice(market)	//polling for final price in the background
-				marketCloseTimeoutId.current = setTimeout(() => {
-					PolymarketApi.closeMarket(market as unknown as Market)
-				}, 60000 * 5)	//wait 5 minutes before closing market
+				// marketCloseTimeoutId.current = setTimeout(() => {
+				// 	PolymarketApi.closeMarket(market as unknown as Market)
+				// }, 60000 * 5)	//wait 5 minutes before closing market
 				
 				// create next market
 				const nextMarket = await PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), minutes)
