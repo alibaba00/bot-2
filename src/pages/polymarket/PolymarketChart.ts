@@ -486,43 +486,22 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 }
 
 
-// ---------------------------------------------------------------------------- 
-// {
-//     "file": "btc-updown-15m-1765406700.json",
-//     "filePath": "A:/DATA/polymarket/markets//btc/2025-12-10/btc-updown-15m-1765406700.json",
-//     "slug": "btc-updown-15m-1765406700",
-//     "timestamp": 1765406700,
-//     "date": "2025-12-10",
-//     "symbol": "btc"
-// }
-export const testData = async (symbol: string) => {
-	console.log('testing data...', symbol)
-
-	// const data_ = await getAllMarkets()
-	// let length = 0
-	// for (const symbol of Object.keys(data_)) {
-	// 	for (const date of Object.keys(data_[symbol])) {
-	// 		length += data_[symbol][date].length
-	// 	}
-	// }
-	// console.log('length:', length)
-
+export const scatterData = async () => {
 	const data_ = await PolymarketApi.store.getItem('chartData') || await initData()
 	// const data_ = await initData()
 
 	const results = {
-		all: createMapData(),
+		all: {up: {win:[], lose: [], total: 0}, down: {win:[], lose: [], total: 0}} as any,
 	} as any
-	const count = {total:0, trades: 0, up: 0, down: 0, value: 0}
+	const count = {count:0, trades: 0, up: 0, down: 0, value: 0}
 
 	for (const symbol of Object.keys(data_)) {
-		results[symbol] = createMapData()
-		// console.log('symbol:', symbol, data[symbol].length)
+		results[symbol] = {up: {win:[], lose: [], total: 0}, down: {win:[], lose: [], total: 0}} as any
 		for (const item of data_[symbol]) {
 			if (!item.marketName.endsWith('-updown-15m')) continue
 			
-			item.hits = {up: {}, down: {}}
-			count.total++
+			item.hits = {up: {}, down: {}} as any
+			count.count++
 
 			item.grid.up.forEach((el: any) => {
 				el[0] = parseNumber(el[0] / 60000)
@@ -536,71 +515,322 @@ export const testData = async (symbol: string) => {
 			})
 
 			const outcome = item.outcome as 'up' | 'down'
-			// const el = item.hits.up[0.6]
-			// if (el && el[0] > 0 && el[0] < 3){
-			// 	count.trades++
-			// 	count[outcome]++
-			// 	results[symbol][outcome].push([el[0], el[3]] as any[])		//time, price
-			// }
 
 			Object.entries(item.hits.up).forEach(([price_, el]: [string, any]) => {
 				if (el[0] > 0 && el[0] < 15){
 					const price = parseFloat(price_)
-					const row = price * 10 - 1 //0 - 8
-					// const col = Math.floor(el[0] / 3) //0 - 4
-					const col = Math.floor(el[0] / 1) //0 - 4
-					const index = col * 9 + row
-					// const value = 0
+					const node = {
+						price: price,
+						time: el[0],
+						minute: Math.floor(el[0]),
+						outcome: outcome,
+						value: el[3],
+						count: 1} as any	
 
-					// results[symbol].up[index] = results[symbol].up[index] || {row, col, price, up: 0, down: 0, total: 0, value}
-					results[symbol].up[index].price = price
-					results[symbol].up[index][outcome]++
-					results[symbol].up[index].total++
-
-					// results.all.up[index] = results.all.up[index] || {row, col, price, up: 0, down: 0, total: 0, value}
-					results.all.up[index].price = price
-					results.all.up[index][outcome]++
-					results.all.up[index].total++
+					if (outcome === 'up') {
+						results[symbol].up.win.push(node)
+						results.all.up.win.push(node)
+						results[symbol].up.total++
+						results.all.up.total++
+					}else{
+						results[symbol].up.lose.push(node)
+						results.all.up.lose.push(node)
+						results[symbol].up.total++
+						results.all.up.total++
+					}
 				}
 			})
 			Object.entries(item.hits.down).forEach(([price_, el]: [string, any]) => {
 				if (el[0] > 0 && el[0] < 15){
 					const price = parseFloat(price_)
+					const node = {
+						price: price,
+						time: el[0],
+						minute: Math.floor(el[0]),
+						outcome: outcome,
+						value: el[3],
+						count: 1} as any	
+
+					if (outcome === 'down') {
+						results[symbol].down.win.push(node)
+						results.all.down.win.push(node)
+						results[symbol].down.total++
+						results.all.down.total++
+					}else{
+						results[symbol].down.lose.push(node)
+						results.all.down.lose.push(node)
+						results[symbol].down.total++
+						results.all.down.total++
+					}
+				}
+			})
+		}
+	}
+
+	// count.value = ((count.up / (0.6 * count.trades)) - 1) * 100
+
+	console.log('complete! data:', data_, 'results:', results, 'count:', count)
+	return results
+}
+
+
+// ---------------------------------------------------------------------------- 
+// {
+//     "file": "btc-updown-15m-1765406700.json",
+//     "filePath": "A:/DATA/polymarket/markets//btc/2025-12-10/btc-updown-15m-1765406700.json",
+//     "slug": "btc-updown-15m-1765406700",
+//     "timestamp": 1765406700,
+//     "date": "2025-12-10",
+//     "symbol": "btc"
+// }
+export const heatmapData = async () => {
+	const data_ = await PolymarketApi.store.getItem('chartData') || await initData()
+	// const data_ = await initData()
+
+	const test = {
+		up: {result: 0, total: 0, up: 0, down: 0},
+		down: {result: 0, total: 0, up: 0, down: 0},
+		// all: {win: 0, lose: 0, total: 0, up: 0, down: 0}
+	} as any
+	let total = 0
+
+	const results = {
+		all: createMapData(),
+	} as any
+	// const count = {count:0, trades: 0, up: 0, down: 0, value: 0}
+
+	for (const symbol of Object.keys(data_)) {
+		results[symbol] = createMapData()
+
+		for (const item of data_[symbol]) {
+			if (!item.marketName.endsWith('-updown-15m')) continue
+			
+			item.hits = {up: {}, down: {}}
+			item.grid.up.forEach((el: any) => {
+				el[0] = parseNumber(el[0] / 60000)
+				el[3] = parseNumber(((el[2] / item.openPrice) - 1) * 100)
+				if (!item.hits.up[el[1]]) item.hits.up[el[1]] = el
+			})
+			item.grid.down.forEach((el: any) => {
+				el[0] = parseNumber(el[0] / 60000)
+				el[3] = parseNumber(((el[2] / item.openPrice) - 1) * 100)
+				if (!item.hits.down[el[1]]) item.hits.down[el[1]] = el
+			})
+
+			const outcome = item.outcome as 'up' | 'down'
+
+let el = item.hits.up['0.4']		
+if (el && el[0] > 0 && el[0] < 3){
+	test.up.total++
+	test.up[outcome]++
+	if (outcome === 'up') test.up.result += (1 / el[1])
+	else test.up.result -= 1
+}
+			
+			Object.entries(item.hits.up).forEach(([price_, el]: [string, any]) => {
+// if (el[0] > 12 && el[0] < 15 && el[1] >= 0.6){
+// 	test.up.total++
+// 	if (outcome === 'up') test.up.win += ((1 / el[1]) - 1)
+// 	else test.up.lose += 1
+// }
+				if (el[0] > 0 && el[0] < 15){
+					const price = parseFloat(price_)
 					const row = price * 10 - 1 //0 - 8
-					const col = Math.floor(el[0] / 3) //0 - 4
+					const col = Math.floor(el[0] / 1) //0 - 4
 					const index = col * 9 + row
-					// const value = 0
+					let item = results[symbol].up[index]
 
-					// results[symbol].down[index] = results[symbol].down[index] || {row, col, price, up: 0, down: 0, total: 0, value}
-					results[symbol].down[index].price = price
-					results[symbol].down[index][outcome]++
-					results[symbol].down[index].total++
+					item.price = price
+					item[outcome]++
+					item.count++
 
-					// results.all.down[index] = results.all.down[index] || {row, col, price, up: 0, down: 0, total: 0, value}
-					results.all.down[index].price = price
-					results.all.down[index][outcome]++
-					results.all.down[index].total++
+					item = results.all.up[index]
+					item.price = price
+					item[outcome]++
+					item.count++
+				}
+			})
+
+el = item.hits.down['0.4']		
+if (el && el[0] > 0 && el[0] < 3){
+	test.down.total++
+	test.down[outcome]++
+	if (outcome === 'down') test.down.result += (1 / el[1])
+	else test.down.result -= 1
+}
+			
+			Object.entries(item.hits.down).forEach(([price_, el]: [string, any]) => {
+// if (el[0] > 12 && el[0] < 15 && el[1] >= 0.6){
+// 	test.down.total++
+// 	if (outcome === 'down') test.down.win += ((1 / el[1]) - 1)
+// 	else test.down.lose += 1
+// }
+				if (el[0] > 0 && el[0] < 15){
+					const price = parseFloat(price_)
+					const row = price * 10 - 1 //0 - 8
+					const col = Math.floor(el[0] / 1) //0 - 4
+					const index = col * 9 + row
+					let item = results[symbol].down[index]
+
+					item.price = price
+					item[outcome]++
+					item.count++
+
+					item = results.all.down[index]
+					item.price = price
+					item[outcome]++
+					item.count++
 				}
 			})
 		}
 
 		results[symbol].up.forEach((item: any) => {
-			item.value = (item.up / (item.total * item.price) - 1) * 100
+			item.value = (item.up / (item.count * item.price) - 1) * 100 * item.count / data_[symbol].length
+			// item.value = ((item.up / item.down) - 1) * 100
 		})
 		results[symbol].down.forEach((item: any) => {
-			item.value = (item.down / (item.total * item.price) - 1) * 100
+			item.value = (item.down / (item.count * item.price) - 1) * 100 * item.count / data_[symbol].length
+			// item.value = ((item.down / item.up) - 1) * 100
 		})
+
+		total += data_[symbol].length
 	}
 
 	results.all.up.forEach((item: any) => {
-		item.value = (item.up / (item.total * item.price) - 1) * 100
+		if (item.count)	item.value = (item.up / (item.count * item.price) - 1) * 100 * item.count / total
+		// if (item.count)	item.value = ((item.up / item.down) - 1) * 100
+	})
+	results.all.down.forEach((item: any) => {
+		if (item.count)	item.value = (item.down / (item.count * item.price) - 1) * 100 * item.count / total
+		// if (item.count)	item.value = ((item.down / item.up) - 1) * 100
 	})
 
 	// count.value = ((count.up / (0.6 * count.trades)) - 1) * 100
 
-	// await PolymarketApi.store.setItem('chartData', data)
-	console.log('complete! data:', data_, 'results:', results, 'count:', count)
+	console.log('complete! data:', total, data_, 'results:', results)
+console.log('test:', test)
+
 	return results
+}
+
+
+// ---------------------------------------------------------------------------- testData
+const testData = async () => {
+	const data_ = await PolymarketApi.store.getItem('chartData') || await initData()
+
+	const test = {
+		up: {win: 0, lose: 0, total: 0},
+		down: {win: 0, lose: 0, total: 0},
+		all: {win: 0, lose: 0, total: 0}
+	} as any
+
+	for (const symbol of Object.keys(data_)) {
+
+		for (const item of data_[symbol]) {
+			if (!item.marketName.endsWith('-updown-15m')) continue
+			
+			item.hits = {up: {}, down: {}}
+			item.grid.up.forEach((el: any) => {
+				el[0] = parseNumber(el[0] / 60000)
+				el[3] = parseNumber(((el[2] / item.openPrice) - 1) * 100)
+				if (!item.hits.up[el[1]]) item.hits.up[el[1]] = el
+			})
+			item.grid.down.forEach((el: any) => {
+				el[0] = parseNumber(el[0] / 60000)
+				el[3] = parseNumber(((el[2] / item.openPrice) - 1) * 100)
+				if (!item.hits.down[el[1]]) item.hits.down[el[1]] = el
+			})
+
+			const outcome = item.outcome as 'up' | 'down'
+
+let el = item.hits.up['0.8']		
+if (el && el[0] > 12 && el[0] < 15){
+	test.up.total++
+	if (outcome === 'up') test.up.win += ((1 / el[1]) - 1)
+	else test.up.lose += 1
+}
+			
+			Object.entries(item.hits.up).forEach(([price_, el]: [string, any]) => {
+// if (el[0] > 12 && el[0] < 15 && el[1] >= 0.6){
+// 	test.up.total++
+// 	if (outcome === 'up') test.up.win += ((1 / el[1]) - 1)
+// 	else test.up.lose += 1
+// }
+				if (el[0] > 0 && el[0] < 15){
+					const price = parseFloat(price_)
+					const row = price * 10 - 1 //0 - 8
+					const col = Math.floor(el[0] / 1) //0 - 4
+					const index = col * 9 + row
+					let item = results[symbol].up[index]
+
+					item.price = price
+					item[outcome]++
+					item.count++
+
+					item = results.all.up[index]
+					item.price = price
+					item[outcome]++
+					item.count++
+				}
+			})
+
+el = item.hits.down['0.8']		
+if (el && el[0] > 12 && el[0] < 15){
+	test.down.total++
+	if (outcome === 'down') test.down.win += ((1 / el[1]) - 1)
+	else test.down.lose += 1
+}
+			
+			Object.entries(item.hits.down).forEach(([price_, el]: [string, any]) => {
+// if (el[0] > 12 && el[0] < 15 && el[1] >= 0.6){
+// 	test.down.total++
+// 	if (outcome === 'down') test.down.win += ((1 / el[1]) - 1)
+// 	else test.down.lose += 1
+// }
+				if (el[0] > 0 && el[0] < 15){
+					const price = parseFloat(price_)
+					const row = price * 10 - 1 //0 - 8
+					const col = Math.floor(el[0] / 1) //0 - 4
+					const index = col * 9 + row
+					let item = results[symbol].down[index]
+
+					item.price = price
+					item[outcome]++
+					item.count++
+
+					item = results.all.down[index]
+					item.price = price
+					item[outcome]++
+					item.count++
+				}
+			})
+		}
+
+		results[symbol].up.forEach((item: any) => {
+			item.value = (item.up / (item.count * item.price) - 1) * 100 * item.count / data_[symbol].length
+			// item.value = ((item.up / item.down) - 1) * 100
+		})
+		results[symbol].down.forEach((item: any) => {
+			item.value = (item.down / (item.count * item.price) - 1) * 100 * item.count / data_[symbol].length
+			// item.value = ((item.down / item.up) - 1) * 100
+		})
+
+		total += data_[symbol].length
+	}
+
+	results.all.up.forEach((item: any) => {
+		if (item.count)	item.value = (item.up / (item.count * item.price) - 1) * 100 * item.count / total
+		// if (item.count)	item.value = ((item.up / item.down) - 1) * 100
+	})
+	results.all.down.forEach((item: any) => {
+		if (item.count)	item.value = (item.down / (item.count * item.price) - 1) * 100 * item.count / total
+		// if (item.count)	item.value = ((item.down / item.up) - 1) * 100
+	})
+
+	// count.value = ((count.up / (0.6 * count.trades)) - 1) * 100
+
+	console.log('complete! data:', total, data_, 'results:', results)
+console.log('test:', test)	
 }
 
 
@@ -609,8 +839,8 @@ const createMapData = () => {
 	const map = {up: [], down: []} as any
 	for (let col = 0; col < 15; col++) {
 		for (let row = 0; row < 9; row++) {
-			map.up.push({col, row, value: 0, up: 0, down: 0, price: 1, total: 0} as any)
-			map.down.push({col, row, value: 0, up: 0, down: 0, price: 1, total: 0} as any)
+			map.up.push({col, row, value: 0, up: 0, down: 0, price: 1, count: 0} as any)
+			map.down.push({col, row, value: 0, up: 0, down: 0, price: 1, count: 0} as any)
 		}
 	}
 	return map

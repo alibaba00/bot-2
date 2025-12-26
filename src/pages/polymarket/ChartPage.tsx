@@ -1,15 +1,14 @@
-import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
-import * as PolymarketChart from "./PolymarketChart";
 import PolymarketApi from "./PolymarketApi";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import * as PolymarketChart from "./PolymarketChart";
+import { Button } from "@/components/ui/button";
 
 
-const content = [
+const assetContent = [
 	{
 		label: 'BTC',
 		value: 'btc',
@@ -26,7 +25,11 @@ const content = [
 		label: 'XRP',
 		value: 'xrp',
 	},
-]
+	{
+		label: 'ALL',
+		value: 'all',
+	},
+] as any
 
 const heatmapChartOptions = {
 	tooltip: {
@@ -44,8 +47,8 @@ const heatmapChartOptions = {
 		data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
 	},
 	visualMap: {
-		min: -100,
-		max: 100,
+		min: -1,
+		max: 1,
 		calculable: true,
 		orient: 'horizontal',
 		left: 'center',
@@ -184,22 +187,67 @@ const lineChartOptions = {
 } as any
 
 
+const chartData = {} as any
+
 export default function ChartPage() {
-	const [activeNode, setActiveNode] = useState(content[0])
+	const [asset, setAsset] = useState(assetContent[0])
 	const [selectedDate, setSelectedDate] = useState(new Date())
 	// const [chartOptions, setChartOptions] = useState({line: lineChartOptions, bar: barChartOptions, heatmap: heatmapChartOptions})
 	const [chartOptions, setChartOptions] = useState({})
 	const [chartType, setChartType] = useState('line')
+	const [side, setSide] = useState('up')
+
+
+	const updateChart = async () => {
+		if (!asset?.value) return
+		switch (chartType) {
+			case 'line':
+				setChartOptions(lineChartOptions)
+				break
+			case 'bar':
+				setChartOptions(barChartOptions)
+				break
+
+			case 'heatmap':
+				if (!chartData.heatmap){
+					const data2 = await PolymarketChart.heatmapData()
+					console.log('data:', data2)
+					chartData.heatmap = data2
+				}
+				setChartOptions({
+					...heatmapChartOptions,
+					series: [{
+						...heatmapChartOptions.series[0],
+						data: chartData.heatmap[asset.value][side].map((item) => [item.col, item.row, item.value]),
+					}],
+				})
+				break
+			case 'scatter':
+				if (!chartData.scatter){
+					const data2 = await PolymarketChart.scatterData()
+					console.log('data:', data2)
+					chartData.scatter = data2
+				}
+				setChartOptions({
+					...scatterChartOptions,
+					series: [
+						{
+							...scatterChartOptions.series[0],
+							data: chartData.scatter[asset.value][side].win.map((item) => [item.time, item.value]),
+						},
+						{
+							...scatterChartOptions.series[1],
+							data: chartData.scatter[asset.value][side].lose.map((item) => [item.time, item.value]),
+						}
+					],
+				})
+				break
+			}
+	}
 
 	useEffect(() => {
-	}, [])
-
-
-	useEffect(() => {
-		// .then((markets) => {
-		// 	console.log('markets:', markets)
-		// })
-	}, [selectedDate])
+		updateChart()
+	}, [chartType, asset, side])
 
 
 	const onClick = async (type: string) => {
@@ -213,9 +261,9 @@ export default function ChartPage() {
 				// const markets = PolymarketChart.getMarketDataFromDate(activeNode?.value, selectedDate)
 				// console.log('markets:', markets)
 
-				if (!activeNode?.value || !selectedDate) return
+				if (!asset?.value || !selectedDate) return
 				const dateString = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
-				const data1 = await PolymarketChart.getChartTickerData(activeNode?.value, dateString)
+				const data1 = await PolymarketChart.getChartTickerData(asset?.value, dateString)
 				const chartData = await PolymarketChart.getChartMinuteData(data1)
 				// const normalizedData = PolymarketChart.normalizeData(chartData, 60)
 				// For time axis, data must be in format [timestamp, value] pairs
@@ -234,7 +282,7 @@ export default function ChartPage() {
 
 			case 'line':
 				// const dateString1 = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
-				const data = await PolymarketChart.getChartDistributionData(activeNode?.value.toLowerCase())
+				const data = await PolymarketChart.getChartDistributionData(asset?.value.toLowerCase())
 				// console.log('data:', data)
 				setChartOptions({
 					...barChartOptions,
@@ -250,7 +298,7 @@ export default function ChartPage() {
 				// const markets = await PolymarketChart.getMarketDataFromDate(activeNode?.value, selectedDate)
 				// console.log('markets:', markets)
 				const dateString2 = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
-				let marketData = await PolymarketChart.getMarketChartData(null, activeNode?.value.toLowerCase(), dateString2)
+				let marketData = await PolymarketChart.getMarketChartData(null, asset?.value.toLowerCase(), dateString2)
 				marketData = marketData.filter((item) => item.direction === 'Up')
 				// setTimeout(() => {
 					setChartOptions({
@@ -267,46 +315,6 @@ export default function ChartPage() {
 				PolymarketChart.updateAllMarketData()
 				break
 
-			case 'test data':
-				const data2 = await PolymarketChart.testData(activeNode?.value)
-				console.log('data:', data2)
-
-				// let data3 = data2[activeNode?.value]?.up.map((item) => [item.col, item.row, item.value]) || []
-				let data3 = data2.all.up.map((item) => [item.col, item.row, item.value]) || []
-				console.log('data3:', data3[0], data3[1], data3[2])
-data3 = data3.slice(1, 1000)
-				setChartOptions({
-					...heatmapChartOptions,
-					series: [{
-						...heatmapChartOptions.series[0],
-						data: data3,
-					}],
-				})
-				// setChartOptions({
-				// 	...scatterChartOptions,
-				// 	xAxis: {
-				// 		...scatterChartOptions.xAxis,
-				// 	},
-				// 	series: [
-				// 		{
-				// 			...scatterChartOptions.series[0],
-				// 			data: data2[activeNode?.value]?.up.map((item) => [item[0], item[1]]) || [],
-				// 		},
-				// 		{
-				// 			...scatterChartOptions.series[1],
-				// 			data: data2[activeNode?.value]?.down.map((item) => [item[0], item[1]]) || [],
-				// 		}
-				// 	],
-				// })
-				break
-			case 'heatmap':
-				// setChartOptions(null)
-				// setTimeout(() => {
-					setChartOptions({
-						...heatmapChartOptions,
-					})
-				// }, 1000)
-				break
 		}
 	}
 
@@ -314,23 +322,24 @@ data3 = data3.slice(1, 1000)
 	return (
 		<ResizablePanelGroup direction='vertical'>
 			<ResizablePanel defaultSize={50}>
-				<div className='flex h-full items-center justify-center p-6 flex-col gap-4'>
-					<ButtonGroup>
-						<Button variant='outline' onClick={() => onClick('load-full-ticker-data')}>load full Ticker data</Button>
-						<Button variant='outline' onClick={() => onClick('load-ticker-data')}>load Ticker data</Button>
-						<Button variant='outline' onClick={() => onClick('line')}>Line</Button>
-						<Button variant='outline' onClick={() => onClick('market')}>Market</Button>
-						<Button variant='outline' onClick={() => onClick('update data')}>update data</Button>
-						<Button variant='outline' onClick={() => onClick('test data')}>test data</Button>
-						<Button variant='outline' onClick={() => onClick('heatmap')}>heatmap</Button>
-					</ButtonGroup>
+				<div className='h-full w-full flex flex-col gap-4 p-4'>
+					<div className='flex flex-row items-center justify-center flex-col gap-4'>
+						<Button onClick={() => PolymarketChart.updateAllMarketData()}>
+							Update Data
+						</Button>
+						
+						<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
+							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
+							<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
+							<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
+							<ToggleGroupItem value='scatter' variant='outline'>Scatter</ToggleGroupItem>
+						</ToggleGroup>
 
-					<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
-						<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
-						<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
-						<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
-					</ToggleGroup>
-
+						<ToggleGroup type='single' defaultValue='up' onValueChange={(e: string) => setSide(e)}>
+							<ToggleGroupItem value='up' variant='outline'>Up</ToggleGroupItem>
+							<ToggleGroupItem value='down' variant='outline'>Down</ToggleGroupItem>
+						</ToggleGroup>
+					</div>
 					<ReactEcharts
 						option={chartOptions}
 						style={{ height: '100%', width: '100%' }}
@@ -343,13 +352,13 @@ data3 = data3.slice(1, 1000)
 			<ResizablePanel defaultSize={50}>
 				<div className='flex h-full items-center justify-center p-4 flex-col gap-4'>
 					<Tabs
-						value={activeNode?.value}
+						value={asset?.value}
 						onValueChange={(value) =>
-							setActiveNode(content.find((node) => node.value === value) ?? content[0])
+							setAsset(assetContent.find((node) => node.value === value) ?? assetContent[0])
 						}
 						className='w-full h-full'>
 						<TabsList className='text-foreground h-auto w-full rounded-none border-b bg-transparent px-0 py-1'>
-							{content.map((tab) => (
+							{assetContent.map((tab) => (
 								<TabsTrigger
 									key={tab.value}
 									value={tab.value}
@@ -366,7 +375,7 @@ data3 = data3.slice(1, 1000)
 								value={selectedDate ? selectedDate.toISOString().slice(0, 10) : ''}
 							/>
 						</TabsList>
-						<MarketList symbol={activeNode?.value} selectedDate={selectedDate} />
+						<MarketList symbol={asset?.value} selectedDate={selectedDate} />
 					</Tabs>
 				</div>
 			</ResizablePanel>

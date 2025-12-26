@@ -95,7 +95,7 @@ if (symbol === 'btc') console.log('---------------------useEffect tickerActive:'
 				)}
 			</h2>
 
-			{/* <MarketItem symbol={symbol} type={'updown-15m'} minutes={15} offset={0} /> */}
+			<MarketItem symbol={symbol} type={'updown-15m'} minutes={15} offset={0} />
 
 			{/* <MarketItem symbol={symbol} type={'updown-1h'} minutes={60} /> */}
 
