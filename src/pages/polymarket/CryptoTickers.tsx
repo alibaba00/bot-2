@@ -7,26 +7,32 @@ import type { MarketState } from '@/lib/polymarket/types'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { useCryptoPricePoller } from '@/hooks/use-crypto-price-poller'
+import type { CryptoPriceUpdate } from '@/lib/polymarket/crypto-price-poller'
 
 const content = [
 	{
 		label: 'BTC',
 		value: 'btc',
+		binanceSymbol: 'btcusdt',
 		page: <CryptoTickerPage symbol='btc' />
 	},
 	{
 		label: 'ETH',
 		value: 'eth',
+		binanceSymbol: 'ethusdt',
 		page: <CryptoTickerPage symbol='eth' />,
 	},
 	{
 		label: 'SOL',
 		value: 'sol',
+		binanceSymbol: 'solusdt',
 		page: <CryptoTickerPage symbol='sol' />,
 	},
 	{
 		label: 'XRP',
 		value: 'xrp',
+		binanceSymbol: 'xrpusdt',
 		page: <CryptoTickerPage symbol='xrp' />,
 	}
 ]
@@ -38,10 +44,61 @@ export default function CryptoTickers() {
 	// console.log('onTimer', onTimer)
 	const tradingActive = PolymarketApi.use('tradingActive')
 	const tickerActive = PolymarketApi.use('tickerActive')
+	const pollingActive = PolymarketApi.use('pollingActive')
 	const isActive = PolymarketApi.use('marketActive')
 	const isLogging = PolymarketApi.use('loggingActive')
-	const pollingActive = PolymarketApi.use('pollingActive')
 
+	// Get all symbols for Polling (all 4 assets when active, using Binance format)
+	const activePollingSymbols = pollingActive
+	? content.map((config) => config.binanceSymbol)
+	: []
+
+
+	const polling = useCryptoPricePoller({
+		source: 'binance',
+		symbols: activePollingSymbols,
+		onPriceUpdate: (update: CryptoPriceUpdate) => {
+			const config = content.find(
+				(c) => c.binanceSymbol.toLowerCase() === update.symbol.toLowerCase()
+			)
+			if (config) {
+				const symbol = config.value
+				const lastPrice = PolymarketApi.get('pollingPrice-' + symbol) as {timestamp: number, price: number} | null
+				if (update.value !== lastPrice?.price) {
+					PolymarketApi.onPollingLog(symbol, update.timestamp, update.value)
+				}
+			}
+		},
+		onError: (err) => {
+			console.error('Polling error:', err)
+		},
+		autoStart: false
+	})
+
+	useEffect(() => {
+		if (polling.status === 'polling') {
+			polling.updateSymbols(activePollingSymbols)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [activePollingSymbols.join(',')])
+
+	// Start/stop polling based on active state
+	useEffect(() => {
+		if (pollingActive) {
+			// Start polling if not already polling
+			if (polling.status === 'stopped') {
+				polling.start()
+			}
+		} else {
+			// Stop polling if active
+			if (polling.status === 'polling') {
+				polling.stop()
+			}
+			// Don't clear prices - keep last value but it will be grayed out
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pollingActive])
+	
 
 	return (
 		<div className='p-4 w-full'>
@@ -53,11 +110,11 @@ export default function CryptoTickers() {
 				className='w-full'>
 
 				<div className='flex items-center gap-2 h-8'>
-					{isActive &&
 					<div className='flex items-center gap-4'>
 						<MarketTimer minutes={15} type={'updown-15m'} />
 						{/* <MarketTimer minutes={60} type={type} /> */}
 						{/* https://polymarket.com/_next/data/FT6aYvzrNjMngWuxKlVC4/event/bitcoin-up-or-down-december-21-7pm-et.json?slug=bitcoin-up-or-down-december-21-7pm-et */}
+						{/* <MarketTimer minutes={60 * 4} type={'updown-4h'} offset={-3600} /> */}
 						<MarketTimer minutes={60 * 4} type={'updown-4h'} offset={-3600} />
 						
 						<Button
@@ -74,15 +131,16 @@ export default function CryptoTickers() {
 							>
 							{pollingActive ? 'Stop Polling' : 'Start Polling'}
 						</Button>
-						<Button
-							onClick={() => PolymarketApi.set('tradingActive', !tradingActive)}
-							variant={tradingActive ? 'destructive' : 'outline'}
-							size='sm'
-							>
-							{tradingActive ? 'Stop Trading' : 'Start Trading'}
-						</Button>
+						{isActive &&
+							<Button
+								onClick={() => PolymarketApi.set('tradingActive', !tradingActive)}
+								variant={tradingActive ? 'destructive' : 'outline'}
+								size='sm'
+								>
+								{tradingActive ? 'Stop Trading' : 'Start Trading'}
+							</Button>
+						}
 					</div>
-					}
 					<div className='text-sm text-muted-foreground ml-auto mr-6'>Root: {PolymarketApi.rootPath}</div>
 					<Label className='text-sm text-muted-foreground'>Activ</Label>
 					<Switch
@@ -98,8 +156,6 @@ export default function CryptoTickers() {
 					/>
 				</div>
 
-				{isActive &&
-				<>
 				<TabsList className='text-foreground h-auto w-full rounded-none border-b bg-transparent px-0 py-1'>
 					{content.map((tab) => (
 						<TabsTrigger
@@ -119,8 +175,6 @@ export default function CryptoTickers() {
 					autoMount={true}
 					// autoUnmount={false}
 				/>
-				</>
-				}
 			</Tabs>
 		</div>
 	)

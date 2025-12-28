@@ -39,6 +39,7 @@ export const useStore = create(() => ({
 	marketActive: false,
 	tradingActive: false,
 	tickerActive: false,
+	pollingActive: false,
 	marketCompleted: false
 }))
 
@@ -524,6 +525,26 @@ class PolymarketApi {
 		}
 
 		this.streams.get(symbol + '-' + this.currentDay.dayString)?.write(timestamp + ';' + price + '\n')
+	}
+
+
+	// ---------------------------------------------------------------------------- onTickerLog
+	async onPollingLog(symbol: string, timestamp: number, price: number) {
+		this.set('pollingPrice-' + symbol, {timestamp: timestamp, price: price})
+
+		if (!this.get('loggingActive')) return
+
+		if (!this.currentDay || timestamp >= this.currentDay.nextDay) this.setCurrentDay(timestamp)
+
+		if (!this.streams.has(symbol + '-polling-' + this.currentDay.dayString)){
+			const dirPath = this.rootPath + 'polling/' + symbol
+			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
+			const filePath = dirPath + '/' + symbol + '-' + this.currentDay.dayString + '.log'
+			// console.log('createWriteStream:', filePath)
+			this.streams.set(symbol + '-polling-' + this.currentDay.dayString, fs.createWriteStream(filePath, {flags:'a'}))
+		}
+
+		this.streams.get(symbol + '-polling-' + this.currentDay.dayString)?.write(timestamp + ';' + price + '\n')
 	}
 
 

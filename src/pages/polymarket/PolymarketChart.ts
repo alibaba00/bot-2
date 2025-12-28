@@ -72,13 +72,17 @@ const parseNumber = (num: number) => {
 }
 
 
+// ---------------------------------------------------------------------------- getMarketsFiles
+export const getMarketsFiles = async (symbol: string, date: Date) => {
+	// const rootPath = PolymarketApi.rootPath + "markets";
+
+	const files = await getAllMarkets(symbol, date)
+	return files[symbol][date.toISOString().slice(0, 10)]
+}
+
+
 // ---------------------------------------------------------------------------- getAllMarketLogs
 export const getAllMarkets = async (symbol: string | null = null, date: Date | null = null) => {
-	if (!isElectron || !fs || !fsPromises) {
-		// Not running in an Electron context, or fs unavailable
-		return {}
-	}
-
 	const rootPath = PolymarketApi.rootPath + "markets";
 
 	async function walkDir(currentPath: string, symbol?: string, date?: string) {
@@ -441,7 +445,9 @@ export const getChartTickerData = async (symbol: string, dateString: string) => 
 
 
 // ---------------------------------------------------------------------------- getChartMinuteData
-export const getChartMinuteData = async (data: { timestamp: number, price: number }[]): Promise<{ timestamp: number, price: number }[]> => {
+// get chart data by minute. price is average of the minute.
+export const getChartMinuteData = async (data: { timestamp: number, price: number }[]):
+	Promise<{ timestamp: number, price: number }[]> => {
 	let min = 60000
 	let currentMinute = Math.floor(data[0].timestamp / min) * min
 	let nextMinute = currentMinute + min
@@ -714,6 +720,7 @@ console.log('test:', test)
 }
 
 
+/*
 // ---------------------------------------------------------------------------- testData
 const testData = async () => {
 	const data_ = await PolymarketApi.store.getItem('chartData') || await initData()
@@ -832,6 +839,7 @@ if (el && el[0] > 12 && el[0] < 15){
 	console.log('complete! data:', total, data_, 'results:', results)
 console.log('test:', test)	
 }
+*/
 
 
 // ---------------------------------------------------------------------------- createMapData
@@ -900,33 +908,29 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 	const values: number[] = []
 	const ranges: number[] = []
 
+	// only ranges with valid start and end data are considered
 	for (let i = 0; i < normalizedData.length - range; i++) {
 		if (!normalizedData[i].valid || !normalizedData[i + range].valid) continue
 		
-		const price = normalizedData[i].price
-		const priceRange = normalizedData[i + range].price
-		values.push(priceRange / price)
-		const value = Math.floor(((priceRange / price) - 1) * 60000 / range)	//price change 2000 = 200%
+		const firstPrice = normalizedData[i].price			//first valid price of the range
+		const lastPrice = normalizedData[i + range].price	//last valid price of the range
+		const priceRatio = lastPrice / firstPrice			//price change ratio
+		values.push(priceRatio)					
+		const value = Math.floor((priceRatio - 1) * 60000 / range)	//price change 2000 = 200%
 		if (!ranges[value]) ranges[value] = 0
 		ranges[value]++
 	}
 
 	values.sort((a, b) => a - b)
+
 	const len = values.length
-	const seg = [
-		Math.floor(len / 4),
-		Math.floor(len / 2),
-		Math.floor(len * 3 / 4),
-	]
+	const pos = [values[0]]
+	for (let i = 1; i < 10; i++) {
+		pos.push(values[Math.round(i * len / 10)])
+	}
+	pos.push(values[len - 1])
 
-	// (Math.pow((values[seg[0]] - 1), 1 / range) * 10000),
-	const pos = [
-		values[seg[0]],
-		values[seg[1]],
-		values[seg[2]],
-	]
-
-	console.log('values:', values.length, seg, pos)
+	console.log('values:', values.length, pos)
 
 	const distribution = Object.entries(ranges).map(([value, count]) => ({
 		value: parseInt(value),
@@ -938,6 +942,8 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 
 
 // ---------------------------------------------------------------------------- normalizeData
+// normalize data to the same time frame
+// fill gaps with the last valid price and set valid to false
 export const normalizeData = (data: { timestamp: number, price: number }[], timeFrame:number = 60) => {	//size: 60000 = 1 minute
 	const newData: { timestamp: number, price: number, valid: boolean }[] = []
 	const timeFrameSize = timeFrame * 1000

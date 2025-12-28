@@ -1,11 +1,10 @@
+import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
-import PolymarketApi from "./PolymarketApi";
 import * as PolymarketChart from "./PolymarketChart";
-import { Button } from "@/components/ui/button";
 
 
 const assetContent = [
@@ -199,13 +198,24 @@ export default function ChartPage() {
 
 
 	const updateChart = async () => {
-		if (!asset?.value) return
+		const symbol = asset?.value.toLowerCase()
+		if (!symbol) return
+
 		switch (chartType) {
 			case 'line':
 				setChartOptions(lineChartOptions)
 				break
 			case 'bar':
-				setChartOptions(barChartOptions)
+				// setChartOptions(barChartOptions)
+				const data = await PolymarketChart.getChartDistributionData(symbol, null, 15)
+				// console.log('data:', data)
+				setChartOptions({
+					...barChartOptions,
+					series: [{
+						...barChartOptions.series[0],
+						data: data.map((item) => [item.value, item.count])
+					}],
+				})
 				break
 
 			case 'heatmap':
@@ -249,7 +259,7 @@ export default function ChartPage() {
 		updateChart()
 	}, [chartType, asset, side])
 
-
+/*
 	const onClick = async (type: string) => {
 		switch (type) {
 			case 'load-full-ticker-data':
@@ -317,7 +327,7 @@ export default function ChartPage() {
 
 		}
 	}
-
+*/
 
 	return (
 		<ResizablePanelGroup direction='vertical'>
@@ -375,7 +385,9 @@ export default function ChartPage() {
 								value={selectedDate ? selectedDate.toISOString().slice(0, 10) : ''}
 							/>
 						</TabsList>
-						<MarketList symbol={asset?.value} selectedDate={selectedDate} />
+						{/* <MarketList symbol={asset?.value} selectedDate={selectedDate}
+							onSelectMarket={(market) => {}}
+						/> */}
 					</Tabs>
 				</div>
 			</ResizablePanel>
@@ -383,17 +395,36 @@ export default function ChartPage() {
 	)
 }
 
-
-const MarketList = ({ symbol, selectedDate }: { symbol: string, selectedDate: Date }) => {
+/*
+// ---------------------------------------------------------------------------- MarketList
+const MarketList = ({ symbol, selectedDate, onSelectMarket }:
+	{ symbol: string, selectedDate: Date, onSelectMarket: (market: any) => void }) => {
 	// const [markets, setMarkets] = useState<MarketData[]>([])
+	const [markets, setMarkets] = useState<any[]>([])
+
 	
 	useEffect(() => {
+		PolymarketChart.getMarketsFiles(symbol, selectedDate)
+		.then((markets) => {
+			// console.log('markets:', markets)
+			setMarkets(markets)
+		})
+
 	}, [symbol, selectedDate])
 
+	
 	return (
-		<div className='flex flex-col gap-4 h-full'>
-			{symbol} Chart {selectedDate.toISOString().slice(0, 10)}
-
+		<div className='flex flex-col gap-4 h-full overflow-y-auto'>
+			{markets?.map((market) => (
+				<div key={market.slug} className='flex flex-row items-center
+				 justify-between border-b border-gray-600 p-2 cursor-pointer'
+				 onClick={() => onSelectMarket(market)}>
+					<div className='flex flex-row items-center justify-between'>
+						{market.slug}
+					</div>
+				</div>
+			))}
 		</div>
 	)
 }
+*/

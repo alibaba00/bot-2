@@ -276,7 +276,7 @@ export default function TickerPage3() {
 					>
 						<div
 							className={`h-2 w-2 rounded-full ${
-								polling.status === 'polling' ? 'bg-yellow-500' : 'bg-gray-400'
+								polling.status === 'polling' ? 'bg-green-500' : 'bg-gray-400'
 							}`}
 						/>
 						{pollingActive ? 'Stop Polling' : 'Start Polling'}
@@ -381,7 +381,7 @@ export default function TickerPage3() {
 										<div
 											className={`h-3 w-3 rounded-full ${
 												pollingActive && priceData.polling
-													? 'bg-yellow-500 animate-pulse'
+													? 'bg-green-500 animate-pulse'
 													: 'bg-gray-300'
 											}`}
 										/>
