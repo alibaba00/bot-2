@@ -82,6 +82,8 @@ export const getMarketsFiles = async (symbol: string, date: Date) => {
 
 
 // ---------------------------------------------------------------------------- getAllMarketLogs
+// get all existing market log files
+//
 export const getAllMarkets = async (symbol: string | null = null, date: Date | null = null) => {
 	const rootPath = PolymarketApi.rootPath + "markets";
 
@@ -196,8 +198,9 @@ export const updateMarketData = async (filePath: string, slug: string): Promise<
 	let updated:boolean = false
 	let market: Market | null = null
 
+	// get market from cache ...
 	market = await PolymarketApi.cache.getItem(slug)
-	if (!market) {		//market not cached! load market from file
+	if (!market) {		//market not cached! load and update market from file
 		if (fs.existsSync(filePath)) {
 			const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
 			market = JSON.parse(jsonFileContent) as Market
@@ -268,17 +271,21 @@ export const updateMarketData = async (filePath: string, slug: string): Promise<
 			market.openPriceTimestamp = priceData.timestamp || null
 		}
 		if (priceData?.closePrice) {
+			// market is now closed!
 			market.closePrice = priceData.closePrice
 			market.closePriceTimestamp = priceData.timestamp || null
 		}
 		updated = true
 	}
 
+	const logFilePath = filePath.replace('.json', '.log')
+
 	if (market.openPrice && market.closePrice) {
 		if (!market.closed || market.state !== 'closed'){
 			console.log('update market closed:', market.slug)
 			market.closed = true
 			market.state = 'closed'
+			delete market.chartData		//force update chart data
 			updated = true
 		}
 		const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
@@ -289,16 +296,17 @@ export const updateMarketData = async (filePath: string, slug: string): Promise<
 		}
 	}
 
-	if (!market.chartData) {
-		const logFilePath = filePath.replace('.json', '.log')
-		market.chartData = await getChartData(market, logFilePath)
-		updated = true
-	}
-
-	if (market.chartData && market.chartData.grid === undefined && market.closed && market.outcome) {
-		market.chartData.grid = getGridData(market) as any
-		console.log('get-grid-data:', market.slug, market.chartData.grid)
-		updated = true
+	if (market.closed){
+		if (!market.chartData) {
+			market.chartData = await getChartData(market, logFilePath)
+			updated = true
+		}
+	
+		if (market.chartData && market.chartData.grid === undefined && market.outcome) {
+			market.chartData.grid = getGridData(market) as any
+			console.log('get-grid-data:', market.slug, market.chartData.grid)
+			updated = true
+		}
 	}
 	
 	if (updated) {

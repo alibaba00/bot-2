@@ -302,6 +302,9 @@ class PolymarketApi {
 		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
 		// console.log(`Fetching market by slug from Gamma API: ${url}`)
 
+		const cachedMarket = await cache.getItem<MarketData>(slug)
+		if (cachedMarket) return cachedMarket
+
 		const response = await fetch(url, {
 			method: 'GET',
 			headers: {
@@ -435,8 +438,11 @@ class PolymarketApi {
 			market.closeMarketTimestamp = Date.now()
 			market.state = 'closed'
 			market.closed = true
-
 			console.log('market closed:', market.slug)
+			
+		}else{
+			market.state = 'completed'
+
 		}
 		await this.cacheMarket(market)	//update market cache
 		await this.saveMarket(market)

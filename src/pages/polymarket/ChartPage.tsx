@@ -5,6 +5,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import * as PolymarketChart from "./PolymarketChart";
+import PolymarketApi from "./PolymarketApi";
 
 
 const assetContent = [
@@ -164,7 +165,11 @@ const lineChartOptions = {
 	],
 	yAxis: {
 		type: 'value',
-		min: 'dataMin'
+		min: 'dataMin',
+		lineStyle: {
+			color: '#fff3',
+			width: 0.5
+		}
 	},
 	dataZoom: [
 		{
@@ -186,7 +191,7 @@ const lineChartOptions = {
 } as any
 
 
-const chartData = {} as any
+// const chartData = {} as any
 
 export default function ChartPage() {
 	const [asset, setAsset] = useState(assetContent[0])
@@ -195,6 +200,7 @@ export default function ChartPage() {
 	const [chartOptions, setChartOptions] = useState({})
 	const [chartType, setChartType] = useState('line')
 	const [side, setSide] = useState('up')
+	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 
 
 	const updateChart = async () => {
@@ -203,7 +209,17 @@ export default function ChartPage() {
 
 		switch (chartType) {
 			case 'line':
-				setChartOptions(lineChartOptions)
+				// setChartOptions(lineChartOptions)
+				let chartData = selectedMarket?.data?.chartData?.[side]
+console.log('marketData:', selectedMarket)
+				if (!chartData) return
+				setChartOptions({
+					...lineChartOptions,
+					series: [{
+						...lineChartOptions.series[0],
+						data: selectedMarket.data.chartData[side]
+					}],
+				})
 				break
 			case 'bar':
 				// setChartOptions(barChartOptions)
@@ -257,7 +273,7 @@ export default function ChartPage() {
 
 	useEffect(() => {
 		updateChart()
-	}, [chartType, asset, side])
+	}, [chartType, asset, side, selectedMarket])
 
 /*
 	const onClick = async (type: string) => {
@@ -385,9 +401,9 @@ export default function ChartPage() {
 								value={selectedDate ? selectedDate.toISOString().slice(0, 10) : ''}
 							/>
 						</TabsList>
-						{/* <MarketList symbol={asset?.value} selectedDate={selectedDate}
-							onSelectMarket={(market) => {}}
-						/> */}
+						<MarketList symbol={asset?.value} selectedDate={selectedDate}
+							onSelectMarket={setSelectedMarket}
+						/>
 					</Tabs>
 				</div>
 			</ResizablePanel>
@@ -395,7 +411,7 @@ export default function ChartPage() {
 	)
 }
 
-/*
+
 // ---------------------------------------------------------------------------- MarketList
 const MarketList = ({ symbol, selectedDate, onSelectMarket }:
 	{ symbol: string, selectedDate: Date, onSelectMarket: (market: any) => void }) => {
@@ -419,12 +435,42 @@ const MarketList = ({ symbol, selectedDate, onSelectMarket }:
 				<div key={market.slug} className='flex flex-row items-center
 				 justify-between border-b border-gray-600 p-2 cursor-pointer'
 				 onClick={() => onSelectMarket(market)}>
-					<div className='flex flex-row items-center justify-between'>
-						{market.slug}
-					</div>
+					<MarketItem market={market} />
 				</div>
 			))}
 		</div>
 	)
 }
-*/
+
+
+// ---------------------------------------------------------------------------- MarketItem
+const MarketItem = ({ market }: { market: any }) => {
+	const [data, setData] = useState<any>(null)
+
+	useEffect(() => {
+		PolymarketApi.fetchMarketBySlug(market.slug)
+		.then((data) => {
+			// console.log('marketData:', marketData)
+			market.data = data
+			setData(data)
+		})
+	}, [market.slug])
+
+	return (
+		<div className='flex flex-row items-center justify-between w-full'>
+			<div className='flex flex-row items-center justify-between gap-8 w-full'>
+				<div className='text-sm font-medium mr-auto'>{market.slug}</div>
+				<div className='text-sm font-medium'>{data?.outcome || ''}</div>
+				<div className='text-sm font-medium'>{data?.state || ''}</div>
+				<Button variant='outline' className='text-xs text-gray-500 h-auto px-2 py-1'
+					onClick={() => PolymarketChart.updateMarketData(market.filePath, market.slug)}
+					>Update</Button>
+				<span
+					className={`inline-block w-3 h-3 rounded-full mr-2 ${data?.closed
+						? 'bg-green-500'
+						: 'bg-red-500'}`}
+				></span>
+			</div>
+		</div>
+	)
+}
