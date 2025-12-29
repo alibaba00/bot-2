@@ -114,7 +114,6 @@ export default function CryptoTickers() {
 						<MarketTimer minutes={15} type={'updown-15m'} />
 						{/* <MarketTimer minutes={60} type={type} /> */}
 						{/* https://polymarket.com/_next/data/FT6aYvzrNjMngWuxKlVC4/event/bitcoin-up-or-down-december-21-7pm-et.json?slug=bitcoin-up-or-down-december-21-7pm-et */}
-						{/* <MarketTimer minutes={60 * 4} type={'updown-4h'} offset={-3600} /> */}
 						<MarketTimer minutes={60 * 4} type={'updown-4h'} offset={-3600} />
 						
 						<Button
@@ -226,10 +225,11 @@ const MarketTimer = ({minutes, type, offset = 0}: {minutes: number, type: string
 // onExpired: () => void
 // return: {minutes: number, seconds: number, timeString: string}
 const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: () => void) => {
-	const [timer, setTimer] = useState<{minutes: number, seconds: number, timeString: string}>({
+	const [timer, setTimer] = useState<{hours: number, minutes: number, seconds: number, timeString: string}>({
+		hours: 0,
 		minutes: 0,
 		seconds: 0,
-		timeString: '--:--'
+		timeString: '--:--:--'
 	})
 
 	useEffect(() => {
@@ -239,7 +239,7 @@ const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: ()
 		const diffToNextSecond = 1000 - past % 1000
 		const maxTime = Math.ceil(minutes * 60)
 		let time = maxTime - Math.ceil(past / 1000)
-
+	
 		setTimeout(() => {
 			interval = setInterval(() => {
 				time --
@@ -248,9 +248,10 @@ const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: ()
 					time = maxTime
 				}
 				setTimer({
-					minutes: Math.floor(time / 60),
+					hours: Math.floor(time / 3600),
+					minutes: Math.floor((time % 3600) / 60),
 					seconds: time % 60,
-					timeString: `${Math.floor(time / 60).toString().padStart(2, '0')}:${(time % 60).toString().padStart(2, '0')}`
+					timeString: `${Math.floor(time / 3600).toString().padStart(2, '0')}:${Math.floor((time % 3600) / 60).toString().padStart(2, '0')}:${(time % 60).toString().padStart(2, '0')}`
 				})
 			}, 1000)
 		}, diffToNextSecond)

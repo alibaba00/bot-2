@@ -126,9 +126,9 @@ class PolymarketApi {
 	// date: e.g. 2025-12-10
 	// minutes: e.g. 15
 	// return: Market
-	async createMarketFromDate(symbol: string, type: string, date: Date, minutes: number, offset: number = 0): Promise<Market> {
+	async createMarketFromDate(symbol: string, type: string, date: Date, minutes: number, offset: number = 0): Promise<Market | null> {
 		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
-		const timestamp = this.getUTCTimestamp(date, minutes) + offset	//e.g. 1765584900
+		const timestamp = this.getUTCTimestamp(date, minutes, offset)	//e.g. 1765584900
 		const marketSlug = `${marketName}-${timestamp}`	//e.g. btc-updown-15m-1765144800
 		// const marketSlug = `btc-updown-4h-1766365200`	//e.g. btc-updown-15m-1765144800-15
 
@@ -136,7 +136,7 @@ class PolymarketApi {
 		// if (cachedMarket) return cachedMarket
 
 		const market = await this.createMarket(symbol, marketName, timestamp, marketSlug, minutes)
-		return market as Market
+		return market
 	}
 
 
@@ -160,9 +160,15 @@ class PolymarketApi {
 	// timestamp: e.g. 1765584900
 	// marketSlug: e.g. btc-updown-15m-1765584900
 	// return: Market
-	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string, minutes: number = 15): Promise<Market> {
+	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string, minutes: number = 15): Promise<Market | null> {
 		const startTimestamp = timestamp * 1000 // Convert to milliseconds
 		const endTimestamp = startTimestamp + minutes * 60 * 1000 // Add minutes
+
+		const marketData = await fetchMarketBySlugFromGamma(marketSlug)
+		if (!marketData){
+			console.log('marketData not found:', marketSlug)
+			return null
+		}
 
 		const market: Market = {
 			symbol: symbol.toLowerCase(),
@@ -181,7 +187,7 @@ class PolymarketApi {
 			openPriceTimestamp: null,	// timestamp of openPrice
 			closePriceTimestamp: null,	// timestamp of closePrice
 			closeMarketTimestamp: null,	// timestamp of closeMarket
-			marketData: await fetchMarketBySlugFromGamma(marketSlug),
+			marketData: marketData,
 			chartData: null,
 			outcome: null
 		}
@@ -215,14 +221,23 @@ class PolymarketApi {
 	// ---------------------------------------------------------------------------- getUTCTimestamp
 	// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
 	// date: e.g. 2025-12-10
-	getUTCTimestamp(date: Date | number | null, minutes: number = 15): number {
+	getUTCTimestamp(date: Date | number | null, minutes: number = 15, offset: number = 0): number {
 		if (!date) date = new Date()
-		const dateTime = date instanceof Date ? date.getTime() : date
+		let dateTime = date instanceof Date ? date.getTime() : date
+		dateTime += offset * 1000
 		const dateTimeSeconds = Math.floor(dateTime / 1000) // Convert to seconds
 		const minutesSeconds = minutes * 60 // minutes in seconds
 		// Round down to the nearest minutes interval
-		return Math.floor(dateTimeSeconds / minutesSeconds) * minutesSeconds
+		const utcTimestamp = Math.floor(dateTimeSeconds / minutesSeconds) * minutesSeconds - offset
+
+// const past = dateTime % (minutes * 60 * 1000)
+// const maxTime = Math.ceil(minutes * 60)
+// let timeoutMinutes = maxTime - Math.ceil(past / 1000)
+// console.log('--------- timeoutMinutes:', timeoutMinutes / 60, 'utcTimestamp', utcTimestamp,  'offset:', offset, 'minutes:', minutes)
+
+		return utcTimestamp
 	}
+
 
 	// ---------------------------------------------------------------------------- getCryptoPrice
 	// Get price to beat for a given symbol, event start time, and end date

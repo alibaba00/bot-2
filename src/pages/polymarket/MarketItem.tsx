@@ -90,8 +90,12 @@ export default function MarketItem({ symbol, type, minutes, offset }: { symbol: 
 		console.log('---init MarketItem:', symbol, type, minutes)
 		PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), minutes, offset)		
 		.then((market) => {
+			if (!market) return;
 			console.log('market:', market)
 			setMarket(market)
+		})
+		.catch((error) => {
+			console.log('error:', error)
 		})
 
 		return () => {
@@ -201,9 +205,14 @@ export default function MarketItem({ symbol, type, minutes, offset }: { symbol: 
 				// }, 60000 * 5)	//wait 5 minutes before closing market
 				
 				// create next market
-				const nextMarket = await PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), minutes)
+				const nextMarket = await PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), minutes, offset)
+				if (!nextMarket){
+					console.log('next market not found!')
+					return;
+				};
+
 				console.log('next market:', nextMarket)
-				if (nextMarket) nextMarket.openTicker = currentTicker
+				nextMarket.openTicker = currentTicker
 				setMarket(nextMarket)	//-> init market
 				return;
 
