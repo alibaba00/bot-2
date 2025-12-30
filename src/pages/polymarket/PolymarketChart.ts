@@ -922,9 +922,9 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 		
 		const firstPrice = normalizedData[i].price			//first valid price of the range
 		const lastPrice = normalizedData[i + range].price	//last valid price of the range
-		const priceRatio = lastPrice / firstPrice			//price change ratio
+		const priceRatio = ((lastPrice / firstPrice) - 1) * 1000			//price change ratio in promilles 
 		values.push(priceRatio)					
-		const value = Math.floor((priceRatio - 1) * 60000 / range)	//price change 2000 = 200%
+		const value = Math.floor(priceRatio * 60 / range)	//price change 2000 = 200%
 		if (!ranges[value]) ranges[value] = 0
 		ranges[value]++
 	}

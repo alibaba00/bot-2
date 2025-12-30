@@ -141,6 +141,7 @@ const barChartOptions = {
 	}
 } as any
 
+
 const lineChartOptions = {
 	// Choose axis ticks based on UTC time.
 	useUTC: true,
@@ -155,22 +156,53 @@ const lineChartOptions = {
 	xAxis: [
 		{
 			type: 'time',
-			interval: 1000 * 60 * 30,
+			boundaryGap: false,
 			axisLabel: {
 				showMinLabel: true,
 				showMaxLabel: true,
 			},
 			data: [] as any[],
+			// show a vertical line every X minutes
+			splitLine: {
+				show: true,
+				lineStyle: {
+					color: '#fff3',
+					width: 1,
+					type: 'dashed'
+				}
+			}
 		}
 	],
-	yAxis: {
-		type: 'value',
-		min: 'dataMin',
-		lineStyle: {
-			color: '#fff3',
-			width: 0.5
+	yAxis: [
+		{
+			type: 'value',
+			scale: false,
+			min: 0,
+			max: 1,
+			interval: 0.1,
+			splitLine: {
+				show: true,
+				lineStyle: {
+					color: '#fff3',
+					width: 0.5
+				}
+			}
+		},
+		{
+			type: 'value',
+			scale: false,
+			min: -2,
+			max: +2,
+			data: [] as any[],
+			splitLine: {
+				show: true,
+				lineStyle: {
+					color: (value: number) => value === 0 ? '#FF6600' : '#fff3',
+					width: (value: number) => value === 0 ? 2 : 0.5,
+				}
+			},
 		}
-	},
+	],
 	dataZoom: [
 		{
 			type: 'inside',
@@ -184,8 +216,34 @@ const lineChartOptions = {
 	series: [
 		{
 			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#0f0c',
+			},
 			symbolSize: 0,
 			data: [] as any[],
+			step: 'end',
+		},
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#f00c',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			step: 'end',
+		},
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#06fc', // set to visible color (e.g. yellow)
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			yAxisIndex: 1,
+			step: 'end',
 		}
 	]
 } as any
@@ -209,22 +267,62 @@ export default function ChartPage() {
 
 		switch (chartType) {
 			case 'line':
-				// setChartOptions(lineChartOptions)
-				let chartData = selectedMarket?.data?.chartData?.[side]
-console.log('marketData:', selectedMarket)
-				if (!chartData) return
+				let chartData = selectedMarket?.data?.chartData
+				if (!chartData) return setChartOptions({})
+				
+				const openPrice = selectedMarket.data.openPrice
+				const startTimestamp = selectedMarket.data.startTimestamp
+				const endTimestamp = selectedMarket.data.endTimestamp
+
+				if (chartData.up[chartData.up.length - 1][0] < endTimestamp) {
+					chartData.up.push([endTimestamp, chartData.up[chartData.up.length - 1][1]])
+				}
+				if (chartData.down[chartData.down.length - 1][0] < endTimestamp) {
+					chartData.down.push([endTimestamp, chartData.down[chartData.down.length - 1][1]])
+				}
+
+				const values = chartData.ticker.map((item: any) => {
+					return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
+				})
+				const minValue = values.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+				const maxValue = values.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+				let scale = maxValue > -minValue ? maxValue : -minValue
+				scale = parseFloat(Math.ceil(scale * 1.01).toFixed(2))
+
 				setChartOptions({
 					...lineChartOptions,
-					series: [{
-						...lineChartOptions.series[0],
-						data: selectedMarket.data.chartData[side]
+					xAxis: [{
+						...lineChartOptions.xAxis[0],
+						min: startTimestamp,
+						max: endTimestamp,
 					}],
+					yAxis: [
+						lineChartOptions.yAxis[0] as any,
+						{
+							...lineChartOptions.yAxis[1] as any,
+							min: -scale,
+							max: +scale,
+						} as any
+					],
+					series: [
+						{
+							...lineChartOptions.series[0],
+							data: chartData.up
+						},
+						{
+							...lineChartOptions.series[1],
+							data: chartData.down.map(([timestamp, value]) => [timestamp, 1 - value]),
+						},
+						{
+							...lineChartOptions.series[2],
+							data: values
+						}
+					],
 				})
 				break
+
 			case 'bar':
-				// setChartOptions(barChartOptions)
-				const data = await PolymarketChart.getChartDistributionData(symbol, null, 15)
-				// console.log('data:', data)
+				const data = await PolymarketChart.getChartDistributionData(symbol, null, 15)	//15
 				setChartOptions({
 					...barChartOptions,
 					series: [{
@@ -248,6 +346,7 @@ console.log('marketData:', selectedMarket)
 					}],
 				})
 				break
+
 			case 'scatter':
 				if (!chartData.scatter){
 					const data2 = await PolymarketChart.scatterData()
@@ -417,12 +516,14 @@ const MarketList = ({ symbol, selectedDate, onSelectMarket }:
 	{ symbol: string, selectedDate: Date, onSelectMarket: (market: any) => void }) => {
 	// const [markets, setMarkets] = useState<MarketData[]>([])
 	const [markets, setMarkets] = useState<any[]>([])
-
+	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 	
 	useEffect(() => {
 		PolymarketChart.getMarketsFiles(symbol, selectedDate)
 		.then((markets) => {
 			// console.log('markets:', markets)
+			if (!markets) return
+			markets = markets.sort((b, a) => a.timestamp - b.timestamp)
 			setMarkets(markets)
 		})
 
@@ -430,11 +531,14 @@ const MarketList = ({ symbol, selectedDate, onSelectMarket }:
 
 	
 	return (
-		<div className='flex flex-col gap-4 h-full overflow-y-auto'>
+		<div className='flex flex-col h-full overflow-y-auto'>
 			{markets?.map((market) => (
-				<div key={market.slug} className='flex flex-row items-center
-				 justify-between border-b border-gray-600 p-2 cursor-pointer'
-				 onClick={() => onSelectMarket(market)}>
+				<div key={market.slug} className={`flex flex-row items-center justify-between border-b border-gray-700 cursor-pointer ${selectedMarket?.slug === market.slug ? 'bg-accent' : ''}`}
+				 onClick={() => {
+					console.log('selectedMarket:', market)
+					setSelectedMarket(market)
+					onSelectMarket(market)
+				}}>
 					<MarketItem market={market} />
 				</div>
 			))}
@@ -457,7 +561,7 @@ const MarketItem = ({ market }: { market: any }) => {
 	}, [market.slug])
 
 	return (
-		<div className='flex flex-row items-center justify-between w-full'>
+		<div className={`flex flex-row items-center justify-between p-2 w-full`}>
 			<div className='flex flex-row items-center justify-between gap-8 w-full'>
 				<div className='text-sm font-medium mr-auto'>{market.slug}</div>
 				<div className='text-sm font-medium'>{data?.outcome || ''}</div>
