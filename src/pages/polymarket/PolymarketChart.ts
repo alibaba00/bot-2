@@ -9,6 +9,97 @@ const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 const tickerData = {} // ticker data cache
 
 
+
+// ---------------------------------------------------------------------------- dataTest
+export const dataTest = async (symbol: string) => {
+	///
+
+	const stats = {
+		middleUp: {
+			count: 0,
+			up: 0,
+			down: 0,
+			trades: 0,
+			pnl: 0
+		},
+		middleDown: {
+			count: 0,
+			up: 0,
+			down: 0,
+			trades: 0,
+			pnl: 0
+		},
+		end: {
+			count: 0,
+			up: 0,
+			down: 0,
+		},
+	} as any
+
+	const keys = await PolymarketApi.cache.keys()
+	console.log('dataTest running', symbol, keys.length, 'markets ...')
+
+	const limit = 7.5 * 60 * 1000	//7.5 minutes
+	const market = symbol !== 'all'? symbol + '-updown-15m' : 'updown-15m'
+
+	for (const key of keys) {
+		if (key.includes(market)) {
+			const market = await PolymarketApi.cache.getItem(key)
+			if (market && market.closed && market.chartData?.ticker?.length) {
+				stats.end.count++
+
+				const ticker = market.chartData.ticker
+
+				const openPrice = market.openPrice
+				const outcome = market.outcome
+				const startTimestamp = market.startTimestamp
+				const middleTimestamp = startTimestamp + limit
+
+				if (outcome === 'up') {
+					stats.end.up++
+				}else {
+					stats.end.down++
+				}
+
+				// if (ticker[ticker.length-1][1] > openPrice) {
+				// 	stats.priceUp++
+				// }else {
+				// 	stats.priceDown++
+				// }
+
+				const middle = ticker.find((item: any) => item[0] >= middleTimestamp)
+				if (middle) {
+					if (middle[1] > openPrice) {
+						stats.middleUp.count++
+
+						const priceUp = market.chartData.up.find((item: any) => item[0] >= middleTimestamp && item[1] <= 0.5)
+						if (priceUp){
+							stats.middleUp.trades++
+							stats.middleUp[outcome]++
+							stats.middleUp.pnl += outcome === 'up' ? (1/0.5)-1 : -1
+						}
+					}else {
+						stats.middleDown.count++
+
+						const priceDown = market.chartData.down.find((item: any) => item[0] >= middleTimestamp && item[1] <= 0.5)
+// if (stats.middleDown.count < 10){
+// 	console.log('middleDown:', priceDown)
+// }
+						if (priceDown){
+							stats.middleDown.trades++
+							stats.middleDown[outcome]++
+							stats.middleDown.pnl += outcome === 'down' ? (1/0.5)-1 : -1
+						}
+					}
+				}
+			}
+		}
+	}
+
+	console.table(stats)
+}
+
+
 // ---------------------------------------------------------------------------- getGrid
 const getGridData = (market: Market): any => {
 	const tickerData = market.chartData.ticker

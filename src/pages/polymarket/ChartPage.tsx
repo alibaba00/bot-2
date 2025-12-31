@@ -257,6 +257,7 @@ export default function ChartPage() {
 	// const [chartOptions, setChartOptions] = useState({line: lineChartOptions, bar: barChartOptions, heatmap: heatmapChartOptions})
 	const [chartOptions, setChartOptions] = useState({})
 	const [chartType, setChartType] = useState('line')
+	const [marketType, setMarketType] = useState('all')
 	const [side, setSide] = useState('up')
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 
@@ -265,6 +266,7 @@ export default function ChartPage() {
 		const symbol = asset?.value.toLowerCase()
 		if (!symbol) return
 
+		console.log('updateChart:', chartType, symbol, selectedMarket)
 		switch (chartType) {
 			case 'line':
 				let chartData = selectedMarket?.data?.chartData
@@ -453,7 +455,7 @@ export default function ChartPage() {
 							Update Data
 						</Button>
 						
-						<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
+						<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setMarketType(e)}>
 							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
 							<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
 							<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
@@ -464,6 +466,11 @@ export default function ChartPage() {
 							<ToggleGroupItem value='up' variant='outline'>Up</ToggleGroupItem>
 							<ToggleGroupItem value='down' variant='outline'>Down</ToggleGroupItem>
 						</ToggleGroup>
+
+						<Button onClick={() => PolymarketChart.dataTest(asset?.value)}>
+							data test
+						</Button>
+
 					</div>
 					<ReactEcharts
 						option={chartOptions}
@@ -475,13 +482,21 @@ export default function ChartPage() {
 			</ResizablePanel>
 			<ResizableHandle />
 			<ResizablePanel defaultSize={50}>
-				<div className='flex h-full items-center justify-center p-4 flex-col gap-4'>
+				<div className='flex h-full p-4 flex-col gap-4 w-full'>
+					<div className='flex flex-row items-center justify-center gap-4 w-full'>
+
+					<ToggleGroup type='single' size='sm' defaultValue='all' onValueChange={(e: string) => setMarketType(e)}>
+						<ToggleGroupItem value='15m' variant='outline' size='sm'>15m</ToggleGroupItem>
+						<ToggleGroupItem value='4h' variant='outline' size='sm'>4h</ToggleGroupItem>
+						<ToggleGroupItem value='all' variant='outline' size='sm'>all</ToggleGroupItem>
+					</ToggleGroup>
+
 					<Tabs
 						value={asset?.value}
 						onValueChange={(value) =>
 							setAsset(assetContent.find((node) => node.value === value) ?? assetContent[0])
 						}
-						className='w-full h-full'>
+						className='w-full h-full flex'>
 						<TabsList className='text-foreground h-auto w-full rounded-none border-b bg-transparent px-0 py-1'>
 							{assetContent.map((tab) => (
 								<TabsTrigger
@@ -491,19 +506,22 @@ export default function ChartPage() {
 									{tab.label}
 								</TabsTrigger>
 							))}
-							<input
-								type="date"
-								className="ml-4 px-2 py-1 border rounded bg-background text-foreground"
-								onChange={(e) => {
-									setSelectedDate(new Date(e.target.value))
-								}}
-								value={selectedDate ? selectedDate.toISOString().slice(0, 10) : ''}
-							/>
 						</TabsList>
-						<MarketList symbol={asset?.value} selectedDate={selectedDate}
-							onSelectMarket={setSelectedMarket}
-						/>
 					</Tabs>
+
+					<input
+						type="date"
+						className="ml-4 px-2 py-1 border rounded bg-background text-foreground"
+						onChange={(e) => {
+							setSelectedDate(new Date(e.target.value))
+						}}
+						value={selectedDate ? selectedDate.toISOString().slice(0, 10) : ''}
+					/>
+					</div>
+
+					<MarketList symbol={asset?.value} marketType={marketType} selectedDate={selectedDate}
+						onSelectMarket={setSelectedMarket}
+					/>
 				</div>
 			</ResizablePanel>
 		</ResizablePanelGroup>
@@ -512,8 +530,8 @@ export default function ChartPage() {
 
 
 // ---------------------------------------------------------------------------- MarketList
-const MarketList = ({ symbol, selectedDate, onSelectMarket }:
-	{ symbol: string, selectedDate: Date, onSelectMarket: (market: any) => void }) => {
+const MarketList = ({ symbol, marketType, selectedDate, onSelectMarket }:
+	{ symbol: string, marketType: string, selectedDate: Date, onSelectMarket: (market: any) => void }) => {
 	// const [markets, setMarkets] = useState<MarketData[]>([])
 	const [markets, setMarkets] = useState<any[]>([])
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
@@ -523,15 +541,18 @@ const MarketList = ({ symbol, selectedDate, onSelectMarket }:
 		.then((markets) => {
 			// console.log('markets:', markets)
 			if (!markets) return
+			if (marketType !== 'all'){
+				markets = markets.filter((market) => market.slug.includes(marketType))
+			}
 			markets = markets.sort((b, a) => a.timestamp - b.timestamp)
 			setMarkets(markets)
 		})
 
-	}, [symbol, selectedDate])
+	}, [symbol, selectedDate, marketType])
 
 	
 	return (
-		<div className='flex flex-col h-full overflow-y-auto'>
+		<div className='flex flex-col h-full overflow-y-auto w-full'>
 			{markets?.map((market) => (
 				<div key={market.slug} className={`flex flex-row items-center justify-between border-b border-gray-700 cursor-pointer ${selectedMarket?.slug === market.slug ? 'bg-accent' : ''}`}
 				 onClick={() => {
