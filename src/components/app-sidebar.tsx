@@ -6,12 +6,14 @@ import { NavMain } from '@/components/nav-main'
 import { NavProjects } from '@/components/nav-projects'
 import { NavUser } from '@/components/nav-user'
 import { TeamSwitcher } from '@/components/team-switcher'
+import { ConsoleToggleButton } from '@/components/console-toggle-button'
 import {
 	Sidebar,
 	SidebarContent,
 	SidebarFooter,
 	SidebarHeader,
-	SidebarRail
+	SidebarRail,
+	SidebarSeparator
 } from '@/components/ui/sidebar'
 
 export function AppSidebar({
@@ -31,11 +33,11 @@ export function AppSidebar({
 				{data.projects && <NavProjects projects={data.projects} />}
 			</SidebarContent>
 
-			{data.user && (
-				<SidebarFooter>
-					<NavUser user={data.user} />
-				</SidebarFooter>
-			)}
+			<SidebarFooter>
+				{data.user && <NavUser user={data.user} />}
+				{data.user && <SidebarSeparator />}
+				<ConsoleToggleButton />
+			</SidebarFooter>
 
 			<SidebarRail />
 		</Sidebar>

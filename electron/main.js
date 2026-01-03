@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
@@ -138,8 +138,20 @@ app.whenReady().then(() => {
 	})
 })
 
-app.on('window-all-closed', () => {
-	if (process.platform !== 'darwin') {
-		app.quit()
-	}
-})
+	app.on('window-all-closed', () => {
+		if (process.platform !== 'darwin') {
+			app.quit()
+		}
+	})
+
+	// IPC handler to toggle DevTools
+	ipcMain.handle('toggle-devtools', () => {
+		const windows = BrowserWindow.getAllWindows()
+		windows.forEach((win) => {
+			if (win.webContents.isDevToolsOpened()) {
+				win.webContents.closeDevTools()
+			} else {
+				win.webContents.openDevTools()
+			}
+		})
+	})

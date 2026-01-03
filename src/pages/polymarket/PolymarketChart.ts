@@ -6,7 +6,7 @@ const fs = isElectron ? (window as any)?.require?.('fs') : null
 const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 // const path = (window as any)?.require?.('path');
 
-const tickerData = {} // ticker data cache
+const tickerDataCache = {} // ticker data cache
 
 
 
@@ -319,12 +319,12 @@ export const updateMarketData = async (filePath: string, slug: string): Promise<
 	}
 
 	if (market.marketName === 'updown-15m') {		//old version
-		market.marketName = market.symbol.toLowerCase() + '-updown-15m'
+		market.marketName = market.symbol + '-updown-15m'
 		updated = true
 	}
 
 	if (market.symbol === 'BTC' || market.symbol === 'ETH' || market.symbol === 'SOL' || market.symbol === 'XRP') {
-		market.symbol = market.symbol.toLowerCase()
+		market.symbol = market.symbol
 		updated = true
 	}
 
@@ -388,7 +388,7 @@ export const updateMarketData = async (filePath: string, slug: string): Promise<
 	}
 
 	if (market.closed){
-		if (!market.chartData) {
+		if (!market.chartData || !market.chartData.ticker_p) {
 			market.chartData = await getChartData(market, logFilePath)
 			updated = true
 		}
@@ -421,10 +421,10 @@ export const getChartData = async (market: Market, logFilePath: string) => {
 	console.log('getChartData from', logFilePath)
 	if (!fs.existsSync(logFilePath)) {
 		console.log('logFile not exists:', logFilePath)
-		return {up: [], down: [], ticker: []}
+		return {up: [], down: [], ticker: [], ticker_p: []}
 	}
 	const logData = await fsPromises.readFile(logFilePath, 'utf8')
-	if (!logData) return {up: [], down: [], ticker: []}
+	if (!logData) return {up: [], down: [], ticker: [], ticker_p: []}
 
 	const lines = logData.split('\n')
 
@@ -452,12 +452,17 @@ export const getChartData = async (market: Market, logFilePath: string) => {
 	})
 
 	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
-	const tickerData = await getChartTickerData(market.symbol.toLowerCase(), dateString)
+	const tickerData = await getChartTickerData(market.symbol, dateString)
 	const ticker = tickerData
 		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
 		.map((item) => [item.timestamp, item.price] as any)
 
-	return {up, down, ticker} as any
+	const tickerData_p = await getChartTickerData(market.symbol, dateString, 'polling')
+	const ticker_p = tickerData_p
+		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
+		.map((item) => [item.timestamp, item.price] as any)
+	
+	return {up, down, ticker, ticker_p} as any
 }
 
 
@@ -477,7 +482,7 @@ export const getChartData = async (market: Market, logFilePath: string) => {
 export const getMarketDataFromDate = (symbol: string, date: Date) => {
 	const dateString = PolymarketApi.getUTCDateFormat(date)
 	const rootPath = PolymarketApi.rootPath
-	const symbolLower = symbol.toLowerCase()
+	const symbolLower = symbol
 	const dirPath = `${rootPath}/markets/${symbolLower}/${dateString}`
 
 	let fileList: string[] = []
@@ -521,23 +526,25 @@ export const getMarketChartData = async (filePath: string | null = null,
 
 // ---------------------------------------------------------------------------- getChartData
 // const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
-export const getChartTickerData = async (symbol: string, dateString: string) => {
-	const dataString = symbol.toLowerCase() + '-' + dateString
-	if (tickerData[dataString]) return tickerData[dataString]
+export const getChartTickerData = async (symbol: string, dateString: string, source: string = 'tickers'): Promise<any[]> => {
+	const dataString = symbol + '-' + dateString
+	if (tickerDataCache[source + '-' + dataString]) return tickerDataCache[source + '-' + dataString]
 
 	const rootPath = PolymarketApi.rootPath
-	const dirPath = `${rootPath}tickers/${symbol}`
+	const dirPath = `${rootPath}${source}/${symbol}`
 	const filePath = `${dirPath}/${dataString}.log`
-	console.log('getChartTickerData:', symbol, dateString, filePath)
+	if (!fs.existsSync(filePath)) return []
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
 	const lines = fileContent.split('\n')
+	console.log('getChartTickerData:', symbol, dateString, filePath, lines.length)
+
 	const data = lines.map((line) => {
 		const [timestamp, price] = line.split(';')
 		return { timestamp: parseInt(timestamp), price: parseFloat(price) }
 	}).filter((item) => item.timestamp > 0 && item.price > 0)
 
-	tickerData[dataString] = data
+	tickerDataCache[source + '-' + dataString] = data
 
 	return data
 }
@@ -963,7 +970,7 @@ const initData = async () => {
 		const market = await PolymarketApi.cache.getItem(key)
 
 		if (market?.closed && market.chartData?.grid) {
-			const symbol = market.symbol.toLowerCase()
+			const symbol = market.symbol
 			data[symbol] = data[symbol] || []
 			data[symbol].push({
 				symbol: symbol,

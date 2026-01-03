@@ -1,7 +1,7 @@
 {
 	"name": "polymarket-bot",
 	"private": true,
-	"version": "1.0.15",
+	"version": "1.0.16",
 	"type": "module",
 	"description": "Polymarket Bot",
 	"author": "a.lang@jtm.digital",

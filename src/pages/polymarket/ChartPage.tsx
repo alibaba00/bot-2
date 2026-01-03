@@ -244,6 +244,17 @@ const lineChartOptions = {
 			data: [] as any[],
 			yAxisIndex: 1,
 			step: 'end',
+		},
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#93fc',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			yAxisIndex: 1,
+			step: 'end',
 		}
 	]
 } as any
@@ -262,65 +273,80 @@ export default function ChartPage() {
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 
 
+	const parseLineData = (chartData: any) => {
+		if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
+
+		const openPrice = selectedMarket.data.openPrice
+		const startTimestamp = selectedMarket.data.startTimestamp
+		const endTimestamp = selectedMarket.data.endTimestamp
+
+		if (chartData.up[chartData.up.length - 1][0] < endTimestamp) {
+			chartData.up.push([endTimestamp, chartData.up[chartData.up.length - 1][1]])
+		}
+		if (chartData.down[chartData.down.length - 1][0] < endTimestamp) {
+			chartData.down.push([endTimestamp, chartData.down[chartData.down.length - 1][1]])
+		}
+
+		const values = chartData.ticker.map((item: any) => {
+			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
+		})
+		const minValue = values.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+		const maxValue = values.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+		let scale = maxValue > -minValue ? maxValue : -minValue
+		scale = parseFloat(Math.ceil(scale * 1.01).toFixed(2))
+
+		const values_p = chartData.ticker_p?.map((item: any) => {
+			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
+		})
+
+		setChartOptions({
+			...lineChartOptions,
+			xAxis: [{
+				...lineChartOptions.xAxis[0],
+				min: startTimestamp,
+				max: endTimestamp,
+			}],
+			yAxis: [
+				lineChartOptions.yAxis[0] as any,
+				{
+					...lineChartOptions.yAxis[1] as any,
+					min: -scale,
+					max: +scale,
+				} as any
+			],
+			series: [
+				{
+					...lineChartOptions.series[0],
+					data: chartData.up
+				},
+				{
+					...lineChartOptions.series[1],
+					data: chartData.down.map(([timestamp, value]) => [timestamp, 1 - value]),
+				},
+				{
+					...lineChartOptions.series[2],
+					data: values
+				},
+				{
+					...lineChartOptions.series[3],
+					data: values_p
+				}
+			],
+		})
+	}
+
+
 	const updateChart = async () => {
 		const symbol = asset?.value.toLowerCase()
 		if (!symbol) return
 
+		let chartData = selectedMarket?.data?.chartData
+		if (!chartData) return setChartOptions({})
+
 		console.log('updateChart:', chartType, symbol, selectedMarket)
 		switch (chartType) {
 			case 'line':
-				let chartData = selectedMarket?.data?.chartData
-				if (!chartData) return setChartOptions({})
-				
-				const openPrice = selectedMarket.data.openPrice
-				const startTimestamp = selectedMarket.data.startTimestamp
-				const endTimestamp = selectedMarket.data.endTimestamp
-
-				if (chartData.up[chartData.up.length - 1][0] < endTimestamp) {
-					chartData.up.push([endTimestamp, chartData.up[chartData.up.length - 1][1]])
-				}
-				if (chartData.down[chartData.down.length - 1][0] < endTimestamp) {
-					chartData.down.push([endTimestamp, chartData.down[chartData.down.length - 1][1]])
-				}
-
-				const values = chartData.ticker.map((item: any) => {
-					return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
-				})
-				const minValue = values.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-				const maxValue = values.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-				let scale = maxValue > -minValue ? maxValue : -minValue
-				scale = parseFloat(Math.ceil(scale * 1.01).toFixed(2))
-
-				setChartOptions({
-					...lineChartOptions,
-					xAxis: [{
-						...lineChartOptions.xAxis[0],
-						min: startTimestamp,
-						max: endTimestamp,
-					}],
-					yAxis: [
-						lineChartOptions.yAxis[0] as any,
-						{
-							...lineChartOptions.yAxis[1] as any,
-							min: -scale,
-							max: +scale,
-						} as any
-					],
-					series: [
-						{
-							...lineChartOptions.series[0],
-							data: chartData.up
-						},
-						{
-							...lineChartOptions.series[1],
-							data: chartData.down.map(([timestamp, value]) => [timestamp, 1 - value]),
-						},
-						{
-							...lineChartOptions.series[2],
-							data: values
-						}
-					],
-				})
+				parseLineData(chartData)
 				break
 
 			case 'bar':
@@ -455,7 +481,7 @@ export default function ChartPage() {
 							Update Data
 						</Button>
 						
-						<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setMarketType(e)}>
+						<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
 							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
 							<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
 							<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
