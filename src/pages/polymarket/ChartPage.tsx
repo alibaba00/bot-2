@@ -60,7 +60,6 @@ const heatmapChartOptions = {
 			'#3f0c',
 			]
 		  }
-	  
 	  },	
 	series: [
 		{
@@ -108,6 +107,12 @@ const scatterChartOptions = {
 			symbolSize: 5,
 		}
 	],
+	grid: {
+		top: 0,
+		bottom: 0,
+		left: 0,
+		right: 0,
+	}
 } as any
 
 const barChartOptions = {
@@ -137,7 +142,7 @@ const barChartOptions = {
 		bottom: 0,
 		left: 0,
 		right: 0,
-		containLabel: true
+		// containLabel: true
 	}
 } as any
 
@@ -145,10 +150,10 @@ const barChartOptions = {
 const lineChartOptions = {
 	// Choose axis ticks based on UTC time.
 	useUTC: true,
-	title: {
-		text: 'Intraday Chart with Breaks (Single Day)',
-		left: 'center'
-	},
+	// title: {
+	// 	text: 'Intraday Chart with Breaks (Single Day)',
+	// 	left: 'center'
+	// },
 	tooltip: {
 		show: true,
 		trigger: 'axis'
@@ -256,7 +261,12 @@ const lineChartOptions = {
 			yAxisIndex: 1,
 			step: 'end',
 		}
-	]
+	],
+	grid: {
+		top: 0,
+		left: 0,
+		right: 0,
+	}
 } as any
 
 
@@ -274,17 +284,20 @@ export default function ChartPage() {
 
 
 	const parseLineData = (chartData: any) => {
-		if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
+		// if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
+		// if (!chartData.ticker.length) return
 
 		const openPrice = selectedMarket.data.openPrice
 		const startTimestamp = selectedMarket.data.startTimestamp
 		const endTimestamp = selectedMarket.data.endTimestamp
 
-		if (chartData.up[chartData.up.length - 1][0] < endTimestamp) {
-			chartData.up.push([endTimestamp, chartData.up[chartData.up.length - 1][1]])
-		}
-		if (chartData.down[chartData.down.length - 1][0] < endTimestamp) {
-			chartData.down.push([endTimestamp, chartData.down[chartData.down.length - 1][1]])
+		if (chartData.up?.length && chartData.down?.length) {
+			if (chartData.up[chartData.up.length - 1][0] < endTimestamp) {
+				chartData.up.push([endTimestamp, chartData.up[chartData.up.length - 1][1]])
+			}
+			if (chartData.down[chartData.down.length - 1][0] < endTimestamp) {
+				chartData.down.push([endTimestamp, chartData.down[chartData.down.length - 1][1]])
+			}
 		}
 
 		const values = chartData.ticker.map((item: any) => {
@@ -321,7 +334,7 @@ export default function ChartPage() {
 				},
 				{
 					...lineChartOptions.series[1],
-					data: chartData.down.map(([timestamp, value]) => [timestamp, 1 - value]),
+					data: chartData.down?.map(([timestamp, value]) => [timestamp, 1 - value]),
 				},
 				{
 					...lineChartOptions.series[2],
@@ -476,7 +489,10 @@ export default function ChartPage() {
 		<ResizablePanelGroup direction='vertical'>
 			<ResizablePanel defaultSize={50}>
 				<div className='h-full w-full flex flex-col gap-4 p-4'>
-					<div className='flex flex-row items-center justify-center flex-col gap-4'>
+					<div className='flex flex-row items-center justify-center gap-4'>
+						{/* <Button onClick={() => PolymarketChart.updateAllMarketData()}>
+							Update Data (new)
+						</Button> */}
 						<Button onClick={() => PolymarketChart.updateAllMarketData()}>
 							Update Data
 						</Button>
@@ -563,6 +579,8 @@ const MarketList = ({ symbol, marketType, selectedDate, onSelectMarket }:
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 	
 	useEffect(() => {
+		setMarkets([])	//clear markets
+
 		PolymarketChart.getMarketsFiles(symbol, selectedDate)
 		.then((markets) => {
 			// console.log('markets:', markets)
@@ -571,6 +589,7 @@ const MarketList = ({ symbol, marketType, selectedDate, onSelectMarket }:
 				markets = markets.filter((market) => market.slug.includes(marketType))
 			}
 			markets = markets.sort((b, a) => a.timestamp - b.timestamp)
+
 			setMarkets(markets)
 		})
 
@@ -586,7 +605,7 @@ const MarketList = ({ symbol, marketType, selectedDate, onSelectMarket }:
 					setSelectedMarket(market)
 					onSelectMarket(market)
 				}}>
-					<MarketItem market={market} />
+					<MarketItem key={market.slug} market={market} />
 				</div>
 			))}
 		</div>
@@ -614,11 +633,14 @@ const MarketItem = ({ market }: { market: any }) => {
 				<div className='text-sm font-medium'>{data?.outcome || ''}</div>
 				<div className='text-sm font-medium'>{data?.state || ''}</div>
 				<Button variant='outline' className='text-xs text-gray-500 h-auto px-2 py-1'
-					onClick={() => PolymarketChart.updateMarketData(market.filePath, market.slug)}
+					onClick={e => {
+						e.stopPropagation()
+						PolymarketChart.updateMarketData(market.filePath, market.slug, true)
+					}}
 					>Update</Button>
 				<span
 					className={`inline-block w-3 h-3 rounded-full mr-2 ${data?.closed
-						? 'bg-green-500'
+						? (data?.chartData?.grid?.up?.length && data?.chartData?.grid?.down?.length) ? 'bg-green-500' : 'bg-yellow-500'
 						: 'bg-red-500'}`}
 				></span>
 			</div>

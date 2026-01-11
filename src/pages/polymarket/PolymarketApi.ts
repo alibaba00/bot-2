@@ -224,8 +224,7 @@ class PolymarketApi {
 	getUTCTimestamp(date: Date | number | null, minutes: number = 15, offset: number = 0): number {
 		if (!date) date = new Date()
 		let dateTime = date instanceof Date ? date.getTime() : date
-		dateTime += offset * 1000
-		const dateTimeSeconds = Math.floor(dateTime / 1000) // Convert to seconds
+		const dateTimeSeconds = Math.floor(dateTime / 1000) + offset // Convert to seconds
 		const minutesSeconds = minutes * 60 // minutes in seconds
 		// Round down to the nearest minutes interval
 		const utcTimestamp = Math.floor(dateTimeSeconds / minutesSeconds) * minutesSeconds - offset
@@ -285,6 +284,7 @@ class PolymarketApi {
 					`URL: ${fullUrl}`,
 					errorText
 				)
+				console.log('❌ getCryptoPrice failed:', market)
 				return null
 			}
 			
@@ -298,11 +298,11 @@ class PolymarketApi {
 
 
 	// ---------------------------------------------------------------------------- fetchMarketBySlug
-	async fetchMarketBySlug(slug: string): Promise<MarketData | null> {
+	async fetchMarketBySlug(slug: string, force: boolean = false): Promise<MarketData | null> {
 		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
 		// console.log(`Fetching market by slug from Gamma API: ${url}`)
 
-		const cachedMarket = await cache.getItem<MarketData>(slug)
+		const cachedMarket = force ? null : await cache.getItem<MarketData>(slug)
 		if (cachedMarket) return cachedMarket
 
 		const response = await fetch(url, {
