@@ -3,6 +3,7 @@
  */
 
 export interface Market {
+	filePath: string
 	symbol: string
 	marketName: string
 	slug: string

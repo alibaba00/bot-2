@@ -6,6 +6,8 @@ import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import * as PolymarketChart from "./PolymarketChart";
 import PolymarketApi from "./PolymarketApi";
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 
 
 const assetContent = [
@@ -281,6 +283,7 @@ export default function ChartPage() {
 	const [marketType, setMarketType] = useState('all')
 	const [side, setSide] = useState('up')
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
+	const isLogging = PolymarketApi.use('loggingActive')
 
 
 	const parseLineData = (chartData: any) => {
@@ -490,9 +493,16 @@ export default function ChartPage() {
 			<ResizablePanel defaultSize={50}>
 				<div className='h-full w-full flex flex-col gap-4 p-4'>
 					<div className='flex flex-row items-center justify-center gap-4'>
-						{/* <Button onClick={() => PolymarketChart.updateAllMarketData()}>
+						<Label className='text-sm text-muted-foreground ml-4'>Logging</Label>
+						<Switch
+							checked={isLogging}
+							onCheckedChange={() => PolymarketApi.set('loggingActive', !isLogging)}
+							className='ml-0'
+						/>
+
+						<Button onClick={() => PolymarketChart.updateAllMarketData_clob()}>
 							Update Data (new)
-						</Button> */}
+						</Button>
 						<Button onClick={() => PolymarketChart.updateAllMarketData()}>
 							Update Data
 						</Button>
@@ -512,7 +522,6 @@ export default function ChartPage() {
 						<Button onClick={() => PolymarketChart.dataTest(asset?.value)}>
 							data test
 						</Button>
-
 					</div>
 					<ReactEcharts
 						option={chartOptions}

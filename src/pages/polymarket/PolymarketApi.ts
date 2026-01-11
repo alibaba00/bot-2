@@ -50,6 +50,8 @@ class PolymarketApi {
 	cache: any = null
 	store: any = null
 	rootPath: string = ''
+	clobPath: string = ''
+	marketsPath: string = ''
 	gammaApiBase: string = GAMMA_API_BASE
 	polymarketApiBase: string = POLYMARKET_API_BASE
 	tickerPrices: Map<string, {timestamp: number, price: number}> = new Map()
@@ -112,7 +114,9 @@ class PolymarketApi {
 		console.log('-----------------------init PolymarketApi-----------------------')
 		this.config = await this.loadConfig()
 		this.rootPath = this.config.polymarket.rootPath
-		console.log('PolymarketApi constructor:', this.rootPath)
+		this.clobPath = this.config.polymarket.clobPath
+		this.marketsPath = this.config.polymarket.marketsPath
+		console.log('PolymarketApi constructor:', this.rootPath, this.clobPath, this.marketsPath)
 		this.gammaApiBase = GAMMA_API_BASE
 		this.polymarketApiBase = POLYMARKET_API_BASE
 
@@ -143,14 +147,14 @@ class PolymarketApi {
 	// ---------------------------------------------------------------------------- createMarketFromSlug
 	// slug: e.g. btc-updown-15m-1765584900
 	// return: Market
-	async createMarketFromSlug(slug: string): Promise<Market | null> {
+	async createMarketFromSlug(slug: string, filePath: string = ''): Promise<Market | null> {
 		const symbol = slug.split('-')[0]		//e.g. btc
 		const split = slug.split('-')
 		const marketName = split[1] + '-' + split[2]	//e.g. updown-15m
 		const timestamp = parseInt(split[3])	//e.g. 1765584900
 		const marketSlug = split.join('-')	//e.g. btc-updown-15m-1765584900
 		console.log('createMarketFromSlug:', symbol, marketName, timestamp, marketSlug)
-		return await this.createMarket(symbol, marketName, timestamp, marketSlug)
+		return await this.createMarket(symbol, marketName, timestamp, marketSlug, 15, filePath)
 	}
 
 	
@@ -160,7 +164,9 @@ class PolymarketApi {
 	// timestamp: e.g. 1765584900
 	// marketSlug: e.g. btc-updown-15m-1765584900
 	// return: Market
-	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string, minutes: number = 15): Promise<Market | null> {
+	//
+	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string,
+		minutes: number = 15, filePath: string = ''): Promise<Market | null> {
 		const startTimestamp = timestamp * 1000 // Convert to milliseconds
 		const endTimestamp = startTimestamp + minutes * 60 * 1000 // Add minutes
 
@@ -171,6 +177,7 @@ class PolymarketApi {
 		}
 
 		const market: Market = {
+			filePath: filePath,
 			symbol: symbol.toLowerCase(),
 			marketName: marketName,		//e.g. btc-updown-15m
 			slug: marketSlug,			//e.g. btc-updown-15m-1765584900
@@ -213,7 +220,7 @@ class PolymarketApi {
 		await this.cacheMarket(market)
 		await this.saveMarket(market)
 
-		console.log('createMarket:', market.slug, market.marketData)
+		console.log('--------> market created:', market.slug, market)
 		return market
 	}
 
@@ -587,12 +594,19 @@ class PolymarketApi {
 	// ---------------------------------------------------------------------------- saveMarket
 	async saveMarket(market: Market, force: boolean = false): Promise<void> {
 		if (!force && !this.get('loggingActive')) return
-		let symbol = market.symbol.toLowerCase()
 
-		// console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
-		const dirPath = this.rootPath + 'markets/' + symbol + '/' + market.dayString
-		if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
-		const filePath = dirPath + '/' + market.slug + '.json'
+		let filePath: string = ''
+		if (market.filePath) {
+			filePath = market.filePath
+
+		}else{
+return
+			let symbol = market.symbol.toLowerCase()
+			// console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
+			const dirPath = this.rootPath + 'markets/' + symbol + '/' + market.dayString
+			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
+			filePath = dirPath + '/' + market.slug + '.json'
+		}
 
 		await fsPromises?.writeFile(filePath, JSON.stringify(market, null, '\t'))
 		console.log('market saved to:', filePath)

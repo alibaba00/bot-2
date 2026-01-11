@@ -172,6 +172,83 @@ export const getMarketsFiles = async (symbol: string, date: Date) => {
 }
 
 
+// ---------------------------------------------------------------------------- getAllMarkets_clob
+export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
+	const rootPath = PolymarketApi.clobPath;
+
+	async function walkDir(currentPath: string, symbol?: string, date?: string) {
+		const result: any = {};
+		let dirList: string[] = [];
+
+		try {
+			dirList = await fsPromises.readdir(currentPath, { withFileTypes: true });
+		} catch (e) {
+			return {};
+		}
+
+		for (const entry of dirList) {
+			if (typeof entry === "string") {
+				// Node < v10 fallback (should not happen)
+				continue;
+			}
+			if ((entry as any).isDirectory()) {
+				const dirName = (entry as any).name;
+				// Symbol layer
+				if (!symbol) {
+					// Drill into the symbol
+					result[dirName] = await walkDir(currentPath + '/' + dirName, dirName, undefined);
+				} else if (!date) {
+					// Date layer inside of Symbol
+					result[dirName] = await walkDir(currentPath + '/' + dirName, symbol, dirName);
+				}
+			} else if ((entry as any).isFile() && (entry as any).name.endsWith('.csv') && symbol && date) {
+				// Only files of the relevant Symbol + Date
+				if (!result[date]) result[date] = [];
+				
+				// result[date].push((entry as any).name);
+				result[date].push(({
+					file: (entry as any).name,
+					filePath: currentPath + '/' + (entry as any).name,
+					slug: (entry as any).name.replace('.csv', ''),
+					timestamp: parseInt((entry as any).name.replace('.csv', '').split('-')[3]),
+					date: date,
+					symbol: symbol
+				}));
+			}
+		}
+
+		// Clean up empty keys
+		if (Object.keys(result).length === 0 && symbol && date) return undefined;
+
+		// On date level, we want an array rather than a subobject
+		if (date && Array.isArray(result[date])) return result[date];
+
+		// Remove keys with undefined values (empty)
+		for (const k of Object.keys(result)) if (typeof result[k] === "undefined") delete result[k];
+
+		return result;
+	}
+
+	let out: any = {};
+	if (!symbol && !date) {
+		// List all symbols and all files
+		out = await walkDir(rootPath);
+	} else if (symbol && !date) {
+		// Only for the given symbol
+		out[symbol] = await walkDir(rootPath + '/' + symbol + '-updown-15m');
+	} else if (symbol && date) {
+		// Only for given symbol & date
+		const dateString = PolymarketApi.getUTCDateFormat(date)
+		const files = await walkDir(rootPath + '/' + symbol + '-updown-15m' + '/' + dateString, symbol, dateString);
+		if (files && Array.isArray(files)) {
+			out[symbol] = { [dateString as string]: files } as any;
+		} else {
+			out[symbol] = {} as any;
+		}
+	}
+	return out;
+}
+
 // ---------------------------------------------------------------------------- getAllMarketLogs
 // get all existing market log files from A:\DATA\polymarket\markets
 // return an array of objects with the following properties:
@@ -183,7 +260,7 @@ export const getMarketsFiles = async (symbol: string, date: Date) => {
 // - symbol: the symbol of the market
 //
 export const getAllMarkets = async (symbol: string | null = null, date: Date | null = null) => {
-	const rootPath = PolymarketApi.rootPath + "markets";
+	const rootPath = PolymarketApi.marketsPath;
 
 	async function walkDir(currentPath: string, symbol?: string, date?: string) {
 		const result: any = {};
@@ -257,6 +334,189 @@ export const getAllMarkets = async (symbol: string | null = null, date: Date | n
 	}
 	return out;
 }
+
+
+// ---------------------------------------------------------------------------- updateAllMarketData_clob
+let isRunning = false
+export const updateAllMarketData_clob = async () => {
+	if (isRunning){
+		console.log('updateAllMarketData_clob canceled!')
+		isRunning = false
+		return
+	}
+	isRunning = true
+
+	console.log('Updating all market data from clob...')
+
+	const data = await getAllMarkets_clob()
+	console.log('data:', data)
+
+	const stat = {
+		count: 0,
+		totalFiles: 0,
+		updatedFiles: 0,
+	}
+	for (const symbol of Object.keys(data)) {
+		for (const date of Object.keys(data[symbol])) {
+			stat.totalFiles += data[symbol][date].length
+		}
+	}
+
+	console.log('checking data of', stat.totalFiles, 'markets ...')
+
+	for (const symbol of Object.keys(data)) {
+		for (const date of Object.keys(data[symbol])) {
+			for (const node of data[symbol][date]) {
+				if (!isRunning) break
+				stat.count++
+if (stat.updatedFiles >= 100) break
+				// stat.updatedFiles++
+				// console.log('update market:',  stat.count, '/', stat.totalFiles, node, '...')
+				if (await updateMarketData_clob(node.filePath, node.slug)) stat.updatedFiles++
+			}
+		}
+	}
+
+	console.log('complete!', stat)
+}
+
+
+// ---------------------------------------------------------------------------- updateMarketData
+export const updateMarketData_clob = async (csvPath: string, slug: string): Promise<boolean> => {
+	let updated:boolean = false
+	let market: Market | null = null
+	const filePath = csvPath.replace('.csv', '.json')
+
+	// console.log('updateMarketData_clob:', filePath)
+
+	// get market from cache ...
+	market = await PolymarketApi.cache.getItem(slug)
+	// if (market){
+	// 	console.log('market from cache:', market)
+	// 	await PolymarketApi.cache.removeItem(market.slug)
+	// }
+// return
+
+	if (!market) {		//market not cached! load and update market from file
+		if (fs.existsSync(filePath)) {
+			const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
+			market = JSON.parse(jsonFileContent) as Market
+	
+		}else{
+			console.log('market file not found:', filePath)
+			market = await PolymarketApi.createMarketFromSlug(slug, filePath)
+		}
+		updated = true
+	}
+
+	if (!market){
+		console.log('market not exists!', slug)
+		return false
+	}
+
+	if (market.state === 'failed') return false
+
+	if (!fs.existsSync(filePath)) updated = true	//market file not saved
+
+	// if (!market.dayString) {
+	// 	market.dayString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
+	// 	console.log('update dayString:', market.startTimestamp, market.dayString)
+	// 	updated = true
+	// }
+
+	// if (market.marketName === 'updown-15m') {		//old version
+	// 	market.marketName = market.symbol + '-updown-15m'
+	// 	updated = true
+	// }
+
+	// old symbol names
+	// if (market.symbol === 'BTC' || market.symbol === 'ETH' || market.symbol === 'SOL' || market.symbol === 'XRP') {
+	// 	market.symbol = market.symbol
+	// 	updated = true
+	// }
+
+	if (!market.marketData){
+		market.marketData = await PolymarketApi.fetchMarketBySlug(slug, true)
+		updated = true
+
+	}else if (!market.marketData.closed && Date.parse(market.marketData.endDate || '') < Date.now()){
+		market.marketData = await PolymarketApi.fetchMarketBySlug(slug, true)
+		if (!market.marketData?.closed) return false
+	}
+
+	if (!market.marketData
+		|| (!market.marketData.closed && Date.parse(market.marketData.endDate || '') < Date.now())) {
+
+		const marketData = await PolymarketApi.fetchMarketBySlug(slug, true)
+		if (marketData){
+			if (!market.marketData){
+				market.marketData = marketData
+				updated = true
+			}else if (!marketData.closed) return false
+
+		}else{
+			console.log('marketData not found:', slug, market)
+			market.state = 'failed'
+			updated = true
+		}
+	}
+
+	if (market.marketData?.closed && (!market.openPrice || !market.closePrice)) {
+		const priceData = await PolymarketApi.getCryptoPrice(market)
+		console.log('update priceData:', market.slug, priceData)
+		if (priceData?.openPrice) {
+			market.openPrice = priceData.openPrice
+			market.openPriceTimestamp = priceData.timestamp || null
+			updated = true
+		}
+		if (priceData?.closePrice) {	// market is now closed!
+			market.closePrice = priceData.closePrice
+			market.closePriceTimestamp = priceData.timestamp || null
+			updated = true
+		}
+	}
+
+	if (market.openPrice && market.closePrice) {
+		if (!market.closed || market.state !== 'closed'){
+			console.log('update market closed:', market.slug)
+			market.closed = true
+			market.state = 'closed'
+			delete market.chartData		//force update chart data
+			updated = true
+		}
+		const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
+		if (outcome !== market.outcome) {
+			console.log('update outcome:', outcome)
+			market.outcome = outcome
+			updated = true
+		}
+	}
+
+	// const logFilePath = filePath.replace('.json', '.log')
+
+	// if (market.closed){
+	// 	if (!market.chartData || !market.chartData.ticker) {
+	// 		market.chartData = await getChartData(market, logFilePath)
+	// 		updated = true
+	// 	}
+	
+	// 	if (market.chartData && market.chartData.grid === undefined && market.outcome) {
+	// 		market.chartData.grid = getGridData(market) as any
+	// 		console.log('get-grid-data:', market.slug, market.chartData.grid)
+	// 		updated = true
+	// 	}
+	// }
+	
+	if (updated) {
+		await PolymarketApi.cacheMarket(market)
+		await PolymarketApi.saveMarket(market, true)
+		console.log('-----> update market:', market.slug, market)
+		console.log('')
+	}
+
+	return updated
+}
+
 
 
 // ---------------------------------------------------------------------------- updateAllMarketData
