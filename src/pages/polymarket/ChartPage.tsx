@@ -293,25 +293,27 @@ export default function ChartPage() {
 		const openPrice = selectedMarket.data.openPrice
 		const startTimestamp = selectedMarket.data.startTimestamp
 		const endTimestamp = selectedMarket.data.endTimestamp
+		const clobData = chartData.clob
 
-		if (chartData.up?.length && chartData.down?.length) {
-			if (chartData.up[chartData.up.length - 1][0] < endTimestamp) {
-				chartData.up.push([endTimestamp, chartData.up[chartData.up.length - 1][1]])
+		if (clobData.up?.length && clobData.down?.length) {
+			if (clobData.up[clobData.up.length - 1][0] < endTimestamp) {
+				clobData.up.push([endTimestamp, clobData.up[clobData.up.length - 1][1]])
 			}
-			if (chartData.down[chartData.down.length - 1][0] < endTimestamp) {
-				chartData.down.push([endTimestamp, chartData.down[chartData.down.length - 1][1]])
+			if (clobData.down[clobData.down.length - 1][0] < endTimestamp) {
+				clobData.down.push([endTimestamp, clobData.down[clobData.down.length - 1][1]])
 			}
 		}
 
-		const values = chartData.ticker.map((item: any) => {
+		const chainlinkData = chartData.ticker?.chainlink?.map((item: any) => {
 			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
 		})
-		const minValue = values.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-		const maxValue = values.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+		const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+		const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
 		let scale = maxValue > -minValue ? maxValue : -minValue
-		scale = parseFloat(Math.ceil(scale * 1.01).toFixed(2))
+		scale = parseFloat(Math.ceil(scale).toFixed(2))
+console.log('scale:', scale, minValue, maxValue)
 
-		const values_p = chartData.ticker_p?.map((item: any) => {
+		const binanceData = chartData.ticker?.binance?.map((item: any) => {
 			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
 		})
 
@@ -333,19 +335,19 @@ export default function ChartPage() {
 			series: [
 				{
 					...lineChartOptions.series[0],
-					data: chartData.up
+					data: clobData.up?.map(([timestamp, value]) => [timestamp, 1 - value])
 				},
 				{
 					...lineChartOptions.series[1],
-					data: chartData.down?.map(([timestamp, value]) => [timestamp, 1 - value]),
+					data: clobData.down
 				},
 				{
 					...lineChartOptions.series[2],
-					data: values
+					data: chainlinkData
 				},
 				{
 					...lineChartOptions.series[3],
-					data: values_p
+					data: binanceData
 				}
 			],
 		})
@@ -503,9 +505,9 @@ export default function ChartPage() {
 						<Button onClick={() => PolymarketChart.updateAllMarketData_clob()}>
 							Update Data (new)
 						</Button>
-						<Button onClick={() => PolymarketChart.updateAllMarketData()}>
+						{/* <Button onClick={() => PolymarketChart.updateAllMarketData()}>
 							Update Data
-						</Button>
+						</Button> */}
 						
 						<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
 							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
@@ -644,7 +646,8 @@ const MarketItem = ({ market }: { market: any }) => {
 				<Button variant='outline' className='text-xs text-gray-500 h-auto px-2 py-1'
 					onClick={e => {
 						e.stopPropagation()
-						PolymarketChart.updateMarketData(market.filePath, market.slug, true)
+						// PolymarketChart.updateMarketData(market.filePath, market.slug, true)
+						PolymarketChart.updateMarketData_clob(market.slug, market.filePath, true)
 					}}
 					>Update</Button>
 				<span

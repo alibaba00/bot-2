@@ -291,7 +291,7 @@ class PolymarketApi {
 					`URL: ${fullUrl}`,
 					errorText
 				)
-				console.log('❌ getCryptoPrice failed:', market)
+				// console.log('❌ getCryptoPrice failed:', market)
 				return null
 			}
 			
