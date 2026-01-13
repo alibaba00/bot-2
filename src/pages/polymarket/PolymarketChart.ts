@@ -10,6 +10,70 @@ const tickerDataCache = {} // ticker data cache
 
 
 
+// ---------------------------------------------------------------------------- convertToCsv
+export const convertToCsv = async () => {
+	const importPath = 'A:/DATA/polymarket/chainlink.old/'
+	const exportPath = 'A:/DATA/polymarket/chainlink/'
+	const dirList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
+	console.log('dirList:', dirList)
+
+	const dataList: any = {}
+	for (const entry of dirList) {
+		if (entry.isDirectory()) continue
+		const filePath = entry.path + '/' + entry.name
+		if (entry.name.endsWith('.csv')) {
+			const symbol = entry.path.split('\\').pop()
+			const fileContent = await fsPromises.readFile(filePath, 'utf8')
+			// console.log('fileContent:', symbol, fileContent?.length)
+
+			if (fileContent?.length) {
+				if (!dataList[symbol]) dataList[symbol] = []
+
+				const lines = fileContent.split('\n')
+				dataList[symbol].push(...lines)
+			}
+		}
+	}
+
+	for (const symbol of Object.keys(dataList)) {
+		const data = dataList[symbol]
+			.map((line: any) => {
+				const values= line.split(',')
+				values[0] = parseInt(values[0])// + 3600000	//add 1 hour to fix the timestamp
+				return values
+			})
+			.filter((item: any) => item[0] > 0 && item[1] > 0)
+			.sort((a: any, b: any) => a[0] - b[0])
+
+		let dayString: string
+		let lastDay: number = Math.floor(data[0][0] / 86400000) * 86400000
+		let nextDay = lastDay + 86400000	//next day
+		const lastTime: number = data[data.length-1][0]
+
+		while(lastDay <= lastTime){
+			dayString = new Date(lastDay).toISOString().slice(0, 10)
+			const tickerData = data.filter((item: any) => item[0] >= lastDay && item[0] < nextDay)
+			console.log('tickerData:', symbol, dayString, tickerData.length, tickerData[0], tickerData[tickerData.length-1], lastDay, nextDay)
+			lastDay = nextDay
+			nextDay += 86400000
+
+			let tickerString: string = ''
+			for (const item of tickerData) tickerString += item[0] + ',' + item[1] + '\n'
+
+			const exportDirPath: string = exportPath + symbol
+			const exportFilePath: string = exportDirPath + '/' + dayString + '.csv'
+			if (!fs.existsSync(exportDirPath)) fs.mkdirSync(exportDirPath, {recursive: true})
+			console.log('exportFilePath:', exportFilePath, tickerString.length)
+			console.log('')
+			await fsPromises.writeFile(exportFilePath, tickerString)
+		}
+	}
+
+	console.log('complete!')
+}
+
+
+
 // ---------------------------------------------------------------------------- dataTest
 export const dataTest = async (symbol: string) => {
 	///
@@ -372,7 +436,7 @@ export const updateAllMarketData_clob = async () => {
 			for (const node of data[symbol][date]) {
 				if (!isRunning) break
 				stat.updated++
-// if (stat.updated > 3) break
+// if (stat.updated > 30) break
 				// stat.updatedFiles++
 				// console.log('update market:',  stat.count, '/', stat.totalFiles, node, '...')
 				await updateMarketData_clob(node.slug, node.filePath, stat)
@@ -485,6 +549,13 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, stat:
 			market.chartData = await getChartData_csv(market, csvPath)
 			updated = true
 		}
+
+const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
+let chainlink = await getChartTickerData(market.symbol, dateString, 'chainlink')
+market.chartData.ticker.chainlink = chainlink
+	.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
+	.map((item) => [item.timestamp, item.price] as any)
+updated = true
 	
 	// 	if (market.chartData && market.chartData.grid === undefined && market.outcome) {
 	// 		market.chartData.grid = getGridData(market) as any
@@ -868,7 +939,7 @@ export const getChartTickerData = async (symbol: string, dateString: string, sou
 	const rootPath = PolymarketApi.rootPath
 	const dirPath = `${rootPath}${source}/${symbol + (source === 'chainlink' ? 'usd' : 'usdt')}`
 	const filePath = `${dirPath}/${dateString}.csv`
-// console.log('------------getChartTickerData:', symbol, dateString, filePath, fs.existsSync(filePath))
+console.log('------------getChartTickerData:', symbol, dateString, filePath, fs.existsSync(filePath), source)
 	if (!fs.existsSync(filePath)) return []
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')

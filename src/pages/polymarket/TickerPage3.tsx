@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { useCryptoPricePoller } from '@/hooks/use-crypto-price-poller'
+import { useBinanceWebSocket } from '@/hooks/use-binance-websocket'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { CryptoPriceUpdate } from '@/lib/polymarket/rtds-websocket'
 import type { CryptoPriceUpdate as PollerPriceUpdate } from '@/lib/polymarket/crypto-price-poller'
+import type { BinanceTickerUpdate } from '@/lib/binance/binance-websocket'
 
 type CryptoSymbol = 'BTC' | 'ETH' | 'SOL' | 'XRP'
 
@@ -26,6 +28,7 @@ interface PriceData {
 	binance: { value: number; timestamp: number } | null
 	chainlink: { value: number; timestamp: number } | null
 	polling: { value: number; timestamp: number } | null
+	binanceDirect: { value: number; timestamp: number } | null
 }
 
 export default function TickerPage3() {
@@ -33,13 +36,14 @@ export default function TickerPage3() {
 	const [binanceActive, setBinanceActive] = useState(false)
 	const [chainlinkActive, setChainlinkActive] = useState(false)
 	const [pollingActive, setPollingActive] = useState(false)
+	const [binanceDirectActive, setBinanceDirectActive] = useState(false)
 
-	// Store prices for each crypto from all three sources
+	// Store prices for each crypto from all sources
 	const [prices, setPrices] = useState<Record<CryptoSymbol, PriceData>>({
-		BTC: { binance: null, chainlink: null, polling: null },
-		ETH: { binance: null, chainlink: null, polling: null },
-		SOL: { binance: null, chainlink: null, polling: null },
-		XRP: { binance: null, chainlink: null, polling: null }
+		BTC: { binance: null, chainlink: null, polling: null, binanceDirect: null },
+		ETH: { binance: null, chainlink: null, polling: null, binanceDirect: null },
+		SOL: { binance: null, chainlink: null, polling: null, binanceDirect: null },
+		XRP: { binance: null, chainlink: null, polling: null, binanceDirect: null }
 	})
 
 	// Get all symbols for Binance (all 4 assets when active)
@@ -55,6 +59,11 @@ export default function TickerPage3() {
 	// Get all symbols for Polling (all 4 assets when active, using Binance format)
 	const activePollingSymbols = pollingActive
 		? CRYPTO_CONFIGS.map((config) => config.binanceSymbol)
+		: []
+
+	// Get all streams for direct Binance WebSocket (format: "btcusdt@ticker")
+	const activeBinanceDirectStreams = binanceDirectActive
+		? CRYPTO_CONFIGS.map((config) => `${config.binanceSymbol}@ticker`)
 		: []
 
 	// Binance WebSocket connection
@@ -131,6 +140,30 @@ export default function TickerPage3() {
 		autoStart: false
 	})
 
+	// Direct Binance WebSocket connection
+	const binanceDirectWs = useBinanceWebSocket({
+		streams: activeBinanceDirectStreams,
+		onTickerUpdate: (update: BinanceTickerUpdate) => {
+			// Find which crypto this update belongs to
+			const config = CRYPTO_CONFIGS.find(
+				(c) => c.binanceSymbol.toLowerCase() === update.symbol.toLowerCase()
+			)
+			if (config) {
+				setPrices((prev) => ({
+					...prev,
+					[config.symbol]: {
+						...prev[config.symbol],
+						binanceDirect: { value: update.price, timestamp: update.timestamp }
+					}
+				}))
+			}
+		},
+		onError: (err) => {
+			console.error('Direct Binance WebSocket error:', err)
+		},
+		autoConnect: false
+	})
+
 	// Update symbols when active tickers change (only if connected)
 	useEffect(() => {
 		if (binanceWs.status === 'connected') {
@@ -203,6 +236,23 @@ export default function TickerPage3() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [pollingActive])
 
+	// Connect/disconnect direct Binance WebSocket based on active state
+	useEffect(() => {
+		if (binanceDirectActive) {
+			// Connect if disconnected and we have streams
+			if (activeBinanceDirectStreams.length > 0 && binanceDirectWs.status === 'disconnected') {
+				binanceDirectWs.connect()
+			}
+		} else {
+			// Disconnect if not active
+			if (binanceDirectWs.status !== 'disconnected') {
+				binanceDirectWs.disconnect()
+			}
+			// Don't clear prices - keep last value but it will be grayed out
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [binanceDirectActive, activeBinanceDirectStreams.join(',')])
+
 	// Toggle Binance source
 	const toggleBinance = useCallback(() => {
 		setBinanceActive((prev) => !prev)
@@ -216,6 +266,11 @@ export default function TickerPage3() {
 	// Toggle Polling source
 	const togglePolling = useCallback(() => {
 		setPollingActive((prev) => !prev)
+	}, [])
+
+	// Toggle Direct Binance source
+	const toggleBinanceDirect = useCallback(() => {
+		setBinanceDirectActive((prev) => !prev)
 	}, [])
 
 	// Format price for display
@@ -280,6 +335,19 @@ export default function TickerPage3() {
 							}`}
 						/>
 						{pollingActive ? 'Stop Polling' : 'Start Polling'}
+					</Button>
+					<Button
+						onClick={toggleBinanceDirect}
+						variant={binanceDirectActive ? 'destructive' : 'default'}
+						size='sm'
+						className='flex items-center gap-2'
+					>
+						<div
+							className={`h-2 w-2 rounded-full ${
+								binanceDirectWs.status === 'connected' ? 'bg-green-500' : 'bg-gray-400'
+							}`}
+						/>
+						{binanceDirectActive ? 'Stop Binance Direct' : 'Start Binance Direct'}
 					</Button>
 				</div>
 			</div>
@@ -381,6 +449,36 @@ export default function TickerPage3() {
 										<div
 											className={`h-3 w-3 rounded-full ${
 												pollingActive && priceData.polling
+													? 'bg-green-500 animate-pulse'
+													: 'bg-gray-300'
+											}`}
+										/>
+									</div>
+
+									{/* Direct Binance WebSocket Price */}
+									<div className='flex items-center justify-between rounded-lg border p-3'>
+										<div className='flex flex-col'>
+											<span className='text-sm font-medium text-muted-foreground'>
+												Binance Direct WS
+											</span>
+											<span
+												className={`text-2xl font-bold ${
+													binanceDirectActive && priceData.binanceDirect
+														? ''
+														: 'text-muted-foreground opacity-60'
+												}`}
+											>
+												{formatPrice(priceData.binanceDirect?.value ?? null)}
+											</span>
+											{priceData.binanceDirect?.timestamp && (
+												<span className='text-xs text-muted-foreground'>
+													{formatTimestamp(priceData.binanceDirect.timestamp)}
+												</span>
+											)}
+										</div>
+										<div
+											className={`h-3 w-3 rounded-full ${
+												binanceDirectActive && priceData.binanceDirect
 													? 'bg-green-500 animate-pulse'
 													: 'bg-gray-300'
 											}`}

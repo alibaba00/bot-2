@@ -289,6 +289,7 @@ export default function ChartPage() {
 	const parseLineData = (chartData: any) => {
 		// if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
 		// if (!chartData.ticker.length) return
+		if (!selectedMarket) return
 
 		const openPrice = selectedMarket.data.openPrice
 		const startTimestamp = selectedMarket.data.startTimestamp
@@ -307,15 +308,18 @@ export default function ChartPage() {
 		const chainlinkData = chartData.ticker?.chainlink?.map((item: any) => {
 			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
 		})
-		const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-		const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		let scale = maxValue > -minValue ? maxValue : -minValue
-		scale = parseFloat(Math.ceil(scale).toFixed(2))
-console.log('scale:', scale, minValue, maxValue)
+		// const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+		// const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+		// const scale = Math.max(Math.abs(minValue), Math.abs(maxValue))
 
+		const firstPrice = chartData.ticker?.binance[0][1]
 		const binanceData = chartData.ticker?.binance?.map((item: any) => {
-			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
+			return [item[0], ((item[1] / firstPrice) - 1 ) * 1000] as any
 		})
+		const minValue = binanceData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+		const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+		const scale = parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2
+
 
 		setChartOptions({
 			...lineChartOptions,
@@ -359,7 +363,7 @@ console.log('scale:', scale, minValue, maxValue)
 		if (!symbol) return
 
 		let chartData = selectedMarket?.data?.chartData
-		if (!chartData) return setChartOptions({})
+		// if (!chartData) return setChartOptions({})
 
 		console.log('updateChart:', chartType, symbol, selectedMarket)
 		switch (chartType) {
@@ -368,6 +372,7 @@ console.log('scale:', scale, minValue, maxValue)
 				break
 
 			case 'bar':
+				console.log('updateChart:', symbol, chartType)
 				const data = await PolymarketChart.getChartDistributionData(symbol, null, 15)	//15
 				setChartOptions({
 					...barChartOptions,
@@ -524,6 +529,9 @@ console.log('scale:', scale, minValue, maxValue)
 						<Button onClick={() => PolymarketChart.dataTest(asset?.value)}>
 							data test
 						</Button>
+						<Button onClick={() => PolymarketChart.convertToCsv()}>
+							convert to csv
+						</Button>
 					</div>
 					<ReactEcharts
 						option={chartOptions}
@@ -637,11 +645,22 @@ const MarketItem = ({ market }: { market: any }) => {
 		})
 	}, [market.slug])
 
+	const timeRange = (startTimestamp: number, endTimestamp: number) => {
+		return startTimestamp && endTimestamp ?
+			(new Date(startTimestamp).toISOString().substring(11, 16) + ' - '
+			+ new Date(endTimestamp).toISOString().substring(11, 16))
+			: ''
+	}	
+
 	return (
 		<div className={`flex flex-row items-center justify-between p-2 w-full`}>
 			<div className='flex flex-row items-center justify-between gap-8 w-full'>
-				<div className='text-sm font-medium mr-auto'>{market.slug}</div>
-				<div className='text-sm font-medium'>{data?.outcome || ''}</div>
+				<div className='text-sm font-medium'>{market.slug}</div>
+				<div className='text-xs text-muted-foreground'>{data?.marketData?.question}</div>
+				<div className='text-xs text-muted-foreground'>
+					{timeRange(data?.startTimestamp, data?.endTimestamp)}
+				</div>
+				<div className='text-sm font-medium ml-auto'>{data?.outcome || ''}</div>
 				<div className='text-sm font-medium'>{data?.state || ''}</div>
 				<Button variant='outline' className='text-xs text-gray-500 h-auto px-2 py-1'
 					onClick={e => {
