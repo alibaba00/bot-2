@@ -9,6 +9,9 @@ import PolymarketApi from "./PolymarketApi";
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 
+const parseNumber = (num: number) => {
+	return parseFloat(num.toFixed(12))
+}
 
 const assetContent = [
 	{
@@ -318,8 +321,7 @@ export default function ChartPage() {
 		})
 		const minValue = binanceData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
 		const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		const scale = parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2
-
+		const scale = parseNumber(parseFloat((Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1))) + 0.2)
 
 		setChartOptions({
 			...lineChartOptions,
@@ -507,12 +509,13 @@ export default function ChartPage() {
 							className='ml-0'
 						/>
 
-						<Button onClick={() => PolymarketChart.updateAllMarketData_clob()}>
-							Update Data (new)
+						<Button onClick={() => PolymarketChart.updateLogfiles()}>
+							Update logfiles
 						</Button>
-						{/* <Button onClick={() => PolymarketChart.updateAllMarketData()}>
-							Update Data
-						</Button> */}
+
+						<Button onClick={() => PolymarketChart.updateAllMarketData_clob()}>
+							Update clob data
+						</Button>
 						
 						<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
 							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
