@@ -237,6 +237,27 @@ export const getMarketsFiles = async (symbol: string, date: Date) => {
 }
 
 
+// ---------------------------------------------------------------------------- getAllMarkets_clob_2
+export const getAllMarkets_clob_2 = async (symbol: string | null = null, date: Date | null = null) => {
+	const rootPath = PolymarketApi.clobPath;
+
+	const dirList = await fsPromises.readdir(rootPath, { withFileTypes: true, recursive: true });
+	const dateString = (date || new Date()).toISOString().substring(0, 10);
+	console.log('dirList:', dirList, symbol, dateString)
+
+	// result[date].push(({
+	// 	file: (entry as any).name,
+	// 	filePath: currentPath + '/' + (entry as any).name,
+	// 	slug: (entry as any).name.replace('.csv', ''),
+	// 	timestamp: parseInt((entry as any).name.replace('.csv', '').split('-')[3]),
+	// 	date: date,
+	// 	symbol: symbol
+	// }));
+
+	return null;
+}
+
+
 // ---------------------------------------------------------------------------- getAllMarkets_clob
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
 	const rootPath = PolymarketApi.clobPath;
@@ -641,6 +662,8 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 			updated = true
 		}
 
+		// if (!useCache || !market.chartData?.ticker?.chainlink?.length
+		// 	|| !market.chartData?.ticker?.binance?.length
 		if (!useCache || !market.chartData?.ticker
 			|| (market.chartData?._incomplete && lastUpdate_logfiles > market.endTimestamp)) {		
 			market.chartData = await getChartData_csv(market, csvPath)
