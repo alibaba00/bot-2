@@ -292,7 +292,10 @@ export default function ChartPage() {
 	const parseLineData = (chartData: any) => {
 		// if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
 		// if (!chartData.ticker.length) return
-		if (!selectedMarket) return
+		if (!selectedMarket || !chartData){
+			setChartOptions({})
+			return
+		}
 
 		const openPrice = selectedMarket.data.openPrice
 		const startTimestamp = selectedMarket.data.startTimestamp
@@ -315,7 +318,7 @@ export default function ChartPage() {
 		// const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
 		// const scale = Math.max(Math.abs(minValue), Math.abs(maxValue))
 
-		const firstPrice = chartData.ticker?.binance[0][1]
+		const firstPrice = chartData.ticker?.binance?.[0]?.[1]
 		const binanceData = chartData.ticker?.binance?.map((item: any) => {
 			return [item[0], ((item[1] / firstPrice) - 1 ) * 1000] as any
 		})
@@ -365,7 +368,7 @@ export default function ChartPage() {
 		if (!symbol) return
 
 		let chartData = selectedMarket?.data?.chartData
-		// if (!chartData) return setChartOptions({})
+		if (!chartData) return setChartOptions({})
 
 		console.log('updateChart:', chartType, symbol, selectedMarket)
 		switch (chartType) {
@@ -557,9 +560,10 @@ export default function ChartPage() {
 
 					<Tabs
 						value={asset?.value}
-						onValueChange={(value) =>
+						onValueChange={(value) => {
+							setSelectedMarket(null)
 							setAsset(assetContent.find((node) => node.value === value) ?? assetContent[0])
-						}
+						}}
 						className='w-full h-full flex'>
 						<TabsList className='text-foreground h-auto w-full rounded-none border-b bg-transparent px-0 py-1'>
 							{assetContent.map((tab) => (
@@ -583,7 +587,9 @@ export default function ChartPage() {
 					/>
 					</div>
 
-					<MarketList symbol={asset?.value} marketType={marketType} selectedDate={selectedDate}
+					<MarketList symbol={asset?.value} marketType={marketType}
+						selectedDate={selectedDate}
+						selectedMarket={selectedMarket}
 						onSelectMarket={setSelectedMarket}
 					/>
 				</div>
@@ -594,11 +600,9 @@ export default function ChartPage() {
 
 
 // ---------------------------------------------------------------------------- MarketList
-const MarketList = ({ symbol, marketType, selectedDate, onSelectMarket }:
-	{ symbol: string, marketType: string, selectedDate: Date, onSelectMarket: (market: any) => void }) => {
-	// const [markets, setMarkets] = useState<MarketData[]>([])
+const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelectMarket }:
+	{ symbol: string, marketType: string, selectedDate: Date, selectedMarket: any, onSelectMarket: (market: any) => void }) => {
 	const [markets, setMarkets] = useState<any[]>([])
-	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 	
 	useEffect(() => {
 		setMarkets([])	//clear markets
@@ -624,7 +628,6 @@ const MarketList = ({ symbol, marketType, selectedDate, onSelectMarket }:
 				<div key={market.slug} className={`flex flex-row items-center justify-between border-b border-gray-700 cursor-pointer ${selectedMarket?.slug === market.slug ? 'bg-accent' : ''}`}
 				 onClick={() => {
 					console.log('selectedMarket:', market)
-					setSelectedMarket(market)
 					onSelectMarket(market)
 				}}>
 					<MarketItem key={market.slug} market={market} />
@@ -668,13 +671,12 @@ const MarketItem = ({ market }: { market: any }) => {
 				<Button variant='outline' className='text-xs text-gray-500 h-auto px-2 py-1'
 					onClick={e => {
 						e.stopPropagation()
-						// PolymarketChart.updateMarketData(market.filePath, market.slug, true)
-						PolymarketChart.updateMarketData_clob(market.slug, market.filePath, true)
+						PolymarketChart.updateMarketData_clob(market.slug, market.filePath, false)
 					}}
 					>Update</Button>
 				<span
 					className={`inline-block w-3 h-3 rounded-full mr-2 ${data?.closed
-						? (data?.chartData?.grid?.up?.length && data?.chartData?.grid?.down?.length) ? 'bg-green-500' : 'bg-yellow-500'
+						? (data?.chartData?.ticker?.chainlink?.length > 100) ? 'bg-green-500' : 'bg-yellow-500'
 						: 'bg-red-500'}`}
 				></span>
 			</div>
