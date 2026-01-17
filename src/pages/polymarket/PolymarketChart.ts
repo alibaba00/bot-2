@@ -227,113 +227,33 @@ const parseNumber = (num: number) => {
 }
 
 
-// ---------------------------------------------------------------------------- getMarketsFiles
-export const getMarketsFiles = async (symbol: string, date: Date) => {
-	// const rootPath = PolymarketApi.rootPath + "markets";
-
-	// const files = await getAllMarkets(symbol, date)
-	const files = await getAllMarkets_clob(symbol, date)
-	return files[symbol][date.toISOString().slice(0, 10)]
-}
-
-
 // ---------------------------------------------------------------------------- getAllMarkets_clob_2
-export const getAllMarkets_clob_2 = async (symbol: string | null = null, date: Date | null = null) => {
-	const rootPath = PolymarketApi.clobPath;
+let dirList: any[] = [];
 
-	const dirList = await fsPromises.readdir(rootPath, { withFileTypes: true, recursive: true });
-	const dateString = (date || new Date()).toISOString().substring(0, 10);
-	console.log('dirList:', dirList, symbol, dateString)
-
-	// result[date].push(({
-	// 	file: (entry as any).name,
-	// 	filePath: currentPath + '/' + (entry as any).name,
-	// 	slug: (entry as any).name.replace('.csv', ''),
-	// 	timestamp: parseInt((entry as any).name.replace('.csv', '').split('-')[3]),
-	// 	date: date,
-	// 	symbol: symbol
-	// }));
-
-	return null;
-}
-
-
-// ---------------------------------------------------------------------------- getAllMarkets_clob
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
 	const rootPath = PolymarketApi.clobPath;
 
-	async function walkDir(currentPath: string, symbol?: string, date?: string) {
-		const result: any = {};
-		let dirList: string[] = [];
+	dirList = dirList.length? dirList : await fsPromises.readdir(rootPath, { withFileTypes: true, recursive: true });
+	const dateString = (date || new Date()).toISOString().substring(0, 10);
 
-		try {
-			dirList = await fsPromises.readdir(currentPath, { withFileTypes: true });
-		} catch (e) {
-			return {};
-		}
+	const fileList: any[] = dirList.filter((entry: any) => entry.isFile()
+		&& entry.name.endsWith('.csv')
+		&& (symbol ? entry.name.startsWith(symbol) : true)
+		&& (date ? entry.path.endsWith(dateString) : true)
+	).map((entry: any) => ({
+		folder: entry.path.replaceAll('\\', '/'),
+		fileName: entry.name,
+		filePath: entry.path.replaceAll('\\', '/') + '/' + entry.name,
+		slug: entry.name.replace('.csv', ''),
+		timestamp: parseInt(entry.name.replace('.csv', '').split('-')[3]),
+		date: date,
+		dateString: dateString,
+		symbol: symbol
+	}));
 
-		for (const entry of dirList) {
-			if (typeof entry === "string") {
-				// Node < v10 fallback (should not happen)
-				continue;
-			}
-			if ((entry as any).isDirectory()) {
-				const dirName = (entry as any).name;
-				// Symbol layer
-				if (!symbol) {
-					// Drill into the symbol
-					result[dirName] = await walkDir(currentPath + '/' + dirName, dirName, undefined);
-				} else if (!date) {
-					// Date layer inside of Symbol
-					result[dirName] = await walkDir(currentPath + '/' + dirName, symbol, dirName);
-				}
-			} else if ((entry as any).isFile() && (entry as any).name.endsWith('.csv') && symbol && date) {
-				// Only files of the relevant Symbol + Date
-				if (!result[date]) result[date] = [];
-				
-				// result[date].push((entry as any).name);
-				result[date].push(({
-					file: (entry as any).name,
-					filePath: currentPath + '/' + (entry as any).name,
-					slug: (entry as any).name.replace('.csv', ''),
-					timestamp: parseInt((entry as any).name.replace('.csv', '').split('-')[3]),
-					date: date,
-					symbol: symbol
-				}));
-			}
-		}
-
-		// Clean up empty keys
-		if (Object.keys(result).length === 0 && symbol && date) return undefined;
-
-		// On date level, we want an array rather than a subobject
-		if (date && Array.isArray(result[date])) return result[date];
-
-		// Remove keys with undefined values (empty)
-		for (const k of Object.keys(result)) if (typeof result[k] === "undefined") delete result[k];
-
-		return result;
-	}
-
-	let out: any = {};
-	if (!symbol && !date) {
-		// List all symbols and all files
-		out = await walkDir(rootPath);
-	} else if (symbol && !date) {
-		// Only for the given symbol
-		out[symbol] = await walkDir(rootPath + '/' + symbol + '-updown-15m');
-	} else if (symbol && date) {
-		// Only for given symbol & date
-		const dateString = PolymarketApi.getUTCDateFormat(date)
-		const files = await walkDir(rootPath + '/' + symbol + '-updown-15m' + '/' + dateString, symbol, dateString);
-		if (files && Array.isArray(files)) {
-			out[symbol] = { [dateString as string]: files } as any;
-		} else {
-			out[symbol] = {} as any;
-		}
-	}
-	return out;
+	return fileList;
 }
+
 
 // ---------------------------------------------------------------------------- getAllMarketLogs
 // get all existing market log files from A:\DATA\polymarket\markets
@@ -434,6 +354,9 @@ export const updateLogfiles = async () => {
 	await updateClobData()
 	console.log('')
 
+	console.log('update markets logfiles...')
+	dirList = await fsPromises.readdir(PolymarketApi.marketsPath, { withFileTypes: true, recursive: true });
+
 	console.log('---Complete!')
 }
 
@@ -451,7 +374,8 @@ export const updateTickerData = async (type: string = 'binance') => {
 		const path = entry.path.replaceAll('\\', '/')
 		const filePath = path + '/' + entry.name
 		const symbol = path.split('/').pop()
-		const exportFilePath = exportPath + symbol + '/' + entry.name
+		const exportDir = exportPath + symbol + '/'
+		const exportFilePath = exportDir + entry.name
 
 		if (fs.existsSync(exportFilePath)){	//export file exists
 			const exportCreatedAt = fs.statSync(exportFilePath).ctime
@@ -463,7 +387,7 @@ export const updateTickerData = async (type: string = 'binance') => {
 			console.log('export new file:', exportFilePath)
 		}
 
-		if (!fs.existsSync(exportFilePath)) fs.mkdirSync(exportFilePath, { recursive: true })
+		if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true })
 		fs.copyFileSync(filePath, exportFilePath)
 
 /*		
@@ -485,6 +409,7 @@ export const updateTickerData = async (type: string = 'binance') => {
 */
 	}
 }
+
 
 // ---------------------------------------------------------------------------- updateTickerData
 // H:\DEV\PY\polymarket\clob_market_ticker\logs\clob\btc-updown-15m\2026-01-05\btc-updown-15m-1767639600.csv
@@ -544,38 +469,23 @@ export const updateAllMarketData_clob = async () => {
 	}
 	isRunning = true
 
-	console.log('Updating all market data from clob...')
-
-	const data = await getAllMarkets_clob()
-	console.log('data:', data)
+	const dataFiles = await getAllMarkets_clob()
+	console.log('Updating all market data from clob', dataFiles.length, 'files ...')
 
 	const stat = {
-		totalMarkets: 0,
+		totalMarkets: dataFiles.length,
 		updated: 0,
 		openMarkets: 0,
 	}
-	for (const symbol of Object.keys(data)) {
-		for (const date of Object.keys(data[symbol])) {
-			stat.totalMarkets += data[symbol][date].length
-		}
-	}
 
-	console.log('checking data of', stat.totalMarkets, 'markets ...')
 	await PolymarketApi.store.setItem('lastUpdate_clobData', Date.now())
 	lastUpdate_logfiles = await PolymarketApi.store.getItem('lastUpdate_logfiles')
 
-	for (const symbol of Object.keys(data)) {
-		for (const date of Object.keys(data[symbol])) {
-			for (const node of data[symbol][date]) {
-				if (!isRunning) break
-// if (stat.updated > 30) break
-				// stat.updatedFiles++
-				// console.log('update market:',  stat.count, '/', stat.totalFiles, node, '...')
-				const {market, updated} = await updateMarketData_clob(node.slug, node.filePath)
-				if (updated) stat.updated++
-				if (market && !market.closed) stat.openMarkets++
-			}
-		}
+	for (const file of dataFiles) {
+		if (!isRunning) break
+		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
+		if (updated) stat.updated++
+		if (market && !market.closed) stat.openMarkets++
 	}
 
 	isRunning = false

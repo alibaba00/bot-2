@@ -607,16 +607,16 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 	useEffect(() => {
 		setMarkets([])	//clear markets
 
-		PolymarketChart.getMarketsFiles(symbol, selectedDate)
-		.then((markets) => {
+		PolymarketChart.getAllMarkets_clob(symbol, selectedDate)
+		.then((files) => {
 			// console.log('markets:', markets)
-			if (!markets) return
+			if (!files) return
 			if (marketType !== 'all'){
-				markets = markets.filter((market) => market.slug.includes(marketType))
+				files = files.filter((market) => market.slug.includes(marketType))
 			}
-			markets = markets.sort((b, a) => a.timestamp - b.timestamp)
+			files = files.sort((b, a) => a.timestamp - b.timestamp)
 
-			setMarkets(markets)
+			setMarkets(files)
 		})
 
 	}, [symbol, selectedDate, marketType])

@@ -1,8 +1,8 @@
 {
 	"name": "polymarket-bot",
 	"info": "welcome to the polymarket bot",
-	"version": "1.0.17",
-	"release": "11.01.2026",
+	"version": "1.0.18",
+	"release": "17.01.2026",
 
 	"userConfig": "c:/jtcore/userConfig.json",
 
