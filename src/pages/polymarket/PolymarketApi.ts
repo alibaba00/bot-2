@@ -40,7 +40,8 @@ export const useStore = create(() => ({
 	tradingActive: false,
 	tickerActive: false,
 	pollingActive: false,
-	marketCompleted: false
+	loggingActive: true,
+	marketCompleted: false,
 }))
 
 

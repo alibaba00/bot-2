@@ -161,7 +161,7 @@ const lineChartOptions = {
 	// },
 	tooltip: {
 		show: true,
-		trigger: 'axis'
+		trigger: 'axis',
 	},
 	xAxis: [
 		{
@@ -233,6 +233,9 @@ const lineChartOptions = {
 			symbolSize: 0,
 			data: [] as any[],
 			step: 'end',
+			tooltip: {
+				show: true,
+			},
 		},
 		{
 			type: 'line',
@@ -243,6 +246,9 @@ const lineChartOptions = {
 			symbolSize: 0,
 			data: [] as any[],
 			step: 'end',
+			tooltip: {
+				show: true,
+			},
 		},
 		{
 			type: 'line',
@@ -254,6 +260,9 @@ const lineChartOptions = {
 			data: [] as any[],
 			yAxisIndex: 1,
 			step: 'end',
+			tooltip: {
+				show: false,
+			},
 		},
 		{
 			type: 'line',
@@ -265,6 +274,9 @@ const lineChartOptions = {
 			data: [] as any[],
 			yAxisIndex: 1,
 			step: 'end',
+			tooltip: {
+				show: false,
+			},
 		}
 	],
 	grid: {
@@ -344,11 +356,11 @@ export default function ChartPage() {
 			series: [
 				{
 					...lineChartOptions.series[0],
-					data: clobData.up?.map(([timestamp, value]) => [timestamp, 1 - value])
+					data: clobData.up
 				},
 				{
 					...lineChartOptions.series[1],
-					data: clobData.down
+					data: clobData.down?.map(([timestamp, value]) => [timestamp, 1 - value])
 				},
 				{
 					...lineChartOptions.series[2],
@@ -535,9 +547,9 @@ export default function ChartPage() {
 						<Button onClick={() => PolymarketChart.dataTest(asset?.value)}>
 							data test
 						</Button>
-						<Button onClick={() => PolymarketChart.convertToCsv()}>
-							convert to csv
-						</Button>
+						{/* <Button onClick={() => PolymarketChart.fixingClobData()}>
+							fixing data
+						</Button> */}
 					</div>
 					<ReactEcharts
 						option={chartOptions}

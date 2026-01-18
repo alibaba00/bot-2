@@ -9,73 +9,98 @@ const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 const tickerDataCache = {} // ticker data cache
 
 
+// ---------------------------------------------------------------------------- fixingClobData
+export const fixingClobData = async () => {
+	if (isRunning){
+		console.log('fixingClobData canceled!')
+		isRunning = false
+		return
+	}
+	isRunning = true
 
-// ---------------------------------------------------------------------------- convertToCsv
-export const convertToCsv = async () => {
-	const importPath = 'A:/DATA/polymarket/chainlink.old/'
-	const exportPath = 'A:/DATA/polymarket/chainlink/'
+	const importPath = 'A:/DATA/polymarket/clob/'
 	const dirList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
-	console.log('dirList:', dirList)
+	console.log('fixingClobData dirList:', dirList.length, '...')
 
-	const dataList: any = {}
+	let count = 0
+	let updated = 0
+
 	for (const entry of dirList) {
+		if (!isRunning) break
 		if (entry.isDirectory()) continue
-		const filePath = entry.path + '/' + entry.name
-		if (entry.name.endsWith('.csv')) {
-			const symbol = entry.path.split('\\').pop()
-			const fileContent = await fsPromises.readFile(filePath, 'utf8')
-			// console.log('fileContent:', symbol, fileContent?.length)
 
+		if (entry.name.endsWith('.csv')) {
+			count++
+			if (count % 100 === 0) console.log('fixingClobData:', count, '...')
+// if (count > 3) break
+
+			const filePath = entry.path.replaceAll('\\', '/') + '/' + entry.name
+			// const symbol = entry.path.split('\\').pop()
+			const fileContent = await fsPromises.readFile(filePath, 'utf8')
 			if (fileContent?.length) {
-				if (!dataList[symbol]) dataList[symbol] = []
+console.log('update:', filePath)
 
 				const lines = fileContent.split('\n')
-				dataList[symbol].push(...lines)
-			}
+				updated++
+				const exportData = lines.map((line) => {
+					if (line.includes('UP')){
+						return line.replace('UP', 'DOWN')
+					}else if (line.includes('DOWN')){
+						return line.replace('DOWN', 'UP')
+					}else return line
+				}).join('\n')
+
+				// await fsPromises.writeFile(filePath, exportData)
+			}	
 		}
 	}
 
-	for (const symbol of Object.keys(dataList)) {
-		const data = dataList[symbol]
-			.map((line: any) => {
-				const values= line.split(',')
-				values[0] = parseInt(values[0])// + 3600000	//add 1 hour to fix the timestamp
-				return values
-			})
-			.filter((item: any) => item[0] > 0 && item[1] > 0)
-			.sort((a: any, b: any) => a[0] - b[0])
-
-		let dayString: string
-		let lastDay: number = Math.floor(data[0][0] / 86400000) * 86400000
-		let nextDay = lastDay + 86400000	//next day
-		const lastTime: number = data[data.length-1][0]
-
-		while(lastDay <= lastTime){
-			dayString = new Date(lastDay).toISOString().slice(0, 10)
-			const tickerData = data.filter((item: any) => item[0] >= lastDay && item[0] < nextDay)
-			console.log('tickerData:', symbol, dayString, tickerData.length, tickerData[0], tickerData[tickerData.length-1], lastDay, nextDay)
-			lastDay = nextDay
-			nextDay += 86400000
-
-			let tickerString: string = ''
-			for (const item of tickerData) tickerString += item[0] + ',' + item[1] + '\n'
-
-			const exportDirPath: string = exportPath + symbol
-			const exportFilePath: string = exportDirPath + '/' + dayString + '.csv'
-			if (!fs.existsSync(exportDirPath)) fs.mkdirSync(exportDirPath, {recursive: true})
-			console.log('exportFilePath:', exportFilePath, tickerString.length)
-			console.log('')
-			await fsPromises.writeFile(exportFilePath, tickerString)
-		}
-	}
-
-	console.log('complete!')
+	console.log('complete!', count, 'files updated:', updated)
+	isRunning = false
 }
-
 
 
 // ---------------------------------------------------------------------------- dataTest
 export const dataTest = async (symbol: string) => {
+	console.log('dataTest running', symbol, '...')
+
+	const dataFiles = await getAllMarkets_clob(symbol)
+
+	const stats = {
+		valid: 0,
+		inValid: 0,
+		total: 0,
+	}
+
+	let count = 0
+	for (const file of dataFiles) {
+		count++
+// if (count > 10) continue
+		// console.log('file:', file.fileName)
+		const market = await getMarket(file.slug)
+		if (market && !market.chartData?._incomplete){
+			const up = market.chartData.clob.up
+
+			let id = up.findIndex((item: any) => item[1] >= 0.9)
+			if (id >= 0){
+				stats.total++
+				let next = up.findIndex((item: any, index: number) => item[1] <= 0.7 && index > id)
+				if (next >= 0){
+					stats.valid++
+				}else{
+					stats.inValid++
+				}
+			}
+		}
+		// console.log('market:', market)
+	}
+
+	console.log('dataTest complete!', stats)
+}
+
+
+// ---------------------------------------------------------------------------- dataTest
+export const dataTest_1 = async (symbol: string) => {
 	///
 
 	const stats = {
@@ -231,9 +256,7 @@ const parseNumber = (num: number) => {
 let dirList: any[] = [];
 
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
-	const rootPath = PolymarketApi.clobPath;
-
-	dirList = dirList.length? dirList : await fsPromises.readdir(rootPath, { withFileTypes: true, recursive: true });
+	dirList = dirList.length? dirList : await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
 	const dateString = (date || new Date()).toISOString().substring(0, 10);
 
 	const fileList: any[] = dirList.filter((entry: any) => entry.isFile()
@@ -355,9 +378,9 @@ export const updateLogfiles = async () => {
 	console.log('')
 
 	console.log('update markets logfiles...')
-	dirList = await fsPromises.readdir(PolymarketApi.marketsPath, { withFileTypes: true, recursive: true });
+	dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
 
-	console.log('---Complete!')
+	console.log('---Complete! new total files:', dirList.length)
 }
 
 
@@ -488,17 +511,27 @@ export const updateAllMarketData_clob = async () => {
 		if (market && !market.closed) stat.openMarkets++
 	}
 
-	isRunning = false
 	console.log('complete!', stat)
+
+	if (isRunning && stat.openMarkets > 0){
+		console.log('continue updating open markets in 3 seconds ...')
+		await new Promise(resolve => setTimeout(resolve, 3000))
+		if (isRunning){
+			isRunning = false
+			return updateAllMarketData_clob()	//continue updating open markets
+		}
+	}
+
+	isRunning = false
 }
 
 
 // ---------------------------------------------------------------------------- updateMarketData
-export const getMarket = async (slug: string, filePath: string, useCache: boolean = true): Promise<Market | null> => {
+export const getMarket = async (slug: string, filePath: string | null = null, useCache: boolean = true): Promise<Market | null> => {
 	// get market from cache ...
 	let market = useCache ? await PolymarketApi.cache.getItem(slug) as Market | null : null
 
-	if (!market) {		//market not cached! load and update market from file
+	if (!market && filePath) {		//market not cached! load and update market from file
 		if (fs.existsSync(filePath)) {
 			const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
 			market = JSON.parse(jsonFileContent) as Market
@@ -572,8 +605,6 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 			updated = true
 		}
 
-		// if (!useCache || !market.chartData?.ticker?.chainlink?.length
-		// 	|| !market.chartData?.ticker?.binance?.length
 		if (!useCache || !market.chartData?.ticker
 			|| (market.chartData?._incomplete && lastUpdate_logfiles > market.endTimestamp)) {		
 			market.chartData = await getChartData_csv(market, csvPath)
