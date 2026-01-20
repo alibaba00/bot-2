@@ -87,10 +87,23 @@ const scatterChartOptions = {
 		min: 0,
 		max: 15,
 		name: 'Minuten',
+		splitLine: {
+			show: true,
+			lineStyle: {
+				color: '#fff3',
+				width: 0.5
+			}
+		}
 	},
-
 	yAxis: {
 		type: 'value',
+		splitLine: {
+			show: true,
+			lineStyle: {
+				color: '#fff3',
+				width: 0.5
+			}
+		}
 	},
 	series: [
 		{
@@ -639,7 +652,7 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 			{markets?.map((market) => (
 				<div key={market.slug} className={`flex flex-row items-center justify-between border-b border-gray-700 cursor-pointer ${selectedMarket?.slug === market.slug ? 'bg-accent' : ''}`}
 				 onClick={() => {
-					console.log('selectedMarket:', market)
+					console.log('selectedMarket:', market, market.chartData?.ticker?.chainlink?._incomplete)
 					onSelectMarket(market)
 				}}>
 					<MarketItem key={market.slug} market={market} />

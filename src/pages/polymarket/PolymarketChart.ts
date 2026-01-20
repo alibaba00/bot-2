@@ -67,35 +67,74 @@ export const dataTest = async (symbol: string) => {
 	const dataFiles = await getAllMarkets_clob(symbol)
 
 	const stats = {
-		valid: 0,
-		inValid: 0,
 		total: 0,
+		inValid: 0,
+		valid: 0,
+		up: 0,
+		dn: 0,
+		pnlUp: 0,
+		pnlDn: 0,
 	}
 
 	let count = 0
 	for (const file of dataFiles) {
 		count++
-// if (count > 10) continue
-		// console.log('file:', file.fileName)
-		const market = await getMarket(file.slug)
-		if (market && !market.chartData?._incomplete){
-			const up = market.chartData.clob.up
+// if (count > 100) continue
 
-			let id = up.findIndex((item: any) => item[1] >= 0.9)
-			if (id >= 0){
-				stats.total++
-				let next = up.findIndex((item: any, index: number) => item[1] <= 0.7 && index > id)
-				if (next >= 0){
-					stats.valid++
-				}else{
-					stats.inValid++
-				}
-			}
+		const market = await getMarket(file.slug)
+		if (!market || market.chartData?._incomplete) continue
+		if (!market.chartData?.ticker?.binance?.length) continue
+		// console.log('market:', market.slug)
+
+		const binance = market.chartData.ticker.binance
+		const ups = market.chartData.clob.up
+		const downs = market.chartData.clob.down
+
+		if (binance._incomplete) continue
+
+		const first = binance[0]
+		const last = binance[binance.length-1]
+		if (first[0] - market.startTimestamp > 3 * 60 * 1000) continue
+		if (market.endTimestamp - last[0] > 3 * 60 * 1000) continue
+
+		stats.total++
+
+		const startPrice = binance[0][1]
+		const limitPrice = startPrice * 1.0002
+
+		let item = binance.find((e: any) => e[1] >= limitPrice)
+		if (!item){
+			stats.inValid++
+			continue
 		}
-		// console.log('market:', market)
+
+		let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp
+		// if (up) up[1] = 0.58
+		// if (up) up = ups.find((e: any) => e[0] > up[0] && e[1] <= up[1] / 0.99)		//limit price
+
+		let down = downs.find((e: any) => e[0] >= item[0])
+		if (!up && !down){
+			stats.inValid++
+			continue
+		}
+
+		stats.valid++
+		if (market.outcome === 'up'){
+			stats.up++
+			if (up) stats.pnlUp += (1 / up[1]) - 1
+			if (down) stats.pnlDn -= 1
+			// stats.pnlUp += (1 / up[1]) - 1
+			// stats.pnlDn -= 1
+		}else{
+			stats.dn++
+			if (up) stats.pnlUp -= 1
+			if (down) stats.pnlDn += (1 / down[1]) - 1
+			// stats.pnlUp -= 1
+			// stats.pnlDn += (1 / down[1]) - 1
+		}
 	}
 
-	console.log('dataTest complete!', stats)
+	console.table(stats)
 }
 
 
@@ -188,7 +227,7 @@ export const dataTest_1 = async (symbol: string) => {
 	console.table(stats)
 }
 
-
+/*
 // ---------------------------------------------------------------------------- getGrid
 const getGridData = (market: Market): any => {
 	const tickerData = market.chartData.ticker
@@ -240,6 +279,7 @@ const getGridData = (market: Market): any => {
 
 	return grid
 }
+*/
 
 
 // ------------------------------------------------------------------------ parseNumber
@@ -513,14 +553,14 @@ export const updateAllMarketData_clob = async () => {
 
 	console.log('complete!', stat)
 
-	if (isRunning && stat.openMarkets > 0){
-		console.log('continue updating open markets in 3 seconds ...')
-		await new Promise(resolve => setTimeout(resolve, 3000))
-		if (isRunning){
-			isRunning = false
-			return updateAllMarketData_clob()	//continue updating open markets
-		}
-	}
+	// if (isRunning && stat.openMarkets > 0){
+	// 	console.log('continue updating open markets in 3 seconds ...')
+	// 	await new Promise(resolve => setTimeout(resolve, 3000))
+	// 	if (isRunning){
+	// 		isRunning = false
+	// 		return updateAllMarketData_clob()	//continue updating open markets
+	// 	}
+	// }
 
 	isRunning = false
 }
@@ -605,7 +645,9 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 			updated = true
 		}
 
-		if (!useCache || !market.chartData?.ticker
+		if (!useCache
+			|| (!market.chartData?.ticker?.chainlink?.length && !market.chartData?.ticker?.chainlink?._incomplete)
+			|| (!market.chartData?.ticker?.binance?.length && !market.chartData?.ticker?.binance?._incomplete)
 			|| (market.chartData?._incomplete && lastUpdate_logfiles > market.endTimestamp)) {		
 			market.chartData = await getChartData_csv(market, csvPath)
 			if (lastUpdate_logfiles < market.endTimestamp) market.chartData._incomplete = true
@@ -658,16 +700,20 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 	}
 
 	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
-	let chainlink = await getChartTickerData(market.symbol, dateString, 'chainlink')
+	let chainlink: any = await getChartTickerData(market.symbol, dateString, 'chainlink')
 	chainlink = chainlink
 		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
 		.map((item) => [item.timestamp, item.price] as any)
 
-	let binance = await getChartTickerData(market.symbol, dateString, 'binance')
+	if (!chainlink.length) chainlink._incomplete = true
+
+	let binance: any = await getChartTickerData(market.symbol, dateString, 'binance')
 	binance = binance
 		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
 		.map((item) => [item.timestamp, item.price] as any)
-	
+
+	if (!binance.length) binance._incomplete = true
+
 	return {
 		clob: {up, down},
 		ticker: {chainlink, binance}
@@ -790,32 +836,6 @@ export const getMarketChartData = async (filePath: string | null = null,
 
 // ---------------------------------------------------------------------------- getChartData
 // const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
-export const getChartTickerData_new = async (symbol: string, dateString: string, source: string = 'tickers'): Promise<any[]> => {
-	const dataString = symbol + '-' + dateString
-	if (tickerDataCache[source + '-' + dataString]) return tickerDataCache[source + '-' + dataString]
-
-	const rootPath = PolymarketApi.rootPath
-	const dirPath = `${rootPath}${source}/${symbol}`
-	const filePath = `${dirPath}/${dataString}.log`
-	if (!fs.existsSync(filePath)) return []
-
-	const fileContent = await fsPromises.readFile(filePath, 'utf8')
-	const lines = fileContent.split('\n')
-	console.log('getChartTickerData:', symbol, dateString, filePath, lines.length)
-
-	const data = lines.map((line) => {
-		const [timestamp, price] = line.split(';')
-		return { timestamp: parseInt(timestamp), price: parseFloat(price) }
-	}).filter((item) => item.timestamp > 0 && item.price > 0)
-
-	tickerDataCache[source + '-' + dataString] = data
-
-	return data
-}
-
-
-// ---------------------------------------------------------------------------- getChartData
-// const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
 // source: chainlink, binance, polling
 // symbol: btc, xrp, etc.
 // dateString: 2025-12-11
@@ -829,13 +849,14 @@ export const getChartTickerData = async (symbol: string, dateString: string, sou
 	const rootPath = PolymarketApi.rootPath
 	const dirPath = `${rootPath}${source}/${symbol + (source === 'chainlink' ? 'usd' : 'usdt')}`
 	const filePath = `${dirPath}/${dateString}.csv`
-console.log('getChartTickerData:', symbol, dateString, filePath, fs.existsSync(filePath), source)
+
+// console.log('getChartTickerData:', symbol, dateString, filePath, fs.existsSync(filePath), source)
 	if (!fs.existsSync(filePath)) return []
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
 	const lines = fileContent.split('\n')
 
-	const data = lines.map((line) => {
+	const data: any = lines.map((line) => {
 		const [timestamp, price] = line.split(',')
 		return { timestamp: parseInt(timestamp), price: parseFloat(price) }
 	}).filter((item) => item.timestamp > 0 && item.price > 0)
@@ -1262,11 +1283,14 @@ const createMapData = () => {
 const initData = async () => {
 	const data = {}
 	const keys = await PolymarketApi.cache.keys()	//e.g. [btc-updown-15m-1765406700, ...]
+	console.log('---create chartData with grid:', keys.length, '...')
 
+	let count = 0
 	for (const key of keys) {
 		const market = await PolymarketApi.cache.getItem(key)
 
 		if (market?.closed && market.chartData?.grid) {
+			count++
 			const symbol = market.symbol
 			data[symbol] = data[symbol] || []
 			data[symbol].push({
@@ -1281,6 +1305,7 @@ const initData = async () => {
 		}
 	}
 	await PolymarketApi.store.setItem('chartData', data)
+	console.log('---create chartData with grid:', count, 'complete!')
 	return data
 }
 
