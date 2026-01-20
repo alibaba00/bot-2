@@ -557,7 +557,7 @@ export default function ChartPage() {
 							<ToggleGroupItem value='down' variant='outline'>Down</ToggleGroupItem>
 						</ToggleGroup>
 
-						<Button onClick={() => PolymarketChart.dataTest(asset?.value)}>
+						<Button onClick={() => PolymarketChart.dataTest_2(asset?.value)}>
 							data test
 						</Button>
 						{/* <Button onClick={() => PolymarketChart.fixingClobData()}>

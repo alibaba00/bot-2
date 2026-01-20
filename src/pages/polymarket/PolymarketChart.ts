@@ -61,6 +61,84 @@ console.log('update:', filePath)
 
 
 // ---------------------------------------------------------------------------- dataTest
+export const dataTest_2 = async (symbol: string) => {
+	console.log('dataTest_2 running', symbol, '...')
+
+	const markets = await PolymarketApi.getAllMarkets((symbol !== 'all'? symbol + '-updown-15m' : 'updown-15m'))
+
+	const stats = {
+		total: 0,
+		inValid: 0,
+		valid: 0,
+		up: 0,
+		dn: 0,
+		pnlUp: 0,
+		valueUp: 0,
+		pnlDn: 0,
+		valueDn: 0,
+	}
+
+
+	for (const market of markets) {
+		if (!market.closed) continue
+		if (market.chartData?._incomplete) continue
+		if (!market.chartData?.ticker?.binance?.length) continue
+
+		const binance = market.chartData.ticker.binance
+		if (binance._incomplete) continue
+
+		const first = binance[0]
+		const last = binance[binance.length-1]
+		if (first[0] - market.startTimestamp > 3 * 60 * 1000) continue
+		if (market.endTimestamp - last[0] > 3 * 60 * 1000) continue
+
+		stats.total++
+
+		const ups = market.chartData.clob.up
+		const downs = market.chartData.clob.down
+		const startPrice = binance[0][1]
+		const limitPrice = startPrice * 1.00025
+
+		let item = binance.find((e: any) => e[1] >= limitPrice)
+		if (!item){
+			stats.inValid++
+			continue
+		}
+
+		let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp
+		// if (up) up[1] = 0.58
+		// if (up) up = ups.find((e: any) => e[0] > up[0] && e[1] <= up[1] / 0.99)		//limit price
+
+		let down = downs.find((e: any) => e[0] >= item[0])
+		if (!up && !down){
+			stats.inValid++
+			continue
+		}
+
+		stats.valid++
+		if (market.outcome === 'up'){
+			stats.up++
+			if (up) stats.pnlUp += (1 / up[1]) - 1
+			if (down) stats.pnlDn -= 1
+			// stats.pnlUp += (1 / up[1]) - 1
+			// stats.pnlDn -= 1
+		}else{
+			stats.dn++
+			if (up) stats.pnlUp -= 1
+			if (down) stats.pnlDn += (1 / down[1]) - 1
+			// stats.pnlUp -= 1
+			// stats.pnlDn += (1 / down[1]) - 1
+		}
+
+	}
+
+	stats.valueUp = stats.pnlUp / (stats.up + stats.dn)
+	stats.valueDn = stats.pnlDn / (stats.up + stats.dn)
+	console.table(stats)
+}
+
+
+// ---------------------------------------------------------------------------- dataTest
 export const dataTest = async (symbol: string) => {
 	console.log('dataTest running', symbol, '...')
 
@@ -686,12 +764,12 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 	
 		data.forEach((item) => {
 			if (item.type === 'UP') {
-				if (last.up !== item.price) {
+				if (item.price !== last.up) {		//prevent duplicate entries
 					last.up = item.price
 					up.push([item.timestamp, item.price] as any)
 				}
 			} else {
-				if (last.down !== item.price) {
+				if (item.price !== last.down) {		//prevent duplicate entries
 					last.down = item.price
 					down.push([item.timestamp, item.price] as any)
 				}
@@ -701,16 +779,29 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 
 	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
 	let chainlink: any = await getChartTickerData(market.symbol, dateString, 'chainlink')
+	// Prevent duplicates from getting into the array based on timestamp and price
 	chainlink = chainlink
-		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
-		.map((item) => [item.timestamp, item.price] as any)
+		.filter((item: any) => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
+		.reduce((acc: any[], item: any) => {		//prevent duplicates
+			const last = acc.length > 0 ? acc[acc.length - 1] : null
+			if (!last || last[0] !== item.timestamp || last[1] !== item.price) {
+				acc.push([item.timestamp, item.price])
+			}
+			return acc
+		}, [])
 
 	if (!chainlink.length) chainlink._incomplete = true
 
 	let binance: any = await getChartTickerData(market.symbol, dateString, 'binance')
 	binance = binance
-		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
-		.map((item) => [item.timestamp, item.price] as any)
+		.filter((item: any) => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
+		.reduce((acc: any[], item: any) => {		//prevent duplicates
+			const last = acc.length > 0 ? acc[acc.length - 1] : null
+			if (!last || last[0] !== item.timestamp || last[1] !== item.price) {
+				acc.push([item.timestamp, item.price])
+			}
+			return acc
+		}, [])
 
 	if (!binance.length) binance._incomplete = true
 
@@ -917,6 +1008,12 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 
 // ---------------------------------------------------------------------------- scatterData
 export const scatterData = async () => {
+	
+}
+
+
+// ---------------------------------------------------------------------------- scatterData
+export const scatterData_old = async () => {
 	const data_ = await PolymarketApi.store.getItem('chartData') || await initData()
 	// const data_ = await initData()
 

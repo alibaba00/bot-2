@@ -125,6 +125,23 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- getAllMarkets
+	async getAllMarkets(symbol: string): Promise<Market[]> {
+		const keys = await this.cache.keys()
+		console.log('getAllMarkets:', symbol, 'from', keys.length, '...')
+		const markets: Market[] = []
+		for (const key of keys) {
+			if (key.includes(symbol)) {
+				const market = await this.cache.getItem(key)
+				if (market) markets.push(market)
+			}
+		}
+		console.log('getAllMarkets complete!', symbol, markets.length)
+		return markets
+	}
+
+
+
 	// ---------------------------------------------------------------------------- getMarketFromDate
 	// symbol: e.g. btc
 	// type: e.g. updown-15m
