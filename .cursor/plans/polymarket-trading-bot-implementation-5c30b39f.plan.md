@@ -1,4 +1,55 @@
-<!-- 5c30b39f-6fb5-40d3-9112-e201617d7552 0692b22e-6ec7-4cf5-996d-b54c988b2c99 -->
+---
+name: Polymarket Trading Bot Implementation Plan
+overview: ""
+todos:
+  - id: 86b7e184-2267-491c-9479-d08ef456f8b0
+    content: Set up environment variable loading and validation (.env.example, config.ts, vite.config updates)
+    status: pending
+  - id: 9fbcfd7e-c8c5-4096-ab21-d00798b8c90e
+    content: Install Polymarket CLOB client and required dependencies
+    status: pending
+  - id: 0db7504a-165d-4876-8fb7-d0bf4bb0f7fc
+    content: Update Dexie database schema with Polymarket tables (markets, orders, transactions)
+    status: pending
+  - id: c75db133-a918-46a3-bf81-280ea9cbbdd0
+    content: Create Polymarket client service with authentication and connection management
+    status: pending
+  - id: 70ee614e-04ac-4e42-9a9a-dfadfc1e3114
+    content: Implement market data fetching service with caching
+    status: pending
+  - id: 76b8bcdc-ed2e-4596-aefe-0f13d65fafaa
+    content: Implement order placement and management service
+    status: pending
+  - id: a0a005c1-3cc1-4bd1-b6ba-0ed5be35ac95
+    content: Implement wallet balance and transaction history service
+    status: pending
+  - id: 9ccf8a34-e192-4fae-a110-a932af0e2bd3
+    content: Create Zustand store for Polymarket state management
+    status: pending
+  - id: b5d9a866-d889-4182-a8bc-4d2a513baf2b
+    content: Convert DashboardPage to TypeScript and implement main dashboard UI
+    status: pending
+  - id: 10c6160c-31b8-47eb-b422-5882365fa0dc
+    content: Create market list and market card components
+    status: pending
+  - id: c41f602a-d49c-496a-8983-62c864f3e7cd
+    content: Create order form and order list components
+    status: pending
+  - id: bf4d7b26-e951-4eab-8bc4-91ebaaf89039
+    content: Create wallet status component
+    status: pending
+  - id: d23f6c77-6493-47e8-a955-52ccbc41be0a
+    content: Update navigation with Polymarket sub-pages
+    status: pending
+  - id: eee19239-f0d7-46c0-b80c-73e386ce045c
+    content: Implement comprehensive error handling and user feedback
+    status: pending
+  - id: ac1155de-ed9e-4fb1-957c-346ad57a099a
+    content: Test runtime errors, GUI functionality, and Electron-specific features
+    status: pending
+isProject: false
+---
+
 # Polymarket Trading Bot Implementation Plan
 
 ## Overview
@@ -211,21 +262,3 @@ src/
 - [ ] Transaction history loads
 - [ ] Error states display user-friendly messages
 - [ ] UI is responsive and works in Electron window
-
-### To-dos
-
-- [ ] Set up environment variable loading and validation (.env.example, config.ts, vite.config updates)
-- [ ] Install Polymarket CLOB client and required dependencies
-- [ ] Update Dexie database schema with Polymarket tables (markets, orders, transactions)
-- [ ] Create Polymarket client service with authentication and connection management
-- [ ] Implement market data fetching service with caching
-- [ ] Implement order placement and management service
-- [ ] Implement wallet balance and transaction history service
-- [ ] Create Zustand store for Polymarket state management
-- [ ] Convert DashboardPage to TypeScript and implement main dashboard UI
-- [ ] Create market list and market card components
-- [ ] Create order form and order list components
-- [ ] Create wallet status component
-- [ ] Update navigation with Polymarket sub-pages
-- [ ] Implement comprehensive error handling and user feedback
-- [ ] Test runtime errors, GUI functionality, and Electron-specific features
