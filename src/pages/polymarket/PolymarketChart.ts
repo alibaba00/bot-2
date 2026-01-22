@@ -78,9 +78,12 @@ export const dataTest_2 = async (symbol: string) => {
 		valueDn: 0,
 	}
 
+	const limitTimestamp = new Date('2026-01-01').getTime()	//2026-01-01
+
 
 	for (const market of markets) {
 		if (!market.closed) continue
+		if (market.startTimestamp < limitTimestamp) continue
 		if (market.chartData?._incomplete) continue
 		if (!market.chartData?.ticker?.binance?.length) continue
 
@@ -96,6 +99,11 @@ export const dataTest_2 = async (symbol: string) => {
 
 		const ups = market.chartData.clob.up
 		const downs = market.chartData.clob.down
+		if (!ups.length || !downs.length) continue
+
+		if (ups[0][0] - market.startTimestamp > 3 * 60 * 1000) continue
+		if (market.endTimestamp - downs[downs.length-1][0] > 3 * 60 * 1000) continue
+
 		const startPrice = binance[0][1]
 		const limitPrice = startPrice * 1.00025
 
@@ -499,6 +507,23 @@ export const updateLogfiles = async () => {
 	dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
 
 	console.log('---Complete! new total files:', dirList.length)
+}
+
+
+// ---------------------------------------------------------------------------- updateOldLogs
+export const updateOldLogs = async () => {
+	console.log('---Updating old logs...')
+	// await PolymarketApi.store.setItem('lastUpdate_oldLogs', Date.now())
+
+	// const importPath = 'A:/DATA/polymarket/clob/'
+
+	// const importPath = 'A:/DATA/polymarket/clob/'
+	// const dirList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
+	// console.log('updateOldLogs dirList:', dirList.length, '...')
+
+	// for (const entry of dirList) {
+	// 	if (entry.isDirectory()) continue
+	// }
 }
 
 

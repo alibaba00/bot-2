@@ -1,23 +1,24 @@
 // import { Button } from "@/components/ui/button";
 // import { fetchMarket, fetchMarketBySlugFromGamma, fetchMarketPricesFromClob, fetchMarkets } from "@/lib/polymarket/markets";
 // import { getOpenOrders } from "@/lib/polymarket/orders";
-// import { usePolymarketConnection } from "@/lib/polymarket/store";
+import { usePolymarketConnection } from "@/lib/polymarket/store";
 // import { getTransactionHistory, getWalletBalance } from "@/lib/polymarket/wallet";
 // import { Side } from "@polymarket/clob-client";
 import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
 
 
 export default function TradingPage() {
-	// const { status, connect } = usePolymarketConnection()
+	const { status, connect } = usePolymarketConnection()
 
 	useEffect(() => {
 		// handleConnect()
 	}, [])
 
-	// const handleConnect = async () => {
-	// 	console.log('handleConnect ...')
-	// 	await connect()		
-	// }
+	const handleConnect = async () => {	
+		console.log('handleConnect ...')
+		await connect()		
+	}
 
 	// const handleGetTrades = async () => {
 	// 	console.log('handleGetTrades ...')
@@ -75,15 +76,16 @@ export default function TradingPage() {
 	// 	// await setOrder(conditionId, price, size, side);
 	// }
 
-	// console.log('status:', status)
+	console.log('status:', status)
 
 	return (
-		<div className="flex flex-row gap-2 flex-wrap">
+		<div className="flex flex-col gap-2 p-4">
 			<h1>Trading Page</h1>
+			<div className="flex gap-2 flex-wrap">
+				<Button variant='default' onClick={handleConnect}>Connect to Polymarket</Button>
+
+			</div>
 				{/* <Button onClick={() => {
-					handleConnect()
-				}}>Connect to Polymarket</Button>
-				<Button onClick={() => {
 					handleFetchMarketBySlugFromGamma()
 				}}>get market by slug from gamma</Button>
 				<Button onClick={() => {

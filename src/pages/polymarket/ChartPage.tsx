@@ -541,6 +541,10 @@ export default function ChartPage() {
 							Update logfiles
 						</Button>
 
+						<Button onClick={() => PolymarketChart.updateOldLogs()}>
+							Update old logs
+						</Button>
+
 						<Button onClick={() => PolymarketChart.updateAllMarketData_clob()}>
 							Update clob data
 						</Button>
