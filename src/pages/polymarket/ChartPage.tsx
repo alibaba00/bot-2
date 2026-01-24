@@ -290,6 +290,20 @@ const lineChartOptions = {
 			tooltip: {
 				show: false,
 			},
+		},
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#ff06',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			yAxisIndex: 1,
+			step: 'end',
+			tooltip: {
+				show: false,
+			},
 		}
 	],
 	grid: {
@@ -339,17 +353,26 @@ export default function ChartPage() {
 		const chainlinkData = chartData.ticker?.chainlink?.map((item: any) => {
 			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
 		})
-		// const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-		// const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		// const scale = Math.max(Math.abs(minValue), Math.abs(maxValue))
+		const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+		const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+		const scale = Math.max(Math.abs(minValue), Math.abs(maxValue))
 
-		const firstPrice = chartData.ticker?.binance?.[0]?.[1]
-		const binanceData = chartData.ticker?.binance?.map((item: any) => {
+		// const firstPrice = chartData.ticker?.binance?.[0]?.[1]
+		// const binanceData = chartData.ticker?.binance?.map((item: any) => {
+		// 	return [item[0], ((item[1] / firstPrice) - 1 ) * 1000] as any
+		// })
+		// const minValue = binanceData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+		// const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+		// const scale = parseNumber(parseFloat((Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1))) + 0.2)
+
+		const coinbaseData = chartData.ticker?.coinbase?.map((item: any) => {
+			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
+		})
+
+		const firstPrice = chartData.ticker?.polling?.[0]?.[1]
+		const pollingData = chartData.ticker?.polling?.map((item: any) => {
 			return [item[0], ((item[1] / firstPrice) - 1 ) * 1000] as any
 		})
-		const minValue = binanceData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-		const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		const scale = parseNumber(parseFloat((Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1))) + 0.2)
 
 		setChartOptions({
 			...lineChartOptions,
@@ -381,7 +404,11 @@ export default function ChartPage() {
 				},
 				{
 					...lineChartOptions.series[3],
-					data: binanceData
+					data: pollingData
+				},
+				{
+					...lineChartOptions.series[4],
+					data: coinbaseData
 				}
 			],
 		})
@@ -541,9 +568,9 @@ export default function ChartPage() {
 							Update logfiles
 						</Button>
 
-						<Button onClick={() => PolymarketChart.updateOldLogs()}>
+						{/* <Button onClick={() => PolymarketChart.updateOldLogs()}>
 							Update old logs
-						</Button>
+						</Button> */}
 
 						<Button onClick={() => PolymarketChart.updateAllMarketData_clob()}>
 							Update clob data
@@ -638,7 +665,6 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 
 		PolymarketChart.getAllMarkets_clob(symbol, selectedDate)
 		.then((files) => {
-			// console.log('markets:', markets)
 			if (!files) return
 			if (marketType !== 'all'){
 				files = files.filter((market) => market.slug.includes(marketType))

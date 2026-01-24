@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRTDSWebSocket } from '@/hooks/use-rtds-websocket'
 import { useCryptoPricePoller } from '@/hooks/use-crypto-price-poller'
 import { useBinanceWebSocket } from '@/hooks/use-binance-websocket'
@@ -9,19 +9,51 @@ import type { CryptoPriceUpdate as PollerPriceUpdate } from '@/lib/polymarket/cr
 import type { BinanceTickerUpdate } from '@/lib/binance/binance-websocket'
 
 type CryptoSymbol = 'BTC' | 'ETH' | 'SOL' | 'XRP'
+type LogSource = 'binance' | 'chainlink' | 'polling' | 'binanceDirect' | 'coinbase' | 'kraken'
+type WsStatus = 'disconnected' | 'connecting' | 'connected'
 
 interface CryptoConfig {
 	symbol: CryptoSymbol
 	binanceSymbol: string // e.g., "btcusdt"
 	chainlinkSymbol: string // e.g., "btc/usd"
+	coinbaseSymbol: string // e.g., "BTC-USD"
+	krakenSymbol: string // e.g., "XBT/USD"
 	displayName: string
 }
 
 const CRYPTO_CONFIGS: CryptoConfig[] = [
-	{ symbol: 'BTC', binanceSymbol: 'btcusdt', chainlinkSymbol: 'btc/usd', displayName: 'Bitcoin' },
-	{ symbol: 'ETH', binanceSymbol: 'ethusdt', chainlinkSymbol: 'eth/usd', displayName: 'Ethereum' },
-	{ symbol: 'SOL', binanceSymbol: 'solusdt', chainlinkSymbol: 'sol/usd', displayName: 'Solana' },
-	{ symbol: 'XRP', binanceSymbol: 'xrpusdt', chainlinkSymbol: 'xrp/usd', displayName: 'XRP' }
+	{
+		symbol: 'BTC',
+		binanceSymbol: 'btcusdt',
+		chainlinkSymbol: 'btc/usd',
+		coinbaseSymbol: 'BTC-USD',
+		krakenSymbol: 'XBT/USD',
+		displayName: 'Bitcoin'
+	},
+	{
+		symbol: 'ETH',
+		binanceSymbol: 'ethusdt',
+		chainlinkSymbol: 'eth/usd',
+		coinbaseSymbol: 'ETH-USD',
+		krakenSymbol: 'ETH/USD',
+		displayName: 'Ethereum'
+	},
+	{
+		symbol: 'SOL',
+		binanceSymbol: 'solusdt',
+		chainlinkSymbol: 'sol/usd',
+		coinbaseSymbol: 'SOL-USD',
+		krakenSymbol: 'SOL/USD',
+		displayName: 'Solana'
+	},
+	{
+		symbol: 'XRP',
+		binanceSymbol: 'xrpusdt',
+		chainlinkSymbol: 'xrp/usd',
+		coinbaseSymbol: 'XRP-USD',
+		krakenSymbol: 'XRP/USD',
+		displayName: 'XRP'
+	}
 ]
 
 interface PriceData {
@@ -29,7 +61,13 @@ interface PriceData {
 	chainlink: { value: number; timestamp: number } | null
 	polling: { value: number; timestamp: number } | null
 	binanceDirect: { value: number; timestamp: number } | null
+	coinbase: { value: number; timestamp: number } | null
+	kraken: { value: number; timestamp: number } | null
 }
+
+const isElectron = window?.navigator.userAgent.includes('Electron')
+const fs = isElectron ? (window as any)?.require?.('fs') : null
+const path = isElectron ? (window as any)?.require?.('path') : null
 
 export default function TickerPage4() {
 	// Track which sources are active
@@ -37,13 +75,84 @@ export default function TickerPage4() {
 	const [chainlinkActive, setChainlinkActive] = useState(false)
 	const [pollingActive, setPollingActive] = useState(false)
 	const [binanceDirectActive, setBinanceDirectActive] = useState(false)
+	const [coinbaseActive, setCoinbaseActive] = useState(false)
+	const [krakenActive, setKrakenActive] = useState(false)
+	const [loggingActive, setLoggingActive] = useState(true)
+	const [coinbaseStatus, setCoinbaseStatus] = useState<WsStatus>('disconnected')
+	const [krakenStatus, setKrakenStatus] = useState<WsStatus>('disconnected')
+
+	const logStreamsRef = useRef<Map<string, import('fs').WriteStream>>(new Map())
+	const coinbaseWsRef = useRef<WebSocket | null>(null)
+	const krakenWsRef = useRef<WebSocket | null>(null)
+
+	const getUTCDateString = useCallback((timestamp: number) => {
+		return new Date(timestamp).toISOString().substring(0, 10)
+	}, [])
+
+	const getLogStream = useCallback(
+		(source: LogSource, symbol: CryptoSymbol, timestamp: number) => {
+			if (!fs || !path) return null
+			const dayString = getUTCDateString(timestamp)
+			const streamKey = `${source}-${symbol}-${dayString}`
+
+			if (!logStreamsRef.current.has(streamKey)) {
+				const dirPath = path.join('logs', 'tickers', source, symbol)
+				if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true })
+
+				const filePath = path.join(dirPath, `${dayString}.csv`)
+				const isNewFile = !fs.existsSync(filePath)
+				const stream = fs.createWriteStream(filePath, { flags: 'a' })
+				if (isNewFile) {
+					stream.write('timestamp,iso,source,symbol,price\n')
+				}
+				logStreamsRef.current.set(streamKey, stream)
+			}
+
+			return logStreamsRef.current.get(streamKey) ?? null
+		},
+		[getUTCDateString]
+	)
+
+	const logTicker = useCallback(
+		({
+			source,
+			symbol,
+			timestamp,
+			price
+		}: {
+			source: LogSource
+			symbol: CryptoSymbol
+			timestamp: number
+			price: number
+		}) => {
+			if (!loggingActive || !fs || !path) return
+			const stream = getLogStream(source, symbol, timestamp)
+			if (!stream) return
+			const iso = new Date(timestamp).toISOString()
+			stream.write(`${timestamp},${iso},${source},${symbol},${price}\n`)
+		},
+		[getLogStream, loggingActive]
+	)
+
+	useEffect(() => {
+		return () => {
+			logStreamsRef.current.forEach((stream) => {
+				try {
+					stream.end()
+				} catch (error) {
+					console.error('Error closing log stream:', error)
+				}
+			})
+			logStreamsRef.current.clear()
+		}
+	}, [])
 
 	// Store prices for each crypto from all sources
 	const [prices, setPrices] = useState<Record<CryptoSymbol, PriceData>>({
-		BTC: { binance: null, chainlink: null, polling: null, binanceDirect: null },
-		ETH: { binance: null, chainlink: null, polling: null, binanceDirect: null },
-		SOL: { binance: null, chainlink: null, polling: null, binanceDirect: null },
-		XRP: { binance: null, chainlink: null, polling: null, binanceDirect: null }
+		BTC: { binance: null, chainlink: null, polling: null, binanceDirect: null, coinbase: null, kraken: null },
+		ETH: { binance: null, chainlink: null, polling: null, binanceDirect: null, coinbase: null, kraken: null },
+		SOL: { binance: null, chainlink: null, polling: null, binanceDirect: null, coinbase: null, kraken: null },
+		XRP: { binance: null, chainlink: null, polling: null, binanceDirect: null, coinbase: null, kraken: null }
 	})
 
 	// Get all symbols for Binance (all 4 assets when active)
@@ -66,6 +175,16 @@ export default function TickerPage4() {
 		? CRYPTO_CONFIGS.map((config) => `${config.binanceSymbol}@ticker`)
 		: []
 
+	// Get all symbols for Coinbase (all 4 assets when active)
+	const activeCoinbaseSymbols = coinbaseActive
+		? CRYPTO_CONFIGS.map((config) => config.coinbaseSymbol)
+		: []
+
+	// Get all symbols for Kraken (all 4 assets when active)
+	const activeKrakenSymbols = krakenActive
+		? CRYPTO_CONFIGS.map((config) => config.krakenSymbol)
+		: []
+
 	// Binance WebSocket connection
 	const binanceWs = useRTDSWebSocket({
 		source: 'binance',
@@ -83,6 +202,12 @@ export default function TickerPage4() {
 						binance: { value: update.value, timestamp: update.timestamp }
 					}
 				}))
+				logTicker({
+					source: 'binance',
+					symbol: config.symbol,
+					timestamp: update.timestamp,
+					price: update.value
+				})
 			}
 		},
 		onError: (err) => {
@@ -108,6 +233,12 @@ export default function TickerPage4() {
 						chainlink: { value: update.value, timestamp: update.timestamp }
 					}
 				}))
+				logTicker({
+					source: 'chainlink',
+					symbol: config.symbol,
+					timestamp: update.timestamp,
+					price: update.value
+				})
 			}
 		},
 		onError: (err) => {
@@ -132,6 +263,12 @@ export default function TickerPage4() {
 						polling: { value: update.value, timestamp: update.timestamp }
 					}
 				}))
+				logTicker({
+					source: 'polling',
+					symbol: config.symbol,
+					timestamp: update.timestamp,
+					price: update.value
+				})
 			}
 		},
 		onError: (err) => {
@@ -156,6 +293,12 @@ export default function TickerPage4() {
 						binanceDirect: { value: update.price, timestamp: update.timestamp }
 					}
 				}))
+				logTicker({
+					source: 'binanceDirect',
+					symbol: config.symbol,
+					timestamp: update.timestamp,
+					price: update.price
+				})
 			}
 		},
 		onError: (err) => {
@@ -163,6 +306,138 @@ export default function TickerPage4() {
 		},
 		autoConnect: false
 	})
+
+	useEffect(() => {
+		if (!coinbaseActive || activeCoinbaseSymbols.length === 0) {
+			coinbaseWsRef.current?.close()
+			coinbaseWsRef.current = null
+			setCoinbaseStatus('disconnected')
+			return
+		}
+
+		setCoinbaseStatus('connecting')
+		const ws = new WebSocket('wss://ws-feed.exchange.coinbase.com')
+		coinbaseWsRef.current = ws
+
+		ws.onopen = () => {
+			setCoinbaseStatus('connected')
+			ws.send(
+				JSON.stringify({
+					type: 'subscribe',
+					product_ids: activeCoinbaseSymbols,
+					channels: ['ticker']
+				})
+			)
+		}
+
+		ws.onmessage = (event) => {
+			try {
+				const data = JSON.parse(event.data as string)
+				if (data?.type !== 'ticker' || !data.product_id || !data.price) return
+				const config = CRYPTO_CONFIGS.find((c) => c.coinbaseSymbol === data.product_id)
+				if (!config) return
+				const timestamp = data.time ? Date.parse(data.time) : Date.now()
+				const price = Number(data.price)
+				if (!Number.isFinite(price)) return
+
+				setPrices((prev) => ({
+					...prev,
+					[config.symbol]: {
+						...prev[config.symbol],
+						coinbase: { value: price, timestamp }
+					}
+				}))
+				logTicker({
+					source: 'coinbase',
+					symbol: config.symbol,
+					timestamp,
+					price
+				})
+			} catch (error) {
+				console.error('Coinbase message error:', error)
+			}
+		}
+
+		ws.onerror = (error) => {
+			console.error('Coinbase WebSocket error:', error)
+			setCoinbaseStatus('disconnected')
+		}
+
+		ws.onclose = () => {
+			setCoinbaseStatus('disconnected')
+		}
+
+		return () => {
+			ws.close()
+		}
+	}, [coinbaseActive, activeCoinbaseSymbols.join(','), logTicker])
+
+	useEffect(() => {
+		if (!krakenActive || activeKrakenSymbols.length === 0) {
+			krakenWsRef.current?.close()
+			krakenWsRef.current = null
+			setKrakenStatus('disconnected')
+			return
+		}
+
+		setKrakenStatus('connecting')
+		const ws = new WebSocket('wss://ws.kraken.com')
+		krakenWsRef.current = ws
+
+		ws.onopen = () => {
+			setKrakenStatus('connected')
+			ws.send(
+				JSON.stringify({
+					event: 'subscribe',
+					pair: activeKrakenSymbols,
+					subscription: { name: 'ticker' }
+				})
+			)
+		}
+
+		ws.onmessage = (event) => {
+			try {
+				const data = JSON.parse(event.data as string)
+				if (!Array.isArray(data) || data[2] !== 'ticker') return
+				const pair = data[3]
+				const payload = data[1]
+				const last = Number(payload?.c?.[0])
+				if (!Number.isFinite(last)) return
+				const config = CRYPTO_CONFIGS.find((c) => c.krakenSymbol === pair)
+				if (!config) return
+				const timestamp = Date.now()
+
+				setPrices((prev) => ({
+					...prev,
+					[config.symbol]: {
+						...prev[config.symbol],
+						kraken: { value: last, timestamp }
+					}
+				}))
+				logTicker({
+					source: 'kraken',
+					symbol: config.symbol,
+					timestamp,
+					price: last
+				})
+			} catch (error) {
+				console.error('Kraken message error:', error)
+			}
+		}
+
+		ws.onerror = (error) => {
+			console.error('Kraken WebSocket error:', error)
+			setKrakenStatus('disconnected')
+		}
+
+		ws.onclose = () => {
+			setKrakenStatus('disconnected')
+		}
+
+		return () => {
+			ws.close()
+		}
+	}, [krakenActive, activeKrakenSymbols.join(','), logTicker])
 
 	// Update symbols when active tickers change (only if connected)
 	useEffect(() => {
@@ -273,6 +548,21 @@ export default function TickerPage4() {
 		setBinanceDirectActive((prev) => !prev)
 	}, [])
 
+	// Toggle Coinbase source
+	const toggleCoinbase = useCallback(() => {
+		setCoinbaseActive((prev) => !prev)
+	}, [])
+
+	// Toggle Kraken source
+	const toggleKraken = useCallback(() => {
+		setKrakenActive((prev) => !prev)
+	}, [])
+
+	// Toggle logging
+	const toggleLogging = useCallback(() => {
+		setLoggingActive((prev) => !prev)
+	}, [])
+
 	// Format price for display
 	const formatPrice = (price: number | null): string => {
 		if (price === null) return '—'
@@ -296,7 +586,46 @@ export default function TickerPage4() {
 		<div className='flex flex-1 flex-col gap-6 p-4 pt-0 pb-16'>
 			<div className='flex items-center justify-between'>
 				<h1 className='text-2xl font-bold'>Crypto Price Ticker</h1>
-				<div className='flex items-center gap-3'>
+				<div className='flex items-center gap-3 flex-wrap'>
+					<Button
+						onClick={toggleLogging}
+						variant={loggingActive ? 'default' : 'destructive'}
+						size='sm'
+						className='flex items-center gap-2'
+					>
+						<div
+							className={`h-2 w-2 rounded-full ${
+								loggingActive ? 'bg-green-500' : 'bg-gray-400'
+							}`}
+						/>
+						{loggingActive ? 'Logging On' : 'Logging Off'}
+					</Button>
+					<Button
+						onClick={toggleCoinbase}
+						variant={coinbaseActive ? 'destructive' : 'default'}
+						size='sm'
+						className='flex items-center gap-2'
+					>
+						<div
+							className={`h-2 w-2 rounded-full ${
+								coinbaseStatus === 'connected' ? 'bg-green-500' : 'bg-gray-400'
+							}`}
+						/>
+						{coinbaseActive ? 'Stop Coinbase' : 'Start Coinbase'}
+					</Button>
+					<Button
+						onClick={toggleKraken}
+						variant={krakenActive ? 'destructive' : 'default'}
+						size='sm'
+						className='flex items-center gap-2'
+					>
+						<div
+							className={`h-2 w-2 rounded-full ${
+								krakenStatus === 'connected' ? 'bg-green-500' : 'bg-gray-400'
+							}`}
+						/>
+						{krakenActive ? 'Stop Kraken' : 'Start Kraken'}
+					</Button>
 					<Button
 						onClick={toggleBinance}
 						variant={binanceActive ? 'destructive' : 'default'}
@@ -479,6 +808,66 @@ export default function TickerPage4() {
 										<div
 											className={`h-3 w-3 rounded-full ${
 												binanceDirectActive && priceData.binanceDirect
+													? 'bg-green-500 animate-pulse'
+													: 'bg-gray-300'
+											}`}
+										/>
+									</div>
+
+									{/* Coinbase Price */}
+									<div className='flex items-center justify-between rounded-lg border p-3'>
+										<div className='flex flex-col'>
+											<span className='text-sm font-medium text-muted-foreground'>
+												Coinbase
+											</span>
+											<span
+												className={`text-2xl font-bold ${
+													coinbaseActive && priceData.coinbase
+														? ''
+														: 'text-muted-foreground opacity-60'
+												}`}
+											>
+												{formatPrice(priceData.coinbase?.value ?? null)}
+											</span>
+											{priceData.coinbase?.timestamp && (
+												<span className='text-xs text-muted-foreground'>
+													{formatTimestamp(priceData.coinbase.timestamp)}
+												</span>
+											)}
+										</div>
+										<div
+											className={`h-3 w-3 rounded-full ${
+												coinbaseActive && priceData.coinbase
+													? 'bg-green-500 animate-pulse'
+													: 'bg-gray-300'
+											}`}
+										/>
+									</div>
+
+									{/* Kraken Price */}
+									<div className='flex items-center justify-between rounded-lg border p-3'>
+										<div className='flex flex-col'>
+											<span className='text-sm font-medium text-muted-foreground'>
+												Kraken
+											</span>
+											<span
+												className={`text-2xl font-bold ${
+													krakenActive && priceData.kraken
+														? ''
+														: 'text-muted-foreground opacity-60'
+												}`}
+											>
+												{formatPrice(priceData.kraken?.value ?? null)}
+											</span>
+											{priceData.kraken?.timestamp && (
+												<span className='text-xs text-muted-foreground'>
+													{formatTimestamp(priceData.kraken.timestamp)}
+												</span>
+											)}
+										</div>
+										<div
+											className={`h-3 w-3 rounded-full ${
+												krakenActive && priceData.kraken
 													? 'bg-green-500 animate-pulse'
 													: 'bg-gray-300'
 											}`}

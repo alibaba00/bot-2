@@ -6,7 +6,9 @@ const fs = isElectron ? (window as any)?.require?.('fs') : null
 const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 // const path = isElectron ? (window as any)?.require?.('path') : null;
 
-const tickerDataCache = {} // ticker data cache
+let tickerDataCache: any = {} // ticker data cache
+let lastUpdate_logfiles: number = await PolymarketApi.store.getItem('lastUpdate_logfiles') || 0
+console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
 
 
 // ---------------------------------------------------------------------------- fixingClobData
@@ -84,16 +86,10 @@ export const dataTest_2 = async (symbol: string) => {
 	for (const market of markets) {
 		if (!market.closed) continue
 		if (market.startTimestamp < limitTimestamp) continue
-		if (market.chartData?._incomplete) continue
-		if (!market.chartData?.ticker?.binance?.length) continue
+		if (!market.chartData?._complete) continue
+		if (!market.chartData?.ticker?.coinbase?._complete) continue
 
-		const binance = market.chartData.ticker.binance
-		if (binance._incomplete) continue
-
-		const first = binance[0]
-		const last = binance[binance.length-1]
-		if (first[0] - market.startTimestamp > 3 * 60 * 1000) continue
-		if (market.endTimestamp - last[0] > 3 * 60 * 1000) continue
+		const coinbase = market.chartData.ticker.coinbase
 
 		stats.total++
 
@@ -104,10 +100,10 @@ export const dataTest_2 = async (symbol: string) => {
 		if (ups[0][0] - market.startTimestamp > 3 * 60 * 1000) continue
 		if (market.endTimestamp - downs[downs.length-1][0] > 3 * 60 * 1000) continue
 
-		const startPrice = binance[0][1]
+		const startPrice = coinbase[0][1]
 		const limitPrice = startPrice * 1.00025
 
-		let item = binance.find((e: any) => e[1] >= limitPrice)
+		let item = coinbase.find((e: any) => e[1] >= limitPrice)
 		if (!item){
 			stats.inValid++
 			continue
@@ -382,6 +378,8 @@ const parseNumber = (num: number) => {
 let dirList: any[] = [];
 
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
+	// console.log('getAllMarkets_clob running', symbol, date)
+
 	dirList = dirList.length? dirList : await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
 	const dateString = (date || new Date()).toISOString().substring(0, 10);
 
@@ -493,14 +491,22 @@ export const getAllMarkets = async (symbol: string | null = null, date: Date | n
 
 // ---------------------------------------------------------------------------- updateLogfiles
 export const updateLogfiles = async () => {
-	console.log('---Updating logfiles...')
-	await PolymarketApi.store.setItem('lastUpdate_logfiles', Date.now())
+	tickerDataCache = {} as any // clear ticker data cache
+	lastUpdate_logfiles = Date.now() as number
+	await PolymarketApi.store.setItem('lastUpdate_logfiles', lastUpdate_logfiles)
+	console.log('---Updating logfiles...', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
 
-	await updateTickerData('binance')
+	await updateClobData()
 	console.log('')
 	await updateTickerData('chainlink')
 	console.log('')
-	await updateClobData()
+	await updateTickerData('binance')
+	console.log('')
+	await updateTickerData('polling')
+	console.log('')
+	await updateTickerData('coinbase')
+	console.log('')
+	await updateTickerData('kraken')
 	console.log('')
 
 	console.log('update markets logfiles...')
@@ -527,12 +533,65 @@ export const updateOldLogs = async () => {
 }
 
 
+const tickerDataSources: any = {
+	chainlink: {
+		importPath: 'H:/DEV/PY/polymarket/chainlink_price_ticker/logs/chainlink',
+		exportPath: 'A:/DATA/polymarket/chainlink/',
+		symbols: {
+			btc: 'btcusd',
+			eth: 'ethusd',
+			sol: 'solusd',
+			xrp: 'xrpusd',
+		}
+	},
+	binance: {
+		importPath: 'H:/DEV/PY/polymarket/binance_price_ticker/logs/binance',
+		exportPath: 'A:/DATA/polymarket/binance/',
+		symbols: {
+			btc: 'btcusdt',
+			eth: 'ethusdt',
+			sol: 'solusdt',
+			xrp: 'xrpusdt',
+		}
+	},
+	polling: {
+		importPath: 'H:/DEV/PY/polymarket/binance_polling_ticker/logs/binance',
+		exportPath: 'A:/DATA/polymarket/binance-polling/',
+		symbols: {
+			btc: 'btcusdt',
+			eth: 'ethusdt',
+			sol: 'solusdt',
+			xrp: 'xrpusdt',
+		}
+	},
+	coinbase: {
+		importPath: 'H:/DEV/PY/polymarket/coinbase_price_ticker/logs/coinbase',
+		exportPath: 'A:/DATA/polymarket/coinbase/',
+		symbols: {
+			btc: 'btc-usd',
+			eth: 'eth-usd',
+			sol: 'sol-usd',
+			xrp: 'xrp-usd',
+		}
+	},
+	kraken: {
+		importPath: 'H:/DEV/PY/polymarket/kraken_price_ticker/logs/kraken',
+		exportPath: 'A:/DATA/polymarket/kraken/',
+		symbols: {
+			btc: 'xbtusd',	
+			eth: 'ethusd',
+			sol: 'solusd',
+			xrp: 'xrpusd',
+		}
+	},
+}
+
 // ---------------------------------------------------------------------------- updateTickerData
 export const updateTickerData = async (type: string = 'binance') => {
 	console.log('Updating ticker data:', type)
 
-	const importPath = 'H:/DEV/PY/polymarket/' + type + '_price_ticker/logs/' + type
-	const exportPath = 'A:/DATA/polymarket/' + type + '/'
+	const importPath = tickerDataSources[type].importPath
+	const exportPath = tickerDataSources[type].exportPath
 	const importList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
 
 	for (const entry of importList) {
@@ -540,39 +599,21 @@ export const updateTickerData = async (type: string = 'binance') => {
 		const path = entry.path.replaceAll('\\', '/')
 		const filePath = path + '/' + entry.name
 		const symbol = path.split('/').pop()
-		const exportDir = exportPath + symbol + '/'
-		const exportFilePath = exportDir + entry.name
+		const exportDir = exportPath + symbol
+		const exportFile = exportDir + '/' + entry.name
 
-		if (fs.existsSync(exportFilePath)){	//export file exists
-			const exportCreatedAt = fs.statSync(exportFilePath).ctime
+		if (fs.existsSync(exportFile)){	//export file exists
+			const exportCreatedAt = fs.statSync(exportFile).ctime
 			const importCreatedAt = fs.statSync(filePath).ctime
 			if (exportCreatedAt >= importCreatedAt) continue
 
-			console.log('update file:', exportFilePath)
+			console.log('update file:', exportFile)
 		}else{
-			console.log('export new file:', exportFilePath)
+			console.log('export new file:', exportFile)
 		}
 
 		if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true })
-		fs.copyFileSync(filePath, exportFilePath)
-
-/*		
-		// checking timestamps in log files ...
-		const fileDate = entry.name.replace('.csv', '')
-		const timeFrom = new Date(fileDate).getTime() //2026-01-11
-		const timeTo = timeFrom + 24 * 60 * 60 * 1000 //2026-01-12
-		const fileData = await fsPromises.readFile(filePath, 'utf8')
-			.then(data => data.split('\n')
-			.filter(line => {
-				const timestamp = parseInt(line.split(',')[0])
-				return timestamp >= timeFrom && timestamp < timeTo
-			}))
-		if (!fileData.length){
-			console.log('no data to export:', filePath)
-			continue
-		}
-		fs.writeFileSync(exportFilePath, fileData.join('\n'))
-*/
+		fs.copyFileSync(filePath, exportFile)
 	}
 }
 
@@ -597,8 +638,8 @@ export const updateClobData = async () => {
 		if (entry.isDirectory() || !entry.name.endsWith('.csv')) continue
 		const path = entry.path.replaceAll('\\', '/')
 		const filePath = path + '/' + entry.name
-		const exportFilePath = exportPath + path.split('logs/')[1]
-		const exportFile = exportFilePath + '/' + entry.name
+		const exportDir = exportPath + path.split('logs/')[1]
+		const exportFile = exportDir + '/' + entry.name
 
 		if (fs.existsSync(exportFile)){		//export file exists
 			stat.exists++
@@ -613,7 +654,7 @@ export const updateClobData = async () => {
 			stat.newFiles++
 			console.log('export new file:', exportFile)
 		}
-		if (!fs.existsSync(exportFilePath)) fs.mkdirSync(exportFilePath, { recursive: true })
+		if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true })
 		fs.copyFileSync(filePath, exportFile)
 	}
 
@@ -625,7 +666,6 @@ export const updateClobData = async () => {
 
 // ---------------------------------------------------------------------------- updateAllMarketData_clob
 let isRunning = false
-let lastUpdate_logfiles = 0
 
 export const updateAllMarketData_clob = async () => {
 	if (isRunning){
@@ -635,17 +675,16 @@ export const updateAllMarketData_clob = async () => {
 	}
 	isRunning = true
 
+	await PolymarketApi.store.setItem('lastUpdate_clobData', Date.now())
+
 	const dataFiles = await getAllMarkets_clob()
-	console.log('Updating all market data from clob', dataFiles.length, 'files ...')
+	console.log('Updating all market data from clob', dataFiles.length, 'files ...', lastUpdate_logfiles)
 
 	const stat = {
 		totalMarkets: dataFiles.length,
 		updated: 0,
 		openMarkets: 0,
 	}
-
-	await PolymarketApi.store.setItem('lastUpdate_clobData', Date.now())
-	lastUpdate_logfiles = await PolymarketApi.store.getItem('lastUpdate_logfiles')
 
 	for (const file of dataFiles) {
 		if (!isRunning) break
@@ -655,16 +694,6 @@ export const updateAllMarketData_clob = async () => {
 	}
 
 	console.log('complete!', stat)
-
-	// if (isRunning && stat.openMarkets > 0){
-	// 	console.log('continue updating open markets in 3 seconds ...')
-	// 	await new Promise(resolve => setTimeout(resolve, 3000))
-	// 	if (isRunning){
-	// 		isRunning = false
-	// 		return updateAllMarketData_clob()	//continue updating open markets
-	// 	}
-	// }
-
 	isRunning = false
 }
 
@@ -748,12 +777,10 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 			updated = true
 		}
 
-		if (!useCache
-			|| (!market.chartData?.ticker?.chainlink?.length && !market.chartData?.ticker?.chainlink?._incomplete)
-			|| (!market.chartData?.ticker?.binance?.length && !market.chartData?.ticker?.binance?._incomplete)
-			|| (market.chartData?._incomplete && lastUpdate_logfiles > market.endTimestamp)) {		
+		if (!useCache || !market.chartData?._complete) {		
 			market.chartData = await getChartData_csv(market, csvPath)
-			if (lastUpdate_logfiles < market.endTimestamp) market.chartData._incomplete = true
+			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
+			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
 			updated = true
 		}
 	}
@@ -778,7 +805,6 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 	const last: any = {up: null, down: null, ticker: null}
 
 	const logData = fs.existsSync(csvFilePath) ? await fsPromises.readFile(csvFilePath, 'utf8') : null
-
 	if (logData) {
 		const lines = logData.split('\n')
 	
@@ -803,37 +829,36 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 	}
 
 	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
-	let chainlink: any = await getChartTickerData(market.symbol, dateString, 'chainlink')
-	// Prevent duplicates from getting into the array based on timestamp and price
-	chainlink = chainlink
-		.filter((item: any) => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
-		.reduce((acc: any[], item: any) => {		//prevent duplicates
-			const last = acc.length > 0 ? acc[acc.length - 1] : null
-			if (!last || last[0] !== item.timestamp || last[1] !== item.price) {
-				acc.push([item.timestamp, item.price])
-			}
-			return acc
-		}, [])
+	const firstTimestamp = market.startTimestamp + 5 * 60 * 1000	//5 minutes
+	const lastTimestamp = market.endTimestamp - 5 * 60 * 1000	//5 minutes
+	const tickers: any = {} as any
 
-	if (!chainlink.length) chainlink._incomplete = true
+	for (const source of Object.keys(tickerDataSources)) {
+		let tickerData: any = await getChartTickerData(market.symbol, dateString, source)
 
-	let binance: any = await getChartTickerData(market.symbol, dateString, 'binance')
-	binance = binance
-		.filter((item: any) => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
-		.reduce((acc: any[], item: any) => {		//prevent duplicates
-			const last = acc.length > 0 ? acc[acc.length - 1] : null
-			if (!last || last[0] !== item.timestamp || last[1] !== item.price) {
-				acc.push([item.timestamp, item.price])
-			}
-			return acc
-		}, [])
+		// Prevent duplicates from getting into the array based on timestamp and price
+		tickerData = tickerData
+			.filter((item: any) => item.timestamp >= market.startTimestamp
+				&& item.timestamp <= market.endTimestamp)
+			.reduce((acc: any[], item: any) => {		//prevent duplicates
+				const last = acc.length > 0 ? acc[acc.length - 1] : null
+				if (!last || last[0] !== item.timestamp || last[1] !== item.price) {
+					acc.push([item.timestamp, item.price])
+				}
+				return acc
+			}, [])
 
-	if (!binance.length) binance._incomplete = true
+		tickerData._complete = tickerData.length > 20
+			&& tickerData[0][0] < firstTimestamp
+			&& tickerData[tickerData.length-1][0] > lastTimestamp
+
+		tickers[source] = tickerData
+	}
 
 	return {
 		clob: {up, down},
-		ticker: {chainlink, binance}
-	}
+		ticker: tickers
+	} as any
 }
 
 
@@ -845,6 +870,7 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 //     "price": 0.36,
 //     "volume": 15
 // }
+/*
 export const getChartData = async (market: Market, logFilePath: string) => {
 	console.log('getChartData from', logFilePath)
 
@@ -890,6 +916,7 @@ export const getChartData = async (market: Market, logFilePath: string) => {
 	
 	return {up, down, ticker, ticker_p} as any
 }
+*/
 
 
 // ---------------------------------------------------------------------------- DateFormat
@@ -950,7 +977,7 @@ export const getMarketChartData = async (filePath: string | null = null,
 }
 
 
-// ---------------------------------------------------------------------------- getChartData
+// ---------------------------------------------------------------------------- getChartTickerData
 // const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
 // source: chainlink, binance, polling
 // symbol: btc, xrp, etc.
@@ -962,11 +989,9 @@ export const getChartTickerData = async (symbol: string, dateString: string, sou
 	const dataString = symbol + '-' + dateString
 	if (tickerDataCache[source + '-' + dataString]) return tickerDataCache[source + '-' + dataString]
 
-	const rootPath = PolymarketApi.rootPath
-	const dirPath = `${rootPath}${source}/${symbol + (source === 'chainlink' ? 'usd' : 'usdt')}`
+	const dirPath = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
 	const filePath = `${dirPath}/${dateString}.csv`
 
-// console.log('getChartTickerData:', symbol, dateString, filePath, fs.existsSync(filePath), source)
 	if (!fs.existsSync(filePath)) return []
 
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
