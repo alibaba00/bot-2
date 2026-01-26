@@ -6,6 +6,9 @@ import { usePolymarketConnection } from "@/lib/polymarket/store";
 // import { Side } from "@polymarket/clob-client";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { getAccountInfo, getTransactionHistory, getWalletBalance } from "@/lib/polymarket/wallet";
+import { fetchMarketBySlugFromGamma, fetchMarkets } from "@/lib/polymarket/markets";
+import { getOpenOrders } from "@/lib/polymarket/orders";
 
 
 export default function TradingPage() {
@@ -20,37 +23,53 @@ export default function TradingPage() {
 		await connect()		
 	}
 
-	// const handleGetTrades = async () => {
-	// 	console.log('handleGetTrades ...')
-	// 	// View your trade history
-	// 	const transactions = await getTransactionHistory();
-	// 	console.log(`You've made ${transactions.length} trades`);
-	// 	console.log(transactions);
-	// }
+	// --- get Account Info
+	const handleGetAccountInfo = async () => {
+		console.log('handleGetAccountInfo ...')
+		const accountInfo = await getAccountInfo();
+		console.log(accountInfo);
+	}
 
-	// const handleGetBalance = async () => {
-	// 	console.log('handleGetBalance ...')
-	// 	const balance = await getWalletBalance();
-	// 	console.log(balance);
-	// }
+	// --- get wallet balance
+	const handleGetBalance = async () => {
+		console.log('handleGetBalance ...')
+		const balance = await getWalletBalance();
+		console.log(balance);
+	}
 
-	// const handleGetOrders = async () => {
-	// 	console.log('handleGetOrders ...')
-	// 	const orders = await getOpenOrders();
-	// 	console.log(orders);
-	// }
+	// --- get orders
+	const handleGetOrders = async () => {
+		console.log('handleGetOrders ...')
+		const orders = await getOpenOrders();
+		console.log(orders);
+	}
 
-	// const handleFetchMarkets = async () => {
-	// 	console.log('handleFetchMarkets ...')
-	// 	const markets = await fetchMarkets();
-	// 	console.log(markets);
-	// }
+	// --- get transaction history
+	const handleGetTrades = async () => {
+		console.log('handleGetTrades ...')
+		// View your trade history
+		const transactions = await getTransactionHistory();
+		console.log(`You've made ${transactions.length} trades`);
+		console.log(transactions);
+	}
 
-	// const handleFetchMarketBySlugFromGamma = async () => {
-	// 	console.log('handleFetchMarketBySlugFromGamma ...')
-	// 	const market = await fetchMarketBySlugFromGamma('elon-musk-of-tweets-january-16-january-23-380-399');
-	// 	console.log(market);
-	// }
+	// --- fetch markets
+	const handleFetchMarkets = async () => {
+		console.log('handleFetchMarkets ...')
+		const markets = await fetchMarkets();
+		console.log(markets);
+	}
+
+	// --- fetch market by slug from gamma
+	// https://gamma-api.polymarket.com/markets/slug/elon-musk-of-tweets-january-26-january-28-90-114
+	const handleFetchMarketBySlugFromGamma = async () => {
+		console.log('handleFetchMarketBySlugFromGamma ...')
+		const market = await fetchMarketBySlugFromGamma('elon-musk-of-tweets-january-26-january-28-90-114');
+		console.log(market);
+	}
+
+
+
 
 	// const handleFetchMarketFromConditionId = async () => {
 	// 	console.log('handleFetchMarketFromConditionId ...')
@@ -83,7 +102,12 @@ export default function TradingPage() {
 			<h1>Trading Page</h1>
 			<div className="flex gap-2 flex-wrap">
 				<Button variant='default' onClick={handleConnect}>Connect to Polymarket</Button>
-
+				<Button variant='default' onClick={handleGetAccountInfo}>Get Account Info</Button>
+				<Button variant='default' onClick={handleGetBalance}>Get Balance</Button>
+				<Button variant='default' onClick={handleGetOrders}>Get Orders</Button>
+				<Button variant='default' onClick={handleGetTrades}>Get Trades</Button>
+				<Button variant='default' onClick={handleFetchMarkets}>Fetch Markets</Button>
+				<Button variant='default' onClick={handleFetchMarketBySlugFromGamma}>Fetch Market By Slug From Gamma</Button>
 			</div>
 				{/* <Button onClick={() => {
 					handleFetchMarketBySlugFromGamma()
