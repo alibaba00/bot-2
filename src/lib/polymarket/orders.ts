@@ -4,6 +4,7 @@
  */
 
 import { getOrInitializeClient } from './client'
+import { fetchMarket } from './markets'
 import type { Order, PlaceOrderParams, PlaceOrderResponse } from './types'
 import { db } from '../db'
 import type { OrderRecord } from '../db'
@@ -41,40 +42,99 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 	try {
 		const client = await getOrInitializeClient()
 
-		// Get market to find token ID
-		const markets = await import('./markets')
-		const market = await markets.fetchMarket(params.marketId)
-
-		if (!market) {
-			throw new Error(`Market not found: ${params.marketId}`)
-		}
-
-		// Find the outcome token ID
-		const outcome = market.outcomes.find(
-			(o) => o.title.toUpperCase() === params.outcome.toUpperCase()
-		)
-
-		if (!outcome) {
-			throw new Error(`Outcome not found: ${params.outcome}`)
-		}
-
 		// Load enums if needed
 		await loadEnums()
 
+		let outcomeTokenId = params.outcomeId
+		let marketData: any | null = null
+
+		if (!outcomeTokenId) {
+			// Fetch market to resolve outcome token id
+			const market = await fetchMarket(params.marketId)
+			marketData = market?.sourceData || null
+
+			if (!market) {
+				throw new Error(`Market not found: ${params.marketId}`)
+			}
+
+			const outcome = market.outcomes.find(
+				(o) => o.title.toUpperCase() === params.outcome.toUpperCase()
+			)
+
+			if (!outcome) {
+				throw new Error(`Outcome not found: ${params.outcome}`)
+			}
+
+			outcomeTokenId = outcome.id
+		}
+
+		// Resolve tickSize/negRisk for createAndPostOrder
+		let tickSize: string | undefined
+		let negRisk: boolean | undefined
+
+		try {
+			const clobMarket = await client.getMarket(params.marketId)
+			tickSize =
+				typeof clobMarket?.tickSize === 'number' || typeof clobMarket?.tickSize === 'string'
+					? String(clobMarket.tickSize)
+					: typeof clobMarket?.orderPriceMinTickSize === 'number' ||
+						  typeof clobMarket?.orderPriceMinTickSize === 'string'
+						? String(clobMarket.orderPriceMinTickSize)
+						: undefined
+			negRisk = typeof clobMarket?.negRisk === 'boolean' ? clobMarket.negRisk : undefined
+		} catch {
+			// Ignore and fall back to gamma data if available
+		}
+
+		if ((!tickSize || typeof negRisk !== 'boolean') && marketData) {
+			if (!tickSize && marketData?.orderPriceMinTickSize) {
+				tickSize = String(marketData.orderPriceMinTickSize)
+			}
+			if (typeof negRisk !== 'boolean' && typeof marketData?.negRisk === 'boolean') {
+				negRisk = marketData.negRisk
+			}
+		}
+
+		const marketParams: Record<string, any> = {}
+		if (tickSize) marketParams.tickSize = tickSize
+		if (typeof negRisk === 'boolean') marketParams.negRisk = negRisk
+
 		// Create order using CLOB client
 		const userOrder = {
-			tokenID: outcome.id,
+			tokenID: outcomeTokenId,
 			price: params.price,
 			size: params.quantity,
 			side: params.side === 'BUY' ? SideEnum.BUY : SideEnum.SELL
 		}
 
 		// Create and post the order
-		const result = await client.createAndPostOrder(userOrder, {}, OrderTypeEnum.GTC, false)
+		const orderType = OrderTypeEnum?.GTC ?? 'GTC'
+		const result = await client.createAndPostOrder(userOrder, marketParams, orderType, false)
+
+		if (result?.error || result?.status >= 400) {
+			const message =
+				result?.error ||
+				result?.data?.error ||
+				`Order rejected with status ${result?.status ?? 'unknown'}`
+			throw new Error(message)
+		}
+
+		const resolvedOrderId =
+			result?.order_id ||
+			result?.orderID ||
+			result?.id ||
+			result?.data?.order_id ||
+			result?.data?.orderID ||
+			result?.data?.id ||
+			null
+
+		if (!resolvedOrderId) {
+			console.warn('Order submission returned no order id. Using fallback id.', result)
+		}
 
 		// Store order in database
 		const order: Order = {
-			id: result.order_id || result.id || String(Date.now()),
+			id: resolvedOrderId || String(Date.now()),
 			marketId: params.marketId,
 			outcome: params.outcome,
 			side: params.side,
@@ -101,29 +161,33 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 /**
  * Cancel an order
  */
-export async function cancelOrder(orderId: string): Promise<void> {
+export async function cancelOrder(orderId: string): Promise<any> {
+	console.log('cancelOrder ...', orderId);
 	try {
 		const client = await getOrInitializeClient()
 
-		// Get order from database to find order hash
+		// Try to get order from database (optional)
 		const orderRecord = await db.orders.get(orderId)
-
 		if (!orderRecord) {
-			throw new Error(`Order not found: ${orderId}`)
+			console.warn(`Order not found in local DB, cancelling by id: ${orderId}`)
 		}
 
 		// Cancel using CLOB client
 		// Note: The actual implementation depends on how orders are stored
 		// For now, we'll use cancelOrder with order payload
-		await client.cancelOrder({
-			order_id: orderId
+		const response = await client.cancelOrder({
+			orderID: orderId
 		})
 
-		// Update order status in database
-		await db.orders.update(orderId, {
-			status: 'CANCELLED',
-			updatedAt: new Date().toISOString()
-		})
+		// Update order status in database if it exists
+		if (orderRecord) {
+			await db.orders.update(orderId, {
+				status: 'CANCELLED',
+				updatedAt: new Date().toISOString()
+			})
+		}
+
+		return response
 	} catch (error) {
 		console.error('Error cancelling order:', error)
 		throw error

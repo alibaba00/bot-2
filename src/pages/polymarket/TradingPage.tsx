@@ -8,7 +8,8 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { getAccountInfo, getTransactionHistory, getWalletBalance } from "@/lib/polymarket/wallet";
 import { fetchMarketBySlugFromGamma, fetchMarkets } from "@/lib/polymarket/markets";
-import { getOpenOrders } from "@/lib/polymarket/orders";
+import { cancelOrder, getOpenOrders, placeOrder } from "@/lib/polymarket/orders";
+// import { Side } from "@polymarket/clob-client";
 
 
 export default function TradingPage() {
@@ -68,8 +69,37 @@ export default function TradingPage() {
 		console.log(market);
 	}
 
+	// --- set order
+	const handleSetOrder = async () => {
+		console.log('handleSetOrder ...')
+		// Market + YES token from Gamma
+		const conditionId = '0x81cf3f03aa3f2a297485df5855df13364628b07823fd27f71077d88d42233a86';
+		const yesTokenId = '50214305297176962065773245512961547550198516374144624237468290586352509598213';
+		const price = 0.2;		//price per share
+		const size = 10;		//10 shares
+		// const side = Side.BUY;
 
+		const order = await placeOrder({
+			marketId: conditionId,
+			price: price,
+			quantity: size,
+			side: 'BUY',
+			outcome: 'YES',
+			outcomeId: yesTokenId
+		});
+		console.log(order);
+	}
 
+	// --- cancel order
+	const handleCancelOrder = async () => {
+		console.log('handleCancelOrder ...')
+		// const orderId = '0x3eb73f7df073f02049648d90871d2d411b2f3c4eefd3c8d84ea7d344d0a37f03';
+		const orders = await getOpenOrders();
+		const orderId = orders[0].id;
+		console.log('orderId:', orderId);
+		const order = await cancelOrder(orderId);
+		console.log('order:', order);
+	}
 
 	// const handleFetchMarketFromConditionId = async () => {
 	// 	console.log('handleFetchMarketFromConditionId ...')
@@ -85,15 +115,6 @@ export default function TradingPage() {
 	// 	console.log(market);
 	// }
 
-	// const handleSetOrder = async () => {
-	// 	console.log('handleSetOrder ...')
-	// 	const conditionId = '0xb44e63b37ed73f1ce8e69a8ed4f894e27ca7dcaf2b112f0e16876c1c07d1f390';
-	// 	const price = 0.0001;
-	// 	const size = 1;
-	// 	const side = Side.BUY;
-
-	// 	// await setOrder(conditionId, price, size, side);
-	// }
 
 	console.log('status:', status)
 
@@ -108,6 +129,8 @@ export default function TradingPage() {
 				<Button variant='default' onClick={handleGetTrades}>Get Trades</Button>
 				<Button variant='default' onClick={handleFetchMarkets}>Fetch Markets</Button>
 				<Button variant='default' onClick={handleFetchMarketBySlugFromGamma}>Fetch Market By Slug From Gamma</Button>
+				<Button variant='default' onClick={handleSetOrder}>Set Order</Button>
+				<Button variant='default' onClick={handleCancelOrder}>Cancel Order</Button>
 			</div>
 				{/* <Button onClick={() => {
 					handleFetchMarketBySlugFromGamma()

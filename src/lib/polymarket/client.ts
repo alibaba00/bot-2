@@ -54,6 +54,31 @@ let isInitialized = false
 let connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected'
 let lastError: Error | null = null
 
+function getStoredApiCreds(storageKey: string): any | null {
+	try {
+		if (typeof localStorage === 'undefined') return null
+		const raw = localStorage.getItem(storageKey)
+		if (!raw) return null
+		const parsed = JSON.parse(raw)
+		if (parsed?.key && parsed?.secret && parsed?.passphrase) {
+			return parsed
+		}
+	} catch {
+		// Ignore storage errors
+	}
+	return null
+}
+
+function storeApiCreds(storageKey: string, creds: any): void {
+	try {
+		if (typeof localStorage === 'undefined') return
+		if (!creds?.key || !creds?.secret || !creds?.passphrase) return
+		localStorage.setItem(storageKey, JSON.stringify(creds))
+	} catch {
+		// Ignore storage errors
+	}
+}
+
 /**
  * Initialize the Polymarket CLOB client
  */
@@ -85,31 +110,53 @@ export async function initializeClient(): Promise<any> {
 		const host = config.proxyAddress || 'https://clob.polymarket.com'
 
 		// Initialize CLOB client first (without credentials)
-		clobClient = new ClobClientModule.ClobClient(host, chainId, wallet, SIGNATURE_TYPE, wallet.address)
+		// Use funder/userId for proxy wallets (signature type 1)
+		clobClient = new ClobClientModule.ClobClient(
+			host,
+			chainId,
+			wallet,
+			SIGNATURE_TYPE,
+			config.userId
+		)
 		console.log('Initial CLOB client created')
 
 		// Create or derive API credentials (required for authenticated endpoints)
-		let apiCreds: any = null
+		const apiCredsKey = `polymarketApiCreds:${config.userId}`
+		let apiCreds: any = getStoredApiCreds(apiCredsKey)
 		try {
-			console.log('Attempting to create/derive API key...')
-			console.log('Wallet address:', wallet.address)
-			console.log('Config userId:', config.userId)
+			if (!apiCreds) {
+				console.log('Attempting to derive/create API key...')
+				console.log('Wallet address:', wallet.address)
+				console.log('Config userId:', config.userId)
 
-			apiCreds = await clobClient.createOrDeriveApiKey()
+				try {
+					apiCreds = await clobClient.deriveApiKey()
+				} catch (deriveError) {
+					apiCreds = await clobClient.createApiKey()
+				}
 
-			// Validate that we got proper credentials
-			if (!apiCreds || !apiCreds.key || !apiCreds.secret || !apiCreds.passphrase) {
-				throw new Error(
-					'API credentials are incomplete. Received: ' + JSON.stringify(apiCreds)
-				)
+				// Validate that we got proper credentials
+				if (!apiCreds || !apiCreds.key || !apiCreds.secret || !apiCreds.passphrase) {
+					throw new Error(
+						'API credentials are incomplete. Received: ' + JSON.stringify(apiCreds)
+					)
+				}
+
+				storeApiCreds(apiCredsKey, apiCreds)
+				console.log('API credentials created/derived successfully:', {
+					hasKey: !!apiCreds?.key,
+					hasSecret: !!apiCreds?.secret,
+					hasPassphrase: !!apiCreds?.passphrase,
+					keyPrefix: apiCreds?.key?.substring(0, 10) + '...'
+				})
+			} else {
+				console.log('Using cached API credentials from local storage:', {
+					hasKey: !!apiCreds?.key,
+					hasSecret: !!apiCreds?.secret,
+					hasPassphrase: !!apiCreds?.passphrase,
+					keyPrefix: apiCreds?.key?.substring(0, 10) + '...'
+				})
 			}
-
-			console.log('API credentials created/derived successfully:', {
-				hasKey: !!apiCreds?.key,
-				hasSecret: !!apiCreds?.secret,
-				hasPassphrase: !!apiCreds?.passphrase,
-				keyPrefix: apiCreds?.key?.substring(0, 10) + '...'
-			})
 		} catch (apiKeyError: any) {
 			console.error('Failed to create/derive API key:', apiKeyError)
 			console.error('Error details:', {
@@ -141,7 +188,14 @@ Original error: ${apiKeyError?.data?.error || apiKeyError?.message || String(api
 		}
 
 		console.log('Reinitializing client with API credentials...')
-		clobClient = new ClobClientModule.ClobClient(host, chainId, wallet, apiCreds, SIGNATURE_TYPE, wallet.address)
+		clobClient = new ClobClientModule.ClobClient(
+			host,
+			chainId,
+			wallet,
+			apiCreds,
+			SIGNATURE_TYPE,
+			config.userId
+		)
 		console.log('CLOB client initialized with credentials')
 
 		// Test connection by checking server status
