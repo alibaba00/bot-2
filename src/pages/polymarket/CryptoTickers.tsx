@@ -202,7 +202,9 @@ const MarketStateIndicator = ({ type, symbol }: { type: string, symbol: string }
 }
 
 
-const MarketTimer = ({minutes, type, offset = 0}: {minutes: number, type: string, offset?: number}) => {
+// ---------------------------------------------------------------------------- MarketTimer
+export const MarketTimer = ({minutes, type = 'updown-15m', offset = 0}:
+	{minutes: number, type?: string, offset?: number}) => {
 	const timer = useMarketTimer(minutes, offset, () => {
 		console.log('timer expired!')
 		// PolymarketApi.set('tradingActive', false)

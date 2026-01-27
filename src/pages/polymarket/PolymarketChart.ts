@@ -94,7 +94,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		value: 0,
 	}
 
-	const limitTimestamp = new Date('2026-01-26').getTime()	//2026-01-01
+	const limitTimestamp = new Date('2026-01-20').getTime()	//2026-01-01
 
 	for (const market of markets) {
 		if (!market.closed) continue
@@ -113,7 +113,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 
 		stats.total++
 
-		const limit = 1.00025
+		const limit = 1.00035
 		const startPrice = tickerData[0][1]
 		const upPrice = startPrice * limit
 		const downPrice = startPrice / limit
@@ -122,7 +122,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		let item = tickerData.find((e: any) => e[1] >= upPrice)
 		if (item){
 			let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp
-			if (up){
+			if (up && up[1] <= 0.7){
 				stats.up.count++
 				const t = parseNum((item[0] - market.startTimestamp) / 1000)
 				if (market.outcome === 'up'){
@@ -140,7 +140,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		item = tickerData.find((e: any) => e[1] <= downPrice)
 		if (item){
 			let dn = downs.find((e: any) => e[0] >= item[0])		//get down price at current timestamp
-			if (dn){
+			if (dn && dn[1] <= 0.7){
 				stats.dn.count++
 				const t = parseNum((item[0] - market.startTimestamp) / 1000)
 				if (market.outcome === 'down'){
