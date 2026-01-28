@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import PolymarketApi from "./PolymarketApi";
 import type { MarketData } from "@/lib/polymarket/types copy";
+import ClobMarketTicker from "./ClobMarketTicker";
+import CoinbasePriceTicker from "./CoinbasePriceTicker";
 
 
 
@@ -13,15 +15,19 @@ export default function TradingBotPage() {
 		<div className="flex flex-col gap-2 p-4">
 			<h1>Trading Bot</h1>
 			<MarketTimer minutes={15} onExpired={async () => {
-				console.log('timer expired!')
-				const currentSlug = 'btc-updown-15m-' + PolymarketApi.getUTCTimestamp(new Date(), 15).toString()
+				// add 1 minute to the current time to get the next 15-minute timestamp
+				const currentSlug = 'btc-updown-15m-' + PolymarketApi.getUTCTimestamp(Date.now() + 60000, 15, 0).toString()
 				setCurrentMarket(await PolymarketApi.fetchMarketBySlug(currentSlug) as MarketData)
 			}} />
 			{currentMarket && (
+				<>
 				<div>
 					<div>{'Market-Slug: ' + currentMarket.slug}</div>
 					<div>{'Market-Name: ' + currentMarket.question}</div>
 				</div>
+				<ClobMarketTicker market={currentMarket} />
+				<CoinbasePriceTicker symbol={'BTC-USD'} />
+				</>
 			)}
 		</div>
 	)
@@ -66,14 +72,16 @@ const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: ()
 
 		const updateTimer = () => {
 			time --	//decrement time by 1 second
-			if (time <= 0) time = maxTime	//reset time to maxTime if time is 0 or less
+			if (time <= 0) {
+				onExpired?.()	//call onExpired function if time is 0 or less
+				time = maxTime	//reset time to maxTime if time is 0 or less
+			}
 			setTimer({
 				hours: Math.floor(time / 3600),
 				minutes: Math.floor((time % 3600) / 60),
 				seconds: time % 60,
 				timeString: `${Math.floor(time / 3600).toString().padStart(2, '0')}:${Math.floor((time % 3600) / 60).toString().padStart(2, '0')}:${(time % 60).toString().padStart(2, '0')}`
 			})
-			if (time <= 0) onExpired?.()	//call onExpired function if time is 0 or less
 		}
 
 		updateTimer()
