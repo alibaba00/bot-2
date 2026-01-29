@@ -4,18 +4,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type PriceEntry = { price: number; timestamp: number };
 
-export default function ClobMarketTicker({ market }: { market: MarketData }) {
+export type LastTrade = {
+	price: number;
+	size: number;
+	side: "BUY" | "SELL" | undefined;
+	outcome_id: string;
+	outcome_title: string;
+	timestamp: number;
+	transaction_hash?: string;
+}
+
+export default function ClobMarketTicker({ market, onUpdate }:
+	{ market: MarketData, onUpdate?: (lastTrade: LastTrade) => void }) {
 	const [marketPrices, setMarketPrices] = useState<Record<string, PriceEntry>>({});
 	const [lastTradePrices, setLastTradePrices] = useState<
 		Record<
 			string,
-			{
-				price: number;
-				size: number;
-				side: "BUY" | "SELL";
-				timestamp: number;
-				transaction_hash?: string;
-			}
+			LastTrade
 		>
 	>({});
 	const [assetIds, setAssetIds] = useState<string[]>([]);
@@ -32,6 +37,7 @@ export default function ClobMarketTicker({ market }: { market: MarketData }) {
 		onPriceUpdate: (update) => {
 			const currentAssetIds = assetIdsRef.current;
 			if (!currentAssetIds.includes(update.asset_id)) return;
+
 			setMarketPrices((prev) => ({
 				...prev,
 				[update.asset_id]: {
@@ -42,17 +48,23 @@ export default function ClobMarketTicker({ market }: { market: MarketData }) {
 			setError(null);
 		},
 		onLastTradePriceUpdate: (update) => {
-			const currentAssetIds = assetIdsRef.current;
-			if (!currentAssetIds.includes(update.asset_id)) return;
+			const outcome = normalizedOutcomes.find((outcome) => outcome.id === update.asset_id);
+			if (!outcome) return;
+
+			const lastTrade: LastTrade = {
+				price: update.price,
+				size: update.size,
+				side: update.side,
+				outcome_id: update.asset_id,
+				outcome_title: outcome?.title.toLowerCase(),
+				timestamp: update.timestamp,
+				transaction_hash: update.transaction_hash
+			}
+			onUpdate?.(lastTrade)
+
 			setLastTradePrices((prev) => ({
 				...prev,
-				[update.asset_id]: {
-					price: update.price,
-					size: update.size,
-					side: update.side,
-					timestamp: update.timestamp,
-					transaction_hash: update.transaction_hash
-				}
+				[update.asset_id]: lastTrade
 			}));
 			setError(null);
 		},
@@ -65,6 +77,7 @@ export default function ClobMarketTicker({ market }: { market: MarketData }) {
 	const { normalizedOutcomes, marketAssetIds } = useMemo(() => {
 		if (!market) return { normalizedOutcomes: [], marketAssetIds: [] as string[] };
 
+		console.log('------------------------ ClobMarketTicker: useMemo: market changed!', market.slug)
 		const sourceData = (market as any).sourceData ?? market;
 
 		const parseStringArray = (value: unknown): string[] => {
@@ -127,7 +140,7 @@ export default function ClobMarketTicker({ market }: { market: MarketData }) {
 	useEffect(() => {
 		if (!market || normalizedOutcomes.length === 0) return;
 
-		console.log('--- ClobMarketTicker: market changed!', market.slug, normalizedOutcomes)
+		console.log('------------------------ ClobMarketTicker: market changed!', market.slug, normalizedOutcomes)
 		autoReconnectRef.current = status === "connected" || status === "connecting";
 		disconnect();
 

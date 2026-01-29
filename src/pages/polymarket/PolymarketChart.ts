@@ -94,7 +94,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		value: 0,
 	}
 
-	const limitTimestamp = new Date('2026-01-20').getTime()	//2026-01-01
+	const limitTimestamp = new Date('2026-01-28').getTime()	//2026-01-01
 
 	for (const market of markets) {
 		if (!market.closed) continue
@@ -113,7 +113,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 
 		stats.total++
 
-		const limit = 1.00035
+		const limit = 1.00025
 		const startPrice = tickerData[0][1]
 		const upPrice = startPrice * limit
 		const downPrice = startPrice / limit

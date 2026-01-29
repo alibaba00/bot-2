@@ -41,33 +41,46 @@ export function useCLOBMarketWebSocket(
 	} = options
 
 	const wsRef = useRef<CLOBMarketWebSocket | null>(null)
+	const onPriceUpdateRef = useRef(onPriceUpdate)
+	const onLastTradePriceUpdateRef = useRef(onLastTradePriceUpdate)
+	const onErrorRef = useRef(onError)
+	const onConnectRef = useRef(onConnect)
+	const onDisconnectRef = useRef(onDisconnect)
 	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>(
 		'disconnected'
 	)
 	const [lastPriceUpdate, setLastPriceUpdate] = useState<CLOBMarketPriceUpdate | null>(null)
 
 	useEffect(() => {
+		onPriceUpdateRef.current = onPriceUpdate
+		onLastTradePriceUpdateRef.current = onLastTradePriceUpdate
+		onErrorRef.current = onError
+		onConnectRef.current = onConnect
+		onDisconnectRef.current = onDisconnect
+	}, [onPriceUpdate, onLastTradePriceUpdate, onError, onConnect, onDisconnect])
+
+	useEffect(() => {
 		// Create WebSocket instance
 		wsRef.current = new CLOBMarketWebSocket(assetIds, {
 			onPriceUpdate: (update) => {
 				setLastPriceUpdate(update)
-				onPriceUpdate?.(update)
+				onPriceUpdateRef.current?.(update)
 			},
 			onLastTradePriceUpdate: (update) => {
-				onLastTradePriceUpdate?.(update)
+				onLastTradePriceUpdateRef.current?.(update)
 			},
 			onConnect: () => {
 				setStatus('connected')
-				onConnect?.()
+				onConnectRef.current?.()
 			},
 			onDisconnect: () => {
 				setStatus('disconnected')
-				onDisconnect?.()
+				onDisconnectRef.current?.()
 			},
 			onError: (error) => {
 				console.error('CLOB Market WebSocket error:', error)
 				setStatus('disconnected')
-				onError?.(error)
+				onErrorRef.current?.(error)
 			}
 		})
 

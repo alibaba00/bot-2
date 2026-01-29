@@ -72,6 +72,7 @@ export class CLOBMarketWebSocket {
 	private isConnected = false
 	private shouldReconnect = true
 	private assetIds: string[] = [] // Asset IDs (not market addresses!)
+	private lastSubscriptionKey: string | null = null
 
 	constructor(assetIds: string[] = [], callbacks: CLOBMarketCallbacks = {}) {
 		this.assetIds = assetIds
@@ -135,7 +136,7 @@ export class CLOBMarketWebSocket {
 						}
 
 						this.subscribe()
-					}, 100)
+					}, 1000)
 				} else {
 					console.warn('⚠️ No asset IDs available for subscription')
 				}
@@ -274,10 +275,15 @@ export class CLOBMarketWebSocket {
 		}
 
 		const subscriptionMessage = JSON.stringify(subscription)
+		if (this.lastSubscriptionKey === subscriptionMessage) {
+			console.log('⏭️ CLOB Market: Subscription unchanged, skipping duplicate send')
+			return
+		}
 		console.log(`📤 CLOB Market: Sending subscription:`, subscriptionMessage)
 
 		try {
 			this.ws.send(subscriptionMessage)
+			this.lastSubscriptionKey = subscriptionMessage
 			console.log(`✅ CLOB Market: Subscription sent successfully`)
 		} catch (sendError) {
 			console.error(`❌ CLOB Market: Failed to send subscription:`, sendError)
@@ -366,6 +372,7 @@ export class CLOBMarketWebSocket {
 		this.isConnected = false
 		this.isConnecting = false
 		this.reconnectAttempts = 0
+		this.lastSubscriptionKey = null
 
 		if (this.ws) {
 			this.ws.onopen = null

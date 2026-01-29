@@ -6,16 +6,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 type WsStatus = 'disconnected' | 'connecting' | 'connected'
 
-export default function CoinbasePriceTicker({ symbol }: { symbol: string }) {
-	const [price, setPrice] = useState<number | null>(null)
+export default function CoinbasePriceTicker({ symbol, onUpdate }:
+	{ symbol: string, onUpdate?: (timestamp: number, price: number) => void }) {
+	const lastPrice = useRef(null)
 	const [timestamp, setTimestamp] = useState<number | null>(null)
 	const [isActive, setIsActive] = useState(false)
 	const [status, setStatus] = useState<WsStatus>('disconnected')
 	const wsRef = useRef<WebSocket | null>(null)
+	
 
 	const toggleTicker = () => {
 		setIsActive((prev) => !prev)
 	}
+
+
 	useEffect(() => {
 		if (!isActive) {
 			wsRef.current?.close()
@@ -44,10 +48,13 @@ export default function CoinbasePriceTicker({ symbol }: { symbol: string }) {
 				const data = JSON.parse(event.data as string)
 				if (data?.type !== 'ticker' || data.product_id !== symbol || !data.price) return
 				const parsedPrice = Number(data.price)
-				if (!Number.isFinite(parsedPrice)) return
+				if (parsedPrice === lastPrice.current || !Number.isFinite(parsedPrice)) return
+
+				lastPrice.current = parsedPrice
 				const parsedTimestamp = data.time ? Date.parse(data.time) : Date.now()
-				setPrice(parsedPrice)
+				onUpdate?.(parsedTimestamp, parsedPrice)
 				setTimestamp(parsedTimestamp)
+
 			} catch (error) {
 				console.error('Coinbase message error:', error)
 			}
@@ -110,12 +117,12 @@ export default function CoinbasePriceTicker({ symbol }: { symbol: string }) {
 						<span className='text-sm font-medium text-muted-foreground'>Price</span>
 						<span
 							className={`text-2xl font-bold ${
-								status === 'connected' && price !== null
+								status === 'connected' && lastPrice.current !== 0
 									? ''
 									: 'text-muted-foreground opacity-60'
 							}`}
 						>
-							{formatPrice(price)}
+							{formatPrice(lastPrice.current)}
 						</span>
 						{timestamp && (
 							<span className='text-xs text-muted-foreground'>
@@ -125,7 +132,7 @@ export default function CoinbasePriceTicker({ symbol }: { symbol: string }) {
 					</div>
 					<div
 						className={`h-3 w-3 rounded-full ${
-							status === 'connected' && price !== null
+							status === 'connected' && lastPrice.current !== 0
 								? 'bg-green-500 animate-pulse'
 								: 'bg-gray-300'
 						}`}
@@ -135,3 +142,26 @@ export default function CoinbasePriceTicker({ symbol }: { symbol: string }) {
 		</Card>
 	)
 }
+
+/*
+data example:
+{
+    "type": "ticker",
+    "sequence": 120185477402,
+    "product_id": "BTC-USD",
+    "price": "89759.34",
+    "open_24h": "87867.94",
+    "volume_24h": "6798.34997364",
+    "low_24h": "87180.01",
+    "high_24h": "90059.94",
+    "volume_30d": "228496.02885858",
+    "best_bid": "89759.34",
+    "best_bid_size": "0.02936817",
+    "best_ask": "89759.35",
+    "best_ask_size": "0.22734666",
+    "side": "sell",
+    "time": "2026-01-28T12:23:33.989119Z",
+    "trade_id": 944696022,
+    "last_size": "0.00042970"
+}
+*/
