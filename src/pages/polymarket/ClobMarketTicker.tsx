@@ -196,7 +196,7 @@ export default function ClobMarketTicker({ market, onUpdate }:
 	}
 
 	return (
-		<div className="flex flex-col gap-3 rounded-md border border-black/10 dark:border-white/10 p-3">
+		<div className="flex flex-col gap-3 rounded-md border border-black/10 dark:border-white/10 p-3 flex-1 min-w-80">
 			<div className="flex flex-col gap-1">
 				<div className="text-sm font-medium">{market.question}</div>
 				<div className="text-xs text-muted-foreground">{market.slug}</div>

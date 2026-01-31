@@ -9,7 +9,9 @@ import { beep } from "@/lib/utils";
 
 export default function TradingBotPage() {
 	const [currentMarket, setCurrentMarket] = useState<MarketData | null>(null)
+
 	const setup = useRef({
+		currentMarket: null as MarketData | null,
 		baseTimestamp: 0,
 		basePrice: 0,
 		nextTimestamp: Infinity,
@@ -35,7 +37,9 @@ export default function TradingBotPage() {
 		setup.current.baseTimestamp = timestamp * 1000
 		setup.current.basePrice = setup.current.tickerValues.coinbase.price
 		const currentSlug = 'btc-updown-15m-' + timestamp.toString()
-		setCurrentMarket(await PolymarketApi.fetchMarketBySlug(currentSlug) as MarketData)
+
+		setup.current.currentMarket = await PolymarketApi.fetchMarketBySlug(currentSlug) as MarketData
+		setCurrentMarket(setup.current.currentMarket)
 	}
 
 	useEffect(() => {
@@ -78,12 +82,12 @@ export default function TradingBotPage() {
 	// console.log('tickerValues:', tickerValues.current)
 
 	return (
-		<div className="flex flex-col gap-2 p-4">
+		<div className="flex flex-col gap-2 p-4 w-full">
 			<h1>Trading Bot</h1>
 			<MarketTimer minutes={15} onExpired={onExpired} />
 			{currentMarket && (
 				<>
-				<div>
+				<div className='w-full'>
 					<div>{'Market-Slug: ' + currentMarket.slug}</div>
 					<div>{'Market-Name: ' + currentMarket.question}</div>
 					<div>{'Base Timestamp: ' + setup.current.baseTimestamp.toString()}</div>
@@ -96,10 +100,49 @@ export default function TradingBotPage() {
 					 + ' - ts: ' + setup.current.events.down.timestamp.toString()
 					 + ' - price: ' + setup.current.events.down.price.toString()}</div>
 				</div>
-				<ClobMarketTicker market={currentMarket} onUpdate={onLastTradePriceUpdate} />
-				<CoinbasePriceTicker symbol={'BTC-USD'} onUpdate={onCoinbasePriceUpdate} />
+				<div className='flex flex-row gap-2 flex-wrap w-full'>
+					<ClobMarketTicker market={currentMarket} onUpdate={onLastTradePriceUpdate} />
+					<CoinbasePriceTicker symbol={'BTC-USD'} onUpdate={onCoinbasePriceUpdate} />
+				</div>
+				<TradesList market={currentMarket} setup={setup.current} />
 				</>
 			)}
+		</div>
+	)
+}
+
+
+// ---------------------------------------------------------------------------- TradesList
+const TradesList = ({market, setup}: {market: MarketData, setup: any}) => {
+	const [trades, setTrades] = useState<any[]>([1, 2, 3])
+
+	useEffect(() => {
+		console.log('---TradesList init:', market)
+	}, [])
+
+	useEffect(() => {
+		console.log('---TradesList market update:', market)
+	}, [market])
+
+
+	return (
+		<div className='flex flex-col gap-2 w-full flex-1 overflow-y-auto'>
+			{trades.map((trade) => (
+				<TradeItem key={trade.id} trade={trade} setup={setup} />
+			))}
+		</div>
+	)
+}
+
+
+// ---------------------------------------------------------------------------- TradeItem
+const TradeItem = ({trade, setup}: {trade: any, setup: any}) => {
+	return (
+		<div className='flex flex-row gap-2 w-full min-h-10 p-2 bg-gray-100 dark:bg-gray-900 rounded-md'>
+			<div>Trade-Item:</div>
+			<div>{trade.id} - {setup.currentMarket.slug}</div>
+			<div>{trade.price} - {setup.currentMarket.openPrice}</div>
+			<div>{trade.quantity} - {setup.currentMarket.openSize}</div>
 		</div>
 	)
 }
@@ -162,54 +205,6 @@ const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: ()
 
 		updateTimer()
 		const interval: NodeJS.Timeout = setInterval(updateTimer, 1000)	//set interval to 1 second
-
-		return () => {
-			if (interval) clearInterval(interval)
-		}
-	}, [])
-
-	return timer
-}
-
-
-const _useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: () => void) => {
-	const [timer, setTimer] = useState<{hours: number, minutes: number, seconds: number, timeString: string}>({
-		hours: 0,
-		minutes: 0,
-		seconds: 0,
-		timeString: '00:00:00'
-	})
-
-	useEffect(() => {
-		console.log('--- useMarketTimer --- minutes:', minutes, 'offset:', offset)
-		let interval: NodeJS.Timeout | null = null
-		let now = Date.now() + offset * 1000
-		let past = now % (minutes * 60 * 1000)
-		let maxTime = Math.ceil(minutes * 60)
-		let time = maxTime - Math.ceil(past / 1000)
-		if (time <= 0) time += maxTime
-
-		const updateTimer = () => {
-			time --	//decrement time by 1 second
-			if (time <= 0) {
-				onExpired?.()	//call onExpired function if time is 0 or less
-				now = Date.now() + offset * 1000
-				past = now % (minutes * 60 * 1000)	
-				time = maxTime - Math.ceil(past / 1000)
-				if (time <= 0) time += maxTime
-			}
-			setTimer({
-				hours: Math.floor(time / 3600),
-				minutes: Math.floor((time % 3600) / 60),
-				seconds: time % 60,
-				timeString: `${Math.floor(time / 3600).toString().padStart(2, '0')}:${Math.floor((time % 3600) / 60).toString().padStart(2, '0')}:${(time % 60).toString().padStart(2, '0')}`
-			})
-		}
-
-		updateTimer()
-		interval = setInterval(updateTimer, 1000)
-
-		onExpired?.()	//initial call
 
 		return () => {
 			if (interval) clearInterval(interval)

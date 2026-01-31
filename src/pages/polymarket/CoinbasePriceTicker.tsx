@@ -8,7 +8,7 @@ type WsStatus = 'disconnected' | 'connecting' | 'connected'
 
 export default function CoinbasePriceTicker({ symbol, onUpdate }:
 	{ symbol: string, onUpdate?: (timestamp: number, price: number) => void }) {
-	const lastPrice = useRef(null)
+	const lastPrice = useRef<number | null>(null)
 	const [timestamp, setTimestamp] = useState<number | null>(null)
 	const [isActive, setIsActive] = useState(false)
 	const [status, setStatus] = useState<WsStatus>('disconnected')
@@ -92,7 +92,7 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 	}
 
 	return (
-		<Card>
+		<Card className='flex-1 min-w-80'>
 			<CardHeader>
 				<div className='flex items-center justify-between gap-3'>
 					<CardTitle className='text-xl'>Coinbase {symbol}</CardTitle>

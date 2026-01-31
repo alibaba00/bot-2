@@ -70,6 +70,9 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 	const markets = await PolymarketApi.getAllMarkets((symbol !== 'all'? symbol + '-updown-15m' : 'updown-15m'))
 
 	const stats = {
+		source: source,
+		symbol: symbol,
+		limit: 1.001,
 		total: 0,
 		inValid: 0,
 		valid: 0,
@@ -94,68 +97,25 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		value: 0,
 	}
 
-	const limitTimestamp = new Date('2026-01-28').getTime()	//2026-01-01
+	// 1769698800000
+	const limitTimestamp = new Date('2026-01-29 16:00:00').getTime()	//2026-01-01
+	// const limitTimestamp = new Date('2026-01-30').getTime()
 
 	for (const market of markets) {
+
 		if (!market.closed) continue
 		if (market.startTimestamp < limitTimestamp) continue
+
+		stats.total++
+
 		if (!market.chartData?._complete) continue
 		if (!market.chartData?.ticker?.[source]?._complete) continue
 
 		const tickerData = market.chartData.ticker[source]
-
-		const ups = market.chartData.clob.up
-		const downs = market.chartData.clob.down
-		if (!ups.length || !downs.length) continue
-
-		if (ups[0][0] - market.startTimestamp > 3 * 60 * 1000) continue
-		if (market.endTimestamp - downs[downs.length-1][0] > 3 * 60 * 1000) continue
-
-		stats.total++
-
-		const limit = 1.00025
-		const startPrice = tickerData[0][1]
-		const upPrice = startPrice * limit
-		const downPrice = startPrice / limit
-		let pnl = 0
-
-		let item = tickerData.find((e: any) => e[1] >= upPrice)
-		if (item){
-			let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp
-			if (up && up[1] <= 0.7){
-				stats.up.count++
-				const t = parseNum((item[0] - market.startTimestamp) / 1000)
-				if (market.outcome === 'up'){
-					pnl = parseNum((1 / up[1]) - 1)
-					stats.up.won++
-				}else{
-					pnl = -1
-					stats.up.lost++
-				}
-				stats.up.pnl = parseNum(stats.up.pnl + pnl)
-				stats.up.trades.push([market.outcome, t, up[1], pnl, stats.up.pnl])
-			}
-		}
-
-		item = tickerData.find((e: any) => e[1] <= downPrice)
-		if (item){
-			let dn = downs.find((e: any) => e[0] >= item[0])		//get down price at current timestamp
-			if (dn && dn[1] <= 0.7){
-				stats.dn.count++
-				const t = parseNum((item[0] - market.startTimestamp) / 1000)
-				if (market.outcome === 'down'){
-					pnl = parseNum((1 / dn[1]) - 1)
-					stats.dn.won++
-				}else{
-					pnl = -1
-					stats.dn.lost++
-				}
-				stats.dn.pnl = parseNum(stats.dn.pnl + pnl)
-				stats.dn.trades.push([market.outcome, t, dn[1], pnl, stats.dn.pnl])
-			}
-		}
+		parseTickerData(tickerData, market, stats)
 	}
 
+	stats.inValid = stats.total - stats.valid
 	stats.count = stats.up.count + stats.dn.count
 	stats.pnl = parseNum(stats.up.pnl + stats.dn.pnl)
 	stats.up.value = parseNum(100 * stats.up.pnl / stats.up.count)
@@ -163,6 +123,60 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 	stats.value = parseNum(100 * stats.pnl / stats.count)
 
 	console.table(stats)
+}
+
+
+// ---------------------------------------------------------------------------- parseTickerData
+const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
+	const ups = market.chartData.clob.up
+	const downs = market.chartData.clob.down
+	if (!ups.length || !downs.length) return null
+
+	if (ups[0][0] - market.startTimestamp > 3 * 60 * 1000) return null
+	if (market.endTimestamp - downs[downs.length-1][0] > 3 * 60 * 1000) return null
+
+	stats.valid++
+
+	const startPrice = tickerData[0][1]
+	const upPrice = startPrice * stats.limit
+	const downPrice = startPrice / stats.limit
+	let pnl = 0
+
+	let item = tickerData.find((e: any) => e[1] >= upPrice)
+	if (item){
+		let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp
+		if (up && up[1] <= 0.7){
+			stats.up.count++
+			const t = parseNum((item[0] - market.startTimestamp) / 1000)
+			if (market.outcome === 'up'){
+				pnl = parseNum((1 / up[1]) - 1)
+				stats.up.won++
+			}else{
+				pnl = -1
+				stats.up.lost++
+			}
+			stats.up.pnl = parseNum(stats.up.pnl + pnl)
+			stats.up.trades.push([market.outcome, t, up[1], pnl, stats.up.pnl])
+		}
+	}
+
+	item = tickerData.find((e: any) => e[1] <= downPrice)
+	if (item){
+		let dn = downs.find((e: any) => e[0] >= item[0])	//get down price at current timestamp
+		if (dn && dn[1] <= 0.7){
+			stats.dn.count++
+			const t = parseNum((item[0] - market.startTimestamp) / 1000)
+			if (market.outcome === 'down'){
+				pnl = parseNum((1 / dn[1]) - 1)
+				stats.dn.won++
+			}else{
+				pnl = -1
+				stats.dn.lost++
+			}
+			stats.dn.pnl = parseNum(stats.dn.pnl + pnl)
+			stats.dn.trades.push([market.outcome, t, dn[1], pnl, stats.dn.pnl])
+		}
+	}
 }
 
 
