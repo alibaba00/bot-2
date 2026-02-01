@@ -72,7 +72,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 	const stats = {
 		source: source,
 		symbol: symbol,
-		limit: 1.001,
+		limit: 1.0005,
 		total: 0,
 		inValid: 0,
 		valid: 0,
@@ -144,10 +144,14 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 
 	let item = tickerData.find((e: any) => e[1] >= upPrice)
 	if (item){
-		let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp
-		if (up && up[1] <= 0.7){
+		let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp  && e[1] <= 0.6
+		if (up){
 			stats.up.count++
-			const t = parseNum((item[0] - market.startTimestamp) / 1000)
+			const t = parseNum((item[0] - market.startTimestamp) / 1000)	//current market time in seconds
+
+			// let cup = 0
+			// let cdn = 0
+
 			if (market.outcome === 'up'){
 				pnl = parseNum((1 / up[1]) - 1)
 				stats.up.won++
@@ -162,10 +166,10 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 
 	item = tickerData.find((e: any) => e[1] <= downPrice)
 	if (item){
-		let dn = downs.find((e: any) => e[0] >= item[0])	//get down price at current timestamp
-		if (dn && dn[1] <= 0.7){
+		let dn = downs.find((e: any) => e[0] >= item[0])	//get down price at current timestamp  && e[1] <= 0.8
+		if (dn){
 			stats.dn.count++
-			const t = parseNum((item[0] - market.startTimestamp) / 1000)
+			const t = parseNum((item[0] - market.startTimestamp) / 1000)	//current market time in seconds
 			if (market.outcome === 'down'){
 				pnl = parseNum((1 / dn[1]) - 1)
 				stats.dn.won++

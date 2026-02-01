@@ -323,11 +323,11 @@ class PolymarketApi {
 
 
 	// ---------------------------------------------------------------------------- fetchMarketBySlug
-	async fetchMarketBySlug(slug: string, force: boolean = false): Promise<MarketData | null> {
+	async fetchMarketBySlug(slug: string, forceLoading: boolean = false): Promise<MarketData | null> {
 		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
 		// console.log(`Fetching market by slug from Gamma API: ${url}`)
 
-		const cachedMarket = force ? null : await cache.getItem<MarketData>(slug)
+		const cachedMarket = forceLoading ? null : await cache.getItem<MarketData>(slug)
 		if (cachedMarket) return cachedMarket
 
 		const response = await fetch(url, {
@@ -339,6 +339,7 @@ class PolymarketApi {
 		if (!response.ok) return null
 		
 		const data = await response.json() as MarketData
+		// await cache.setItem<MarketData>(slug, data)
 		return data
 	}
 
