@@ -5,6 +5,9 @@ import ClobMarketTicker, { type LastTrade } from "./ClobMarketTicker";
 import CoinbasePriceTicker from "./CoinbasePriceTicker";
 import { beep } from "@/lib/utils";
 import localForage from "localforage";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const TRADE_STORE = localForage.createInstance({
 	name: 'polymarket',
@@ -31,6 +34,7 @@ type Trade = {
 	}
 	state: State
 	createdAt: number
+	isLive: boolean
 	_setTickerPrice?: (timestamp: number, price: number) => void
 	_setMarketPrice?: (timestamp: number, outcome: 'up' | 'down', price: number) => void
 	_setState?: (state: State) => void
@@ -40,8 +44,10 @@ type Trade = {
 // ============================================================================ TradingBotPage
 export default function TradingBotPage() {
 	const [currentMarket, setCurrentMarket] = useState<MarketData | null>(null)
+	const [liveTrading, setLiveTrading] = useState<boolean>(false)
 
 	const setup = useRef({
+		liveTrading: false as boolean,
 		currentMarket: null as MarketData | null,
 		baseTimestamp: 0,
 		basePrice: 0,
@@ -142,7 +148,35 @@ export default function TradingBotPage() {
 	// ---------------------------------------------------------------------------- render
 	return (
 		<div className="flex flex-col gap-2 p-4 w-full">
-			<h1 onClick={() => console.log('setup:', setup.current)}>Trading Bot</h1>
+			<div className="flex flex-row justify-between items-center w-full">
+				<h1 onClick={() => console.log('setup:', setup.current)}>Trading Bot</h1>
+
+				<div className="flex flex-row items-center gap-2">
+					<Label className="text-sm font-medium select-none ml-0">Live Trading</Label>
+					<Switch checked={liveTrading} onCheckedChange={(checked) => {
+						setup.current.liveTrading = checked
+						setup.current.trade && (setup.current.trade.isLive = checked)
+						setLiveTrading(checked)
+					}}	 />
+				</div>
+
+				{/* <div className="flex flex-row items-center gap-2 ml-auto">
+					<span className="text-sm font-medium select-none">Live Trading</span>
+					<label className="relative inline-flex items-center cursor-pointer">
+						<input
+							type="checkbox"
+							className="sr-only peer"
+							checked={liveTrading || false}
+							onChange={e => {
+								const checked = e.target.checked;
+								setLiveTrading(checked);
+							}}
+						/>
+						<div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-green-500 transition-colors duration-200"></div>
+						<div className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 peer-checked:translate-x-5"></div>
+					</label>
+				</div> */}
+			</div>
 			<MarketTimer minutes={15} onExpired={onExpired} />
 			{currentMarket && (
 				<>
@@ -240,7 +274,8 @@ const TradesList = ({market: market, setup}: {market: MarketData, setup: any}) =
 				state: 'pending',
 			},
 			state: 'pending',
-			createdAt: Date.now()
+			createdAt: Date.now(),
+			isLive: setup.liveTrading
 		}
 		return trade
 	}

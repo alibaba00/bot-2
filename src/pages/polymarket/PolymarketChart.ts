@@ -1593,6 +1593,75 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 }
 
 
+// ---------------------------------------------------------------------------- getChartDistributionData
+export const _getChartDistributionData = async (symbol: string, dateString: string | null = null, range: number = 15) => {
+	let data: any[] = []
+	if (dateString) {
+		data = await getChartTickerData(symbol, dateString)
+
+	} else {
+		// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
+		const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'coinbase/' + symbol + '-usd', { withFileTypes: true });
+		console.log('dirList:', dirList)
+	
+		for (const entry of dirList) {
+			if (entry.isDirectory()) continue
+			// const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
+			const dateString = entry.name.split('.')[0]		//yyyy-mm-dd
+			const data_ = await getChartTickerData(symbol, dateString, 'coinbase')
+			console.log(entry.path + '/' + entry.name, data_.length)
+			// data.push(...data_ as any)
+			data = data.concat(data_ as any) || []
+		}
+		data.sort((a, b) => a.timestamp - b.timestamp)
+		console.log('chartData:', data.length)
+	}
+	if (!data.length) return [] as any
+
+	const minuteData = await getChartMinuteData(data)
+	const normalizedData = normalizeData(minuteData)
+
+	const values: number[] = []
+	const ranges: number[] = []
+
+	// only ranges with valid start and end data are considered
+	for (let i = 0; i < normalizedData.length - range; i++) {
+		if (!normalizedData[i].valid || !normalizedData[i + range].valid) continue
+		
+		const firstPrice = normalizedData[i].price			//first valid price of the range
+		const lastPrice = normalizedData[i + range].price	//last valid price of the range
+		const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
+		let value = Math.floor(priceRatio)				//round to the nearest integer
+		if (value > 19 || value < -20) continue
+
+		values.push(priceRatio)					
+		// value = Math.max(Math.min(value, 19), -20)
+		if (!ranges[value]) ranges[value] = 0
+		ranges[value]++
+	}
+
+	values.sort((a, b) => a - b)		//sort all price values
+
+	const len = values.length
+	const pos = [values[0]]		//first value 0%
+	for (let i = 1; i < 10; i++) {
+		pos.push(values[Math.round(i * len / 10)])
+	}
+	pos.push(values[len - 1])	//last value 100%
+
+	console.log('values:', values.length, pos)
+
+	const distribution = Object.entries(ranges).map(([value, count]) => ({
+		value: parseInt(value),
+		count: count,
+	})).sort((a, b) => a.value - b.value)
+
+	// console.log('distribution:', distribution.length, distribution)
+
+	return distribution
+}
+
+
 // ---------------------------------------------------------------------------- normalizeData
 // normalize data to the same time frame
 // fill gaps with the last valid price and set valid to false
