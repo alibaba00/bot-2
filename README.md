@@ -100,3 +100,10 @@ wss://ws.kraken.com
 
 binance:
 wss://ws-api.binance.com:443/ws-api/v3
+
+-----------------
+
+real utc-price tickers ab 2026-01-29 15:00:00
+first: btc-updown-15m-1769698800
+
+timestamp:1769698800

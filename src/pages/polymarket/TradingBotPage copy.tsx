@@ -14,30 +14,21 @@ const TRADE_STORE = localForage.createInstance({
 type State = 'pending' | 'open' | 'active' | 'completed' | 'closed' | 'cancelled'
 type Trade = {
 	slug: string
+	id: number
+	price: number
+	quantity: number
 	basePrice: number
-	up: {
-		price: number
-		limit: number
-		openPrice: number
-		trades: {type: 'open' | 'close', outcome: 'up' | 'down', price: number, timestamp: number}[]
-		state: 'pending' | 'active' | 'completed'
-	}
-	down: {
-		price: number
-		limit: number
-		openPrice: number
-		trades: {type: 'open' | 'close', outcome: 'up' | 'down', price: number, timestamp: number}[]
-		state: 'pending' | 'active' | 'completed'
-	}
+	limit: number
+	openPrice: number
+	outcome: 'up' | 'down'
+	_setTickerPrice?: (timestamp: number, price: number) => void
+	_setMarketPrice?: (timestamp: number, price: number) => void
+	_setState?: (state: State) => void
+	trades: {type: 'open' | 'close', outcome: 'up' | 'down', price: number, timestamp: number}[]
 	state: State
 	createdAt: number
-	_setTickerPrice?: (timestamp: number, price: number) => void
-	_setMarketPrice?: (timestamp: number, outcome: 'up' | 'down', price: number) => void
-	_setState?: (state: State) => void
 }
 
-
-// ============================================================================ TradingBotPage
 export default function TradingBotPage() {
 	const [currentMarket, setCurrentMarket] = useState<MarketData | null>(null)
 
@@ -57,13 +48,12 @@ export default function TradingBotPage() {
 			up: {limit: 1.00025, timestamp: 0, price: 0},
 			down: {limit: 1 / 1.00025, timestamp: 0, price: 0}
 		},
-		trade: null as Trade | null,		//current trade
+		trades: [] as Trade[]
 	})
 
-
-	// ---------------------------------------------------------------------------- initialize on mount
 	useEffect(() => {
-		onInit()		
+		// onExpired()		//initialize the market
+		onInit()
 	}, [])
 
 
@@ -90,59 +80,53 @@ export default function TradingBotPage() {
 
 	// ---------------------------------------------------------------------------- onExpired
 	const onExpired = async () => {
-		const sc = setup.current
-
-		// use coinbase price if it is less than 1 minutes old or 0 if it is older
-		const basePrice = sc.tickerValues.coinbase.timestamp > Date.now() - 1 * 60 * 1000 ?
-			sc.tickerValues.coinbase.price : 0
-
+		const basePrice = setup.current.tickerValues.coinbase.price
 		console.log('----------------------onExpired! basePrice:', basePrice)
+		if (!basePrice) return
 
 		const timestamp = getUTCTimestamp(Date.now() + 10000, 15, 0)	//find next 15-minute timestamp
-		sc.baseTimestamp = timestamp * 1000
-		sc.nextTimestamp = (timestamp + 15 * 60) * 1000
+		setup.current.baseTimestamp = timestamp * 1000
+		setup.current.nextTimestamp = (timestamp + 15 * 60) * 1000
 		const currentSlug = 'btc-updown-15m-' + timestamp.toString()
 
-		sc.basePrice = basePrice
 		await PolymarketApi.store.setItem('lastBasePrice', {slug:currentSlug, price:basePrice, timestamp:timestamp})
+		setup.current.basePrice = basePrice
 
-		if (!basePrice){
-			sc.currentMarket = null
-			setCurrentMarket(null)
-		}else{
-			sc.currentMarket = await PolymarketApi.fetchMarketBySlug(currentSlug, true) as MarketData
-			setCurrentMarket(sc.currentMarket)
-		}
+		setup.current.currentMarket = await PolymarketApi.fetchMarketBySlug(currentSlug, true) as MarketData
+		setCurrentMarket(setup.current.currentMarket)
 	}
 
 
-	// ---------------------------------------------------------------------------- onMarketPriceUpdate
-	const onMarketPriceUpdate = (lastTrade: LastTrade) => {
+	// ---------------------------------------------------------------------------- onLastTradePriceUpdate
+	const onLastTradePriceUpdate = (lastTrade: LastTrade) => {
+		// console.log('onLastTradePriceUpdate:', lastTrade)
 		const values = setup.current.tickerValues.clob[lastTrade.outcome_title]
 		values.price = lastTrade.price
 		values.timestamp = lastTrade.timestamp
+		// console.log('tickerValues:', tickerValues.current)
 
-		const trade = setup.current.trade
-		if (!trade) return
+		setup.current.trades.forEach((trade) => {
+			if (trade.outcome === lastTrade.outcome_title) {
+				trade._setMarketPrice?.(lastTrade.timestamp, lastTrade.price)
+			}
+		})
 
-		trade._setMarketPrice?.(lastTrade.timestamp, lastTrade.outcome_title as 'up' | 'down', lastTrade.price)
-		// trade[lastTrade.outcome_title].price = lastTrade.price
 	}
-
 
 	// ---------------------------------------------------------------------------- onCoinbasePriceUpdate
 	const onCoinbasePriceUpdate = (timestamp: number, price: number) => {
-		setup.current.trade?._setTickerPrice?.(timestamp, price)
+		setup.current.trades.forEach((trade) => {
+			trade._setTickerPrice?.(timestamp, price)
+		})
 
 		const values = setup.current.tickerValues
 		values.coinbase = {timestamp: timestamp, price: price}
 	}
 
-
 	// ---------------------------------------------------------------------------- render
 	return (
 		<div className="flex flex-col gap-2 p-4 w-full">
-			<h1 onClick={() => console.log('setup:', setup.current)}>Trading Bot</h1>
+			<h1>Trading Bot</h1>
 			<MarketTimer minutes={15} onExpired={onExpired} />
 			{currentMarket && (
 				<>
@@ -150,7 +134,7 @@ export default function TradingBotPage() {
 					<div>{'Base Price: ' + setup.current.basePrice.toString()}</div>
 				</div>
 				<div className='flex flex-row gap-2 flex-wrap w-full'>
-					<ClobMarketTicker market={currentMarket} onUpdate={onMarketPriceUpdate} />
+					<ClobMarketTicker market={currentMarket} onUpdate={onLastTradePriceUpdate} />
 					<CoinbasePriceTicker symbol={'BTC-USD'} onUpdate={onCoinbasePriceUpdate} />
 				</div>
 				<TradesList market={currentMarket} setup={setup.current} />
@@ -165,91 +149,61 @@ export default function TradingBotPage() {
 const TradesList = ({market: market, setup}: {market: MarketData, setup: any}) => {
 	const [currentMarket, setCurrentMarket] = useState<MarketData | null>()
 	const [trades, setTrades] = useState<Trade[]>([])
-	const [isLoaded, setIsLoaded] = useState<boolean>(false)
-
 
 	useEffect(() => {
-		console.log('---TradesList init:')
-
-		loadTrades().then((trades) => {
-			trades.forEach((trade) => {
-				if (trade.slug === market.slug) {
-					trade.state = 'pending'
-					setup.trade = trade
-				}else{
-					if (trade.state !== 'closed') {
-						trade.state = 'closed'
-						saveTrade(trade)
-					}
-				}
-			})
-			if (setup.basePrice && !setup.trade){
-				const trade = createTrade()
-				setup.trade = trade
-				trades = [trade, ...trades]
-			}
-			setTrades(trades)
-			setIsLoaded(true)
-		})
-
+		console.log('---TradesList init:', market)
 		return () => {
 			setCurrentMarket(null)
 			setTrades([])
-			setup.trade = null
 		}
 	}, [])
 
 
 	useEffect(() => {
 		if (!market || market === currentMarket) return
-		console.log('---TradesList market update:', market, setup.trade, setup.basePrice)
+		console.log('---TradesList market update:', market)
 		setCurrentMarket(market)
 
-		if (!isLoaded) return
-
-		if (setup.trade && setup.trade.slug !== market.slug) {
-			setup.trade._setState?.('closed')
-			setup.trade = null
-		}
-		if (setup.basePrice && (!setup.trade || setup.trade.slug !== market.slug)){
-			const trade = createTrade()
-			setup.trade = trade
-			setTrades(trades => [trade, ...trades])
+		// close all trades
+		trades.forEach((trade) => {
+			if (trade.state === 'open') {
+				trade._setState?.('closed')
+			}
+		})
+		if (setup.basePrice){
+			addTrade('up')
+			addTrade('down')
 		}
 	}, [market])
 
 
-	// ---------------------------------------------------------------------------- createTrade
-	const createTrade = (): Trade => {
-		console.log('---TradesList createTrade:', market)
-		const trade: Trade = {
-			slug: market.slug,
-			basePrice: setup.basePrice,
-			up: {
+	// ---------------------------------------------------------------------------- addTrade
+	const addTrade = (outcome: 'up' | 'down') => {
+		setTrades(trades => {
+			const trade: Trade = {
+				slug: market.slug,
+				id: trades.length + 1,
 				price: 0,
-				limit: 1.001,
-				openPrice: setup.basePrice * 1.001,
+				quantity: 0,
+				outcome: outcome,
+				basePrice: setup.basePrice,
+				limit: outcome === 'up' ? 1.001 : parseNumber(1 / 1.001),
+				openPrice: outcome === 'up' ? setup.basePrice * 1.001 : setup.basePrice / 1.001,
 				trades: [],
 				state: 'pending',
-			},
-			down: {
-				price: 0,
-				limit: 1 / 1.001,
-				openPrice: setup.basePrice / 1.001,
-				trades: [],
-				state: 'pending',
-			},
-			state: 'pending',
-			createdAt: Date.now()
-		}
-		return trade
+				createdAt: Date.now()
+			}
+			TRADE_STORE.setItem(trade.slug + '_' + outcome, trade)
+			setup.trades.push(trade)
+			return [...trades, trade]
+		})
 	}
 
 
 	return (
 		<div className='flex flex-col gap-2 w-full flex-1 overflow-y-auto'>
 			{trades.map((trade) => (
-				<TradeItem key={trade.slug} trade={trade} />
+				<TradeItem key={trade.id} trade={trade} />
 			))}
 		</div>
 	)
@@ -257,9 +211,10 @@ const TradesList = ({market: market, setup}: {market: MarketData, setup: any}) =
 
 
 // ============================================================================ TradeItem
-const TradeItem = ({trade}: {trade: Trade}) => {
+const TradeItem = ({trade}: {trade: any}) => {
 	const [state, _setState] = useState<string>(trade.state)
 	const [tickerPrice, _setTickerPrice] = useState<number>(0)
+	const [marketPrice, _setMarketPrice] = useState<number>(0)
 
 	useEffect(() => {
 		if (trade.state === 'pending') setState('open')
@@ -274,32 +229,28 @@ const TradeItem = ({trade}: {trade: Trade}) => {
 	const setTickerPrice = (timestamp: number, price: number) => {
 		if (trade.state === 'open'){
 			_setTickerPrice(price)
-			if (trade.up.state === 'pending' && price >= trade.up.openPrice && trade.up.price >= 0.6){
-				trade.up.trades.push({type:'open', outcome:'up', price:trade.up.price, timestamp:timestamp})
-				trade.up.state = 'active'
-				saveTrade(trade)
-				beep()
-			}
-			if (trade.down.state === 'pending' && price <= trade.down.openPrice && trade.down.price <= 0.8){	
-				trade.down.trades.push({type:'open', outcome:'down', price:trade.down.price, timestamp:timestamp})
-				trade.down.state = 'active'
-				saveTrade(trade)
-				beep()
+			if (trade.outcome === 'up'){
+				if (price >= trade.openPrice && marketPrice >= 0.6){
+					trade.trades.push({type:'open', outcome:trade.outcome, price:marketPrice, timestamp:timestamp})
+					setState('active')
+					beep()
+				}
+			}else{
+				if (price <= trade.openPrice && marketPrice <= 0.8){
+					trade.trades.push({type:'open', outcome:trade.outcome, price:marketPrice, timestamp:timestamp})
+					setState('active')
+					beep()
+				}
 			}
 		}
 	}
 
 
 	// ---------------------------------------------------------------------------- setMarketPrice
-	const setMarketPrice = (timestamp: number, outcome: 'up' | 'down', price: number) => {
-		if (outcome === 'up'){
-			trade.up.price = price
-			// trade.up.trades.push({type:'close', outcome:'up', price:marketPrice, timestamp:timestamp})
-			// setState('completed')
-		}else if (outcome === 'down'){
-			trade.down.price = price
-			// trade.down.trades.push({type:'close', outcome:'down', price:marketPrice, timestamp:timestamp})
-			// setState('completed')
+	const setMarketPrice = (timestamp: number, price: number) => {
+		_setMarketPrice(price)
+		if (trade.state === 'active'){
+			// check if trade is completed
 		}
 	}
 
@@ -313,13 +264,15 @@ const TradeItem = ({trade}: {trade: Trade}) => {
 				trade._setTickerPrice = setTickerPrice
 				trade._setMarketPrice = setMarketPrice
 				trade._setState = setState
-				saveTrade(trade)
+				break
+			case 'active':		//market trade is active
+
+				break
+			case 'completed':	//market trade is completed
 				break
 			case 'closed':		//market is closed
 				delete trade._setTickerPrice
 				delete trade._setMarketPrice
-				delete trade._setState
-				saveTrade(trade)
 				break
 		}
 		trade.state = state
@@ -327,32 +280,15 @@ const TradeItem = ({trade}: {trade: Trade}) => {
 	}
 
 	return (
-		<div className={`grid grid-cols-5 gap-2 w-full p-2 bg-gray-100 dark:bg-gray-900 rounded-md text-xs border-l-4`}
-			style={{borderLeftColor: state === 'completed' ? 'green'
-				: state === 'closed' ? 'red'
-				: state === 'active' ? 'yellow'
-				: state === 'open' ? 'orange'
-				: state === 'pending' ? 'gray'
-				: 'black'}}
-			onClick={() => {
-				console.log('TradeItem:', trade)
-			}}
-			>
+		<div className="grid grid-cols-5 gap-2 w-full p-2 bg-gray-100 dark:bg-gray-900 rounded-md text-xs">
 			<div>{trade.slug}</div>
+			<div>{trade.outcome}</div>
 			<div>{state}</div>
+			<div>{trade.limit.toFixed(6)}</div>
+			<div>{trade.openPrice}</div>
 			<div>{trade.basePrice}</div>
 			<div>{tickerPrice}</div>
-			<div></div>
-			<div>UP</div>
-			<div>{trade.up.state}</div>
-			<div>{trade.up.limit.toFixed(6)}</div>
-			<div>{trade.up.openPrice}</div>
-			<div>{trade.up.price}</div>
-			<div>DOWN</div>
-			<div>{trade.down.state}</div>
-			<div>{trade.down.limit.toFixed(6)}</div>
-			<div>{trade.down.openPrice}</div>
-			<div>{trade.down.price}</div>
+			<div>{marketPrice}</div>
 		</div>
 	)
 }
@@ -452,29 +388,4 @@ const getUTCTimestamp = (date: Date | number | null, minutes: number = 15, offse
 // }
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
-}
-
-
-// ---------------------------------------------------------------------------- saveTrade
-const saveTrade = (trade: Trade) => {
-	if (!trade?.slug) return
-
-	trade = {...trade}
-	delete trade._setTickerPrice
-	delete trade._setMarketPrice
-	delete trade._setState
-
-	TRADE_STORE.setItem(trade.slug, trade)
-}
-
-
-// ---------------------------------------------------------------------------- loadTrades
-const loadTrades = async () => {
-	let trades: Trade[] = []
-	const keys = await TRADE_STORE.keys()
-	for (const key of keys) {	
-		const trade = await TRADE_STORE.getItem(key)
-		if (trade) trades.push(trade as Trade)
-	}
-	return trades.sort((a, b) => b.createdAt - a.createdAt)
 }

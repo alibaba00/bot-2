@@ -355,7 +355,7 @@ export default function ChartPage() {
 		})
 		const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
 		const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		const scale = Math.max(Math.abs(minValue), Math.abs(maxValue))
+		const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
 
 		// const firstPrice = chartData.ticker?.binance?.[0]?.[1]
 		// const binanceData = chartData.ticker?.binance?.map((item: any) => {
@@ -415,29 +415,33 @@ export default function ChartPage() {
 	}
 
 
+	// ---------------------------------------------------------------------------- updateChart
 	const updateChart = async () => {
 		const symbol = asset?.value.toLowerCase()
+		console.log('updateChart:', chartType, symbol, selectedMarket?.slug || '')
 		if (!symbol) return
+
+		if (chartType === 'bar'){
+			console.log('updateChart:', symbol, chartType)
+			const data = await PolymarketChart.getChartDistributionData(symbol, null, 15)
+			if (!data.length) return
+
+			setChartOptions({
+				...barChartOptions,
+				series: [{
+					...barChartOptions.series[0],
+					data: data.map((item) => [item.value, item.count])
+				}],
+			})
+			return
+		}
 
 		let chartData = selectedMarket?.data?.chartData
 		if (!chartData) return setChartOptions({})
 
-		console.log('updateChart:', chartType, symbol, selectedMarket)
 		switch (chartType) {
 			case 'line':
 				parseLineData(chartData)
-				break
-
-			case 'bar':
-				console.log('updateChart:', symbol, chartType)
-				const data = await PolymarketChart.getChartDistributionData(symbol, null, 15)	//15
-				setChartOptions({
-					...barChartOptions,
-					series: [{
-						...barChartOptions.series[0],
-						data: data.map((item) => [item.value, item.count])
-					}],
-				})
 				break
 
 			case 'heatmap':
@@ -576,14 +580,16 @@ export default function ChartPage() {
 							Update clob data
 						</Button>
 						
-						<ToggleGroup type='single' defaultValue='line' onValueChange={(e: string) => setChartType(e)}>
+						<ToggleGroup type='single' defaultValue='line' value={chartType}
+							onValueChange={(value: string) => {if (value) setChartType(value)}}>
 							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
 							<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
 							<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
 							<ToggleGroupItem value='scatter' variant='outline'>Scatter</ToggleGroupItem>
 						</ToggleGroup>
 
-						<ToggleGroup type='single' defaultValue='up' onValueChange={(e: string) => setSide(e)}>
+						<ToggleGroup type='single' defaultValue='up' value={side}
+							onValueChange={(value: string) => {if (value) setSide(value)}}>
 							<ToggleGroupItem value='up' variant='outline'>Up</ToggleGroupItem>
 							<ToggleGroupItem value='down' variant='outline'>Down</ToggleGroupItem>
 						</ToggleGroup>
@@ -682,7 +688,7 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 			{markets?.map((market) => (
 				<div key={market.slug} className={`flex flex-row items-center justify-between border-b border-gray-700 cursor-pointer ${selectedMarket?.slug === market.slug ? 'bg-accent' : ''}`}
 				 onClick={() => {
-					console.log('selectedMarket:', market, market.chartData?.ticker?.chainlink?._incomplete)
+					console.log('selectedMarket:', market)
 					onSelectMarket(market)
 				}}>
 					<MarketItem key={market.slug} market={market} />

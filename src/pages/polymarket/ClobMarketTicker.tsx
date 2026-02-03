@@ -77,7 +77,7 @@ export default function ClobMarketTicker({ market, onUpdate }:
 	const { normalizedOutcomes, marketAssetIds } = useMemo(() => {
 		if (!market) return { normalizedOutcomes: [], marketAssetIds: [] as string[] };
 
-		console.log('------------------------ ClobMarketTicker: useMemo: market changed!', market.slug)
+		// console.log('---ClobMarketTicker: useMemo: market changed!', market.slug)
 		const sourceData = (market as any).sourceData ?? market;
 
 		const parseStringArray = (value: unknown): string[] => {
@@ -140,7 +140,7 @@ export default function ClobMarketTicker({ market, onUpdate }:
 	useEffect(() => {
 		if (!market || normalizedOutcomes.length === 0) return;
 
-		console.log('------------------------ ClobMarketTicker: market changed!', market.slug, normalizedOutcomes)
+		// console.log('---ClobMarketTicker: market changed!', market.slug, normalizedOutcomes)
 		autoReconnectRef.current = status === "connected" || status === "connecting";
 		disconnect();
 

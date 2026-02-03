@@ -147,10 +147,16 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 		let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp  && e[1] <= 0.6
 		if (up){
 			stats.up.count++
-			const t = parseNum((item[0] - market.startTimestamp) / 1000)	//current market time in seconds
 
-			// let cup = 0
-			// let cdn = 0
+			// let cup = ups.find((e: any) => e[0] >= up[0] && e[1] >= 0.95)
+			// let cdn = ups.find((e: any) => e[0] >= up[0] && e[1] <= 0.1)
+			// if (cup && (!cdn || cup[0] < cdn[0])){
+			// 	pnl = parseNum((0.95 / cup[1]) - 1)
+			// 	stats.up.won++
+			// }else if (cdn && (!cup || cdn[0] < cup[0])){
+			// 	pnl = parseNum((0.1 / cdn[1]) - 1)
+			// 	stats.up.lost++
+			// }
 
 			if (market.outcome === 'up'){
 				pnl = parseNum((1 / up[1]) - 1)
@@ -159,8 +165,10 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 				pnl = -1
 				stats.up.lost++
 			}
+
 			stats.up.pnl = parseNum(stats.up.pnl + pnl)
-			stats.up.trades.push([market.outcome, t, up[1], pnl, stats.up.pnl])
+			// const t = parseNum((item[0] - market.startTimestamp) / 1000)	//current market time in seconds
+			// stats.up.trades.push([market.outcome, t, up[1], pnl, stats.up.pnl])
 		}
 	}
 
@@ -169,7 +177,17 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 		let dn = downs.find((e: any) => e[0] >= item[0])	//get down price at current timestamp  && e[1] <= 0.8
 		if (dn){
 			stats.dn.count++
-			const t = parseNum((item[0] - market.startTimestamp) / 1000)	//current market time in seconds
+
+			// let cup = downs.find((e: any) => e[0] >= dn[0] && e[1] >= 0.95)
+			// let cdn = downs.find((e: any) => e[0] >= dn[0] && e[1] <= 0.1)
+			// if (cup && (!cdn || cup[0] < cdn[0])){
+			// 	pnl = parseNum((0.95 / cup[1]) - 1)
+			// 	stats.dn.won++
+			// }else if (cdn && (!cup || cdn[0] < cup[0])){
+			// 	pnl = parseNum((0.1 / cdn[1]) - 1)
+			// 	stats.dn.lost++
+			// }
+
 			if (market.outcome === 'down'){
 				pnl = parseNum((1 / dn[1]) - 1)
 				stats.dn.won++
@@ -177,8 +195,10 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 				pnl = -1
 				stats.dn.lost++
 			}
+
 			stats.dn.pnl = parseNum(stats.dn.pnl + pnl)
-			stats.dn.trades.push([market.outcome, t, dn[1], pnl, stats.dn.pnl])
+			// const t = parseNum((item[0] - market.startTimestamp) / 1000)	//current market time in seconds
+			// stats.dn.trades.push([market.outcome, t, dn[1], pnl, stats.dn.pnl])
 		}
 	}
 }
@@ -695,6 +715,7 @@ export const updateClobData = async () => {
 			if (exportCreatedAt >= importCreatedAt) continue
 
 			stat.updatedFiles++
+			console.log('')
 			console.log('update file:', exportFile)
 
 		}else{			//export file not exists
@@ -880,6 +901,7 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 
 	for (const source of Object.keys(tickerDataSources)) {
 		let tickerData: any = await getChartTickerData(market.symbol, dateString, source)
+		if (!tickerData?.length) continue
 
 		// Prevent duplicates from getting into the array based on timestamp and price
 		tickerData = tickerData
@@ -1510,19 +1532,22 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 
 	} else {
 		// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
-		const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'chainlink/' + symbol + 'usd', { withFileTypes: true });
+		const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'coinbase/' + symbol + '-usd', { withFileTypes: true });
 		console.log('dirList:', dirList)
 	
 		for (const entry of dirList) {
 			if (entry.isDirectory()) continue
 			// const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
 			const dateString = entry.name.split('.')[0]		//yyyy-mm-dd
-			const data_ = await getChartTickerData(symbol, dateString, 'chainlink')
-			data.push(...data_ as any)
+			const data_ = await getChartTickerData(symbol, dateString, 'coinbase')
+			console.log(entry.path + '/' + entry.name, data_.length)
+			// data.push(...data_ as any)
+			data = data.concat(data_ as any) || []
 		}
 		data.sort((a, b) => a.timestamp - b.timestamp)
 		console.log('chartData:', data.length)
 	}
+	if (!data.length) return [] as any
 
 	const minuteData = await getChartMinuteData(data)
 	const normalizedData = normalizeData(minuteData)
@@ -1536,21 +1561,24 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 		
 		const firstPrice = normalizedData[i].price			//first valid price of the range
 		const lastPrice = normalizedData[i + range].price	//last valid price of the range
-		const priceRatio = ((lastPrice / firstPrice) - 1) * 1000			//price change ratio in promilles 
+		const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
+		let value = Math.floor(priceRatio)				//round to the nearest integer
+		if (value > 19 || value < -20) continue
+
 		values.push(priceRatio)					
-		const value = Math.floor(priceRatio * 60 / range)	//price change 2000 = 200%
+		// value = Math.max(Math.min(value, 19), -20)
 		if (!ranges[value]) ranges[value] = 0
 		ranges[value]++
 	}
 
-	values.sort((a, b) => a - b)
+	values.sort((a, b) => a - b)		//sort all price values
 
 	const len = values.length
-	const pos = [values[0]]
+	const pos = [values[0]]		//first value 0%
 	for (let i = 1; i < 10; i++) {
 		pos.push(values[Math.round(i * len / 10)])
 	}
-	pos.push(values[len - 1])
+	pos.push(values[len - 1])	//last value 100%
 
 	console.log('values:', values.length, pos)
 
@@ -1558,6 +1586,8 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 		value: parseInt(value),
 		count: count,
 	})).sort((a, b) => a.value - b.value)
+
+	// console.log('distribution:', distribution.length, distribution)
 
 	return distribution
 }
