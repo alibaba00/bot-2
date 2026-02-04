@@ -8,6 +8,7 @@ import * as PolymarketChart from "./PolymarketChart";
 import PolymarketApi from "./PolymarketApi";
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -705,6 +706,7 @@ const MarketItem = ({ market }: { market: any }) => {
 
 	useEffect(() => {
 		PolymarketApi.fetchMarketBySlug(market.slug)
+		// fetchMarketBySlugFromGamma(market.slug)
 		.then((data) => {
 			// console.log('marketData:', marketData)
 			market.data = data

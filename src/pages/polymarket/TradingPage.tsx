@@ -73,8 +73,8 @@ export default function TradingPage() {
 	const handleSetOrder = async () => {
 		console.log('handleSetOrder ...')
 		// Market + YES token from Gamma
-		const conditionId = '0x81cf3f03aa3f2a297485df5855df13364628b07823fd27f71077d88d42233a86';
-		const yesTokenId = '50214305297176962065773245512961547550198516374144624237468290586352509598213';
+		const conditionId = '0x0f26097ce1de840eefd0b64e3a1dc542e2e09320e1f3854dc4592657e33c3cfc';
+		const yesTokenId = '18891856818799422062874545461735956983602641799890124905298658195207910642583';
 		const price = 0.2;		//price per share
 		const size = 10;		//10 shares
 		// const side = Side.BUY;

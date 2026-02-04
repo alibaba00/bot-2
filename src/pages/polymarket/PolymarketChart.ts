@@ -72,11 +72,11 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 	const stats = {
 		source: source,
 		symbol: symbol,
-		limit: 1.0005,
 		total: 0,
 		inValid: 0,
 		valid: 0,
 		up: {
+			limit: 1.001,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -85,6 +85,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 			trades: [] as any[],
 		},
 		dn: {
+			limit: 1.001,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -99,7 +100,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 
 	// 1769698800000
 	const limitTimestamp = new Date('2026-01-29 16:00:00').getTime()	//2026-01-01
-	// const limitTimestamp = new Date('2026-01-30').getTime()
+	// const limitTimestamp = new Date('2026-02-04').getTime()
 
 	for (const market of markets) {
 
@@ -138,68 +139,46 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 	stats.valid++
 
 	const startPrice = tickerData[0][1]
-	const upPrice = startPrice * stats.limit
-	const downPrice = startPrice / stats.limit
+	const upPrice = startPrice * stats.up.limit
+	const downPrice = startPrice / stats.dn.limit
 	let pnl = 0
+	let up: any = null
+	let dn: any = null
 
 	let item = tickerData.find((e: any) => e[1] >= upPrice)
 	if (item){
-		let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp  && e[1] <= 0.6
-		if (up){
-			stats.up.count++
-
-			// let cup = ups.find((e: any) => e[0] >= up[0] && e[1] >= 0.95)
-			// let cdn = ups.find((e: any) => e[0] >= up[0] && e[1] <= 0.1)
-			// if (cup && (!cdn || cup[0] < cdn[0])){
-			// 	pnl = parseNum((0.95 / cup[1]) - 1)
-			// 	stats.up.won++
-			// }else if (cdn && (!cup || cdn[0] < cup[0])){
-			// 	pnl = parseNum((0.1 / cdn[1]) - 1)
-			// 	stats.up.lost++
-			// }
-
-			if (market.outcome === 'up'){
-				pnl = parseNum((1 / up[1]) - 1)
-				stats.up.won++
-			}else{
-				pnl = -1
-				stats.up.lost++
-			}
-
-			stats.up.pnl = parseNum(stats.up.pnl + pnl)
-			// const t = parseNum((item[0] - market.startTimestamp) / 1000)	//current market time in seconds
-			// stats.up.trades.push([market.outcome, t, up[1], pnl, stats.up.pnl])
-		}
+		up = ups.find((e: any) => e[0] >= item[0] && e[1] <= 0.8)	//get up price at current timestamp  && e[1] <= 0.6
 	}
-
 	item = tickerData.find((e: any) => e[1] <= downPrice)
 	if (item){
-		let dn = downs.find((e: any) => e[0] >= item[0])	//get down price at current timestamp  && e[1] <= 0.8
-		if (dn){
-			stats.dn.count++
+		dn = downs.find((e: any) => e[0] >= item[0] && e[1] <= 0.8)	//get down price at current timestamp  && e[1] <= 0.6
+	}
 
-			// let cup = downs.find((e: any) => e[0] >= dn[0] && e[1] >= 0.95)
-			// let cdn = downs.find((e: any) => e[0] >= dn[0] && e[1] <= 0.1)
-			// if (cup && (!cdn || cup[0] < cdn[0])){
-			// 	pnl = parseNum((0.95 / cup[1]) - 1)
-			// 	stats.dn.won++
-			// }else if (cdn && (!cup || cdn[0] < cup[0])){
-			// 	pnl = parseNum((0.1 / cdn[1]) - 1)
-			// 	stats.dn.lost++
-			// }
-
-			if (market.outcome === 'down'){
-				pnl = parseNum((1 / dn[1]) - 1)
-				stats.dn.won++
-			}else{
-				pnl = -1
-				stats.dn.lost++
-			}
-
-			stats.dn.pnl = parseNum(stats.dn.pnl + pnl)
-			// const t = parseNum((item[0] - market.startTimestamp) / 1000)	//current market time in seconds
-			// stats.dn.trades.push([market.outcome, t, dn[1], pnl, stats.dn.pnl])
+	// if (up && !dn?.[0] || (dn?.[0] > up?.[0])){
+	if (up){
+		stats.up.count++
+		if (market.outcome === 'up'){
+			pnl = parseNum((1 / up[1]) - 1)
+			stats.up.won++
+		}else{
+			pnl = -1
+			stats.up.lost++
 		}
+		stats.up.pnl = parseNum(stats.up.pnl + pnl)
+		stats.up.trades.push([market.outcome, up[0], up[1], pnl, stats.up.pnl])
+	}
+	// }else if (dn){
+	if (dn){
+		stats.dn.count++
+		if (market.outcome === 'down'){
+			pnl = parseNum((1 / dn[1]) - 1)
+			stats.dn.won++
+		}else{
+			pnl = -1
+			stats.dn.lost++
+		}
+		stats.dn.pnl = parseNum(stats.dn.pnl + pnl)
+		stats.dn.trades.push([market.outcome, dn[0], dn[1], pnl, stats.dn.pnl])
 	}
 }
 
@@ -1539,6 +1518,10 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 			if (entry.isDirectory()) continue
 			// const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
 			const dateString = entry.name.split('.')[0]		//yyyy-mm-dd
+// const date = new Date(dateString)
+// if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
+// if (date.getTime() < new Date('2026-02-01').getTime()) continue
+
 			const data_ = await getChartTickerData(symbol, dateString, 'coinbase')
 			console.log(entry.path + '/' + entry.name, data_.length)
 			// data.push(...data_ as any)
@@ -1552,43 +1535,32 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 	const minuteData = await getChartMinuteData(data)
 	const normalizedData = normalizeData(minuteData)
 
-	const values: number[] = []
-	const ranges: number[] = []
+	const ranges: any = [] as any
 
 	// only ranges with valid start and end data are considered
-	for (let i = 0; i < normalizedData.length - range; i++) {
-		if (!normalizedData[i].valid || !normalizedData[i + range].valid) continue
-		
-		const firstPrice = normalizedData[i].price			//first valid price of the range
-		const lastPrice = normalizedData[i + range].price	//last valid price of the range
-		const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
-		let value = Math.floor(priceRatio)				//round to the nearest integer
-		if (value > 19 || value < -20) continue
+	for (let t = 1; t <= 15; t++) {
+		ranges[t] = [] as any
+		for (let v = 0; v < 40; v++) ranges[t][v] = 0
+		for (let i = 0; i < normalizedData.length - t; i++) {
+			if (!normalizedData[i].valid || !normalizedData[i + t].valid) continue
+			
+			const firstPrice = normalizedData[i].price		//first valid price of the range
+			const lastPrice = normalizedData[i + t].price	//last valid price of the range
+			const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
+			let value = Math.floor(priceRatio) + 20				//round to the nearest integer (-20 - 19)
+			if (value < 0 || value > 39) continue
 
-		values.push(priceRatio)					
-		// value = Math.max(Math.min(value, 19), -20)
-		if (!ranges[value]) ranges[value] = 0
-		ranges[value]++
+			ranges[t][value]++
+		}
 	}
+	console.log('ranges:', ranges)
 
-	values.sort((a, b) => a - b)		//sort all price values
-
-	const len = values.length
-	const pos = [values[0]]		//first value 0%
-	for (let i = 1; i < 10; i++) {
-		pos.push(values[Math.round(i * len / 10)])
-	}
-	pos.push(values[len - 1])	//last value 100%
-
-	console.log('values:', values.length, pos)
-
-	const distribution = Object.entries(ranges).map(([value, count]) => ({
+	const distribution = Object.entries(ranges[range]).map(([value, count]) => ({
 		value: parseInt(value),
 		count: count,
-	})).sort((a, b) => a.value - b.value)
+	}))//.sort((a, b) => a.value - b.value)
 
 	// console.log('distribution:', distribution.length, distribution)
-
 	return distribution
 }
 
