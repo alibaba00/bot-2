@@ -1,8 +1,10 @@
 import type { MarketData } from "@/lib/polymarket/types copy";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type PriceEntry = { price: number; timestamp: number };
+	type PriceEntry = { price: number; timestamp: number };
+
+const TICKER_FLUSH_MS = 150;
 
 export type LastTrade = {
 	price: number;
@@ -32,23 +34,46 @@ export default function ClobMarketTicker({ market, onUpdate }:
 		assetIdsRef.current = assetIds;
 	}, [assetIds]);
 
+	const pendingLastTradesRef = useRef<Record<string, LastTrade>>({});
+	const pendingPricesRef = useRef<Record<string, PriceEntry>>({});
+	const flushScheduledRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const normalizedOutcomesRef = useRef<Array<{ id: string; title: string; price: number }>>([]);
+
+	const flushPendingUpdates = useCallback(() => {
+		flushScheduledRef.current = null;
+		const trades = pendingLastTradesRef.current;
+		const prices = pendingPricesRef.current;
+		if (Object.keys(trades).length > 0) {
+			pendingLastTradesRef.current = {};
+			setLastTradePrices((prev) => ({ ...prev, ...trades }));
+		}
+		if (Object.keys(prices).length > 0) {
+			pendingPricesRef.current = {};
+			setMarketPrices((prev) => ({ ...prev, ...prices }));
+		}
+		setError(null);
+	}, []);
+
+	const scheduleFlush = useCallback(() => {
+		if (flushScheduledRef.current !== null) return;
+		flushScheduledRef.current = setTimeout(flushPendingUpdates, TICKER_FLUSH_MS);
+	}, [flushPendingUpdates]);
+
 	const { connect, disconnect, updateAssetIds, status } = useCLOBMarketWebSocket({
 		assetIds,
 		onPriceUpdate: (update) => {
 			const currentAssetIds = assetIdsRef.current;
 			if (!currentAssetIds.includes(update.asset_id)) return;
 
-			setMarketPrices((prev) => ({
-				...prev,
-				[update.asset_id]: {
-					price: update.price,
-					timestamp: update.timestamp
-				}
-			}));
-			setError(null);
+			pendingPricesRef.current[update.asset_id] = {
+				price: update.price,
+				timestamp: update.timestamp
+			};
+			scheduleFlush();
 		},
 		onLastTradePriceUpdate: (update) => {
-			const outcome = normalizedOutcomes.find((outcome) => outcome.id === update.asset_id);
+			const outcomes = normalizedOutcomesRef.current;
+			const outcome = outcomes.find((o) => o.id === update.asset_id);
 			if (!outcome) return;
 
 			const lastTrade: LastTrade = {
@@ -56,17 +81,14 @@ export default function ClobMarketTicker({ market, onUpdate }:
 				size: update.size,
 				side: update.side,
 				outcome_id: update.asset_id,
-				outcome_title: outcome?.title.toLowerCase(),
+				outcome_title: outcome?.title?.toLowerCase(),
 				timestamp: update.timestamp,
 				transaction_hash: update.transaction_hash
-			}
-			onUpdate?.(lastTrade)
+			};
+			onUpdate?.(lastTrade);
 
-			setLastTradePrices((prev) => ({
-				...prev,
-				[update.asset_id]: lastTrade
-			}));
-			setError(null);
+			pendingLastTradesRef.current[update.asset_id] = lastTrade;
+			scheduleFlush();
 		},
 		onError: (err) => {
 			setError(err.message || "CLOB Market WebSocket error");
@@ -123,6 +145,8 @@ export default function ClobMarketTicker({ market, onUpdate }:
 		return { normalizedOutcomes: outcomes, marketAssetIds: clobTokenIds };
 	}, [market]);
 
+	normalizedOutcomesRef.current = normalizedOutcomes;
+
 	const canToggle =
 		status === "connected" || (assetIds.length > 0 && status === "disconnected");
 	const handleToggle = () => {
@@ -169,6 +193,15 @@ export default function ClobMarketTicker({ market, onUpdate }:
 			connect();
 		}
 	}, [assetIds, connect, status, updateAssetIds]);
+
+	useEffect(() => {
+		return () => {
+			if (flushScheduledRef.current !== null) {
+				clearTimeout(flushScheduledRef.current);
+				flushScheduledRef.current = null;
+			}
+		};
+	}, []);
 
 	const formattedOutcomes = useMemo(() => {
 		if (!market || normalizedOutcomes.length === 0) return [];

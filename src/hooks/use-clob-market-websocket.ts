@@ -46,6 +46,9 @@ export function useCLOBMarketWebSocket(
 	const onErrorRef = useRef(onError)
 	const onConnectRef = useRef(onConnect)
 	const onDisconnectRef = useRef(onDisconnect)
+	const lastPriceUpdateThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const pendingPriceUpdateRef = useRef<CLOBMarketPriceUpdate | null>(null)
+	const lastStatusRef = useRef<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>(
 		'disconnected'
 	)
@@ -63,8 +66,16 @@ export function useCLOBMarketWebSocket(
 		// Create WebSocket instance
 		wsRef.current = new CLOBMarketWebSocket(assetIds, {
 			onPriceUpdate: (update) => {
-				setLastPriceUpdate(update)
 				onPriceUpdateRef.current?.(update)
+				pendingPriceUpdateRef.current = update
+				// Throttle lastPriceUpdate to avoid re-render storm (max ~2/sec for UI display)
+				if (lastPriceUpdateThrottleRef.current === null) {
+					lastPriceUpdateThrottleRef.current = setTimeout(() => {
+						lastPriceUpdateThrottleRef.current = null
+						const latest = pendingPriceUpdateRef.current
+						if (latest) setLastPriceUpdate(latest)
+					}, 500)
+				}
 			},
 			onLastTradePriceUpdate: (update) => {
 				onLastTradePriceUpdateRef.current?.(update)
@@ -92,6 +103,10 @@ export function useCLOBMarketWebSocket(
 
 		// Cleanup on unmount
 		return () => {
+			if (lastPriceUpdateThrottleRef.current) {
+				clearTimeout(lastPriceUpdateThrottleRef.current)
+				lastPriceUpdateThrottleRef.current = null
+			}
 			if (wsRef.current) {
 				wsRef.current.disconnect()
 				wsRef.current = null
@@ -107,11 +122,15 @@ export function useCLOBMarketWebSocket(
 		}
 	}, [assetIds])
 
-	// Update status periodically
+	// Update status periodically (only setState when status actually changed)
 	useEffect(() => {
 		const interval = setInterval(() => {
 			if (wsRef.current) {
-				setStatus(wsRef.current.getStatus())
+				const next = wsRef.current.getStatus()
+				if (next !== lastStatusRef.current) {
+					lastStatusRef.current = next
+					setStatus(next)
+				}
 			}
 		}, 1000)
 

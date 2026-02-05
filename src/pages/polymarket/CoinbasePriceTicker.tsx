@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 type WsStatus = 'disconnected' | 'connecting' | 'connected'
 
+const COINBASE_TICKER_FLUSH_MS = 120
+
 export default function CoinbasePriceTicker({ symbol, onUpdate }:
 	{ symbol: string, onUpdate?: (timestamp: number, price: number) => void }) {
 	const lastPrice = useRef<number | null>(null)
@@ -13,15 +15,22 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 	const [isActive, setIsActive] = useState(false)
 	const [status, setStatus] = useState<WsStatus>('disconnected')
 	const wsRef = useRef<WebSocket | null>(null)
-	
+	const onUpdateRef = useRef(onUpdate)
+	const throttleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const pendingTimestampRef = useRef<number | null>(null)
+
+	onUpdateRef.current = onUpdate
 
 	const toggleTicker = () => {
 		setIsActive((prev) => !prev)
 	}
 
-
 	useEffect(() => {
 		if (!isActive) {
+			if (throttleRef.current) {
+				clearTimeout(throttleRef.current)
+				throttleRef.current = null
+			}
 			wsRef.current?.close()
 			wsRef.current = null
 			setStatus('disconnected')
@@ -48,13 +57,22 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 				const data = JSON.parse(event.data as string)
 				if (data?.type !== 'ticker' || data.product_id !== symbol || !data.price) return
 				const parsedPrice = Number(data.price)
-				if (parsedPrice === lastPrice.current || !Number.isFinite(parsedPrice)) return
+				if (!Number.isFinite(parsedPrice)) return
+
+				const parsedTimestamp = data.time ? Date.parse(data.time) : Date.now()
+				onUpdateRef.current?.(parsedTimestamp, parsedPrice)
 
 				lastPrice.current = parsedPrice
-				const parsedTimestamp = data.time ? Date.parse(data.time) : Date.now()
-				onUpdate?.(parsedTimestamp, parsedPrice)
-				setTimestamp(parsedTimestamp)
+				pendingTimestampRef.current = parsedTimestamp
 
+				// Throttle setState to avoid re-render storm (max ~8/sec)
+				if (throttleRef.current === null) {
+					throttleRef.current = setTimeout(() => {
+						throttleRef.current = null
+						const ts = pendingTimestampRef.current
+						if (ts !== null) setTimestamp(ts)
+					}, COINBASE_TICKER_FLUSH_MS)
+				}
 			} catch (error) {
 				console.error('Coinbase message error:', error)
 			}
@@ -70,6 +88,10 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 		}
 
 		return () => {
+			if (throttleRef.current) {
+				clearTimeout(throttleRef.current)
+				throttleRef.current = null
+			}
 			ws.close()
 		}
 	}, [isActive, symbol])
