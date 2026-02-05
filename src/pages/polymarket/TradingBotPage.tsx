@@ -1,16 +1,15 @@
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import type { MarketData } from "@/lib/polymarket/types";
+import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
+import { placeOrder } from "@/lib/polymarket/orders";
+import type { MarketData, PlaceOrderParams } from "@/lib/polymarket/types";
 import { beep } from "@/lib/utils";
 import localForage from "localforage";
 import { useEffect, useRef, useState } from "react";
 import ClobMarketTicker, { type LastTrade } from "./ClobMarketTicker";
 import CoinbasePriceTicker from "./CoinbasePriceTicker";
 import PolymarketApi from "./PolymarketApi";
-import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
-import { Button } from "@/components/ui/button";
-import { getOpenOrders, placeOrder, cancelOrder } from "@/lib/polymarket/orders";
-import type { PlaceOrderParams } from "@/lib/polymarket/types";
 
 const TRADE_STORE = localForage.createInstance({
 	name: 'polymarket',
@@ -66,6 +65,7 @@ export default function TradingBotPage() {
 		currentMarket: null as MarketData | null,
 		baseTimestamp: 0,
 		basePrice: 0,
+		priceOffset: 0.02,
 		nextTimestamp: Infinity,
 		tickerValues: {
 			coinbase: {timestamp: 0, price: 0},
@@ -167,7 +167,7 @@ export default function TradingBotPage() {
 	// ---------------------------------------------------------------------------- onTest
 	const onTest = () => {
 		console.log('-----> onTest:')
-		_getOpenOrders()
+		// _getOpenOrders()
 	}
 
 
@@ -186,7 +186,7 @@ export default function TradingBotPage() {
 					<Label className="text-sm font-medium select-none ml-0">Live Trading</Label>
 					<Switch checked={liveTrading} onCheckedChange={(checked) => {
 						setup.current.liveTrading = checked
-						setup.current.trade && (setup.current.trade.isLive = checked)
+						if (setup.current.trade) {setup.current.trade.isLive = checked}
 						setLiveTrading(checked)
 					}}	 />
 				</div>
@@ -352,19 +352,19 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 		if (trade.state === 'open'){
 			if (trade.up.enabled && trade.up.state === 'pending' && price >= trade.up.openPrice && trade.up.price <= 0.8){
 				setTrade(trade, {
-					type:'BUY',
-					outcome:'up',
-					price:trade.up.price,
+					type		:'BUY',
+					outcome		:'up',
+					price		:trade.up.price + setup.priceOffset,
 					timestamp,
-					size:5
+					size		:5
 				})
 			}
 			if (trade.down.enabled && trade.down.state === 'pending' && price <= trade.down.openPrice && trade.down.price <= 0.8){	
 				setTrade(trade, {
 					type		:'BUY',
 					outcome		:'down',
-					price		:trade.down.price,
-					timestamp	:timestamp,
+					price		:trade.down.price + setup.priceOffset,
+					timestamp,
 					size		:10
 				})
 			}
@@ -548,8 +548,8 @@ const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: ()
 // Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
 // date: e.g. 2025-12-10
 const getUTCTimestamp = (date: Date | number | null, minutes: number = 15, offset: number = 0): number => {
-	if (!date) date = new Date()
-	let dateTime = date instanceof Date ? date.getTime() : date
+	if (!date) date = new Date()	
+	const dateTime = date instanceof Date ? date.getTime() : date
 	const dateTimeSeconds = Math.floor(dateTime / 1000) + offset // Convert to seconds
 	const minutesSeconds = minutes * 60 // minutes in seconds
 	// Round down to the nearest minutes interval
@@ -584,7 +584,7 @@ const saveTrade = async (trade: Trade) => {
 
 // ---------------------------------------------------------------------------- loadTrades
 const loadTrades = async () => {
-	let trades: Trade[] = []
+	const trades: Trade[] = []
 	const keys = await TRADE_STORE.keys()
 	for (const key of keys) {	
 		const trade = await TRADE_STORE.getItem(key)
@@ -649,6 +649,7 @@ const closeTrade = (trade: Trade, newBasePrice: number = 0) => {
 // outcome: 'up' | 'down'
 // price: number (price per share)
 // size: number (number of shares)
+/*
 const setOrder = async (trade: Trade, outcome: 'up' | 'down', price: number, size: number) => {
 	if (!trade?.slug) return null
 
@@ -668,8 +669,9 @@ const setOrder = async (trade: Trade, outcome: 'up' | 'down', price: number, siz
 	});
 	console.log(order);
 }
+*/
 
-
+/*
 const _cancelOrder = async () => {
 	const orderId = "0x9b7c28cfbec00b2fd8047a1e8ccfd4966b314e630a3a53c58b699eb5b6bc3e7a"
 	console.log('--- cancelOrder:')
@@ -683,3 +685,4 @@ const _getOpenOrders = async () => {
 	const orders = await getOpenOrders()
 	console.log(orders);
 }
+*/

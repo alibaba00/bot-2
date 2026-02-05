@@ -50,6 +50,7 @@ export default [
 				'warn',
 				{ allowConstantExport: true },
 			],
+			'prefer-const': 'error',
 			'@typescript-eslint/no-explicit-any': 'off',
 			'@typescript-eslint/no-unsafe-assignment': 'off',
 			'@typescript-eslint/no-unsafe-member-access': 'off',

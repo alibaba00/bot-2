@@ -76,7 +76,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		inValid: 0,
 		valid: 0,
 		up: {
-			limit: 1.001,
+			limit: 1.002,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -85,7 +85,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 			trades: [] as any[],
 		},
 		dn: {
-			limit: 1.001,
+			limit: 1.002,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -99,8 +99,8 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 	}
 
 	// 1769698800000
-	const limitTimestamp = new Date('2026-01-29 16:00:00').getTime()	//2026-01-01
-	// const limitTimestamp = new Date('2026-02-04').getTime()
+	// const limitTimestamp = new Date('2026-01-29 16:00:00').getTime()	//2026-01-01
+	const limitTimestamp = new Date('2026-02-04').getTime()
 
 	for (const market of markets) {
 
@@ -204,9 +204,9 @@ export const dataTest = async (symbol: string) => {
 		pnlDn: 0,
 	}
 
-	let count = 0
+	// let count = 0
 	for (const file of dataFiles) {
-		count++
+		// count++
 // if (count > 100) continue
 
 		const market = await getMarket(file.slug)
@@ -230,17 +230,17 @@ export const dataTest = async (symbol: string) => {
 		const startPrice = binance[0][1]
 		const limitPrice = startPrice * 1.0002
 
-		let item = binance.find((e: any) => e[1] >= limitPrice)
+		const item = binance.find((e: any) => e[1] >= limitPrice)
 		if (!item){
 			stats.inValid++
 			continue
 		}
 
-		let up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp
+		const up = ups.find((e: any) => e[0] >= item[0])		//get up price at current timestamp
 		// if (up) up[1] = 0.58
 		// if (up) up = ups.find((e: any) => e[0] > up[0] && e[1] <= up[1] / 0.99)		//limit price
 
-		let down = downs.find((e: any) => e[0] >= item[0])
+		const down = downs.find((e: any) => e[0] >= item[0])
 		if (!up && !down){
 			stats.inValid++
 			continue
@@ -467,8 +467,9 @@ export const getAllMarkets = async (symbol: string | null = null, date: Date | n
 
 		try {
 			dirList = await fsPromises.readdir(currentPath, { withFileTypes: true });
-		} catch (e) {
-			return {};
+		} catch (error) {
+			console.error('Error reading directory:', error)
+			return {}
 		}
 
 		for (const entry of dirList) {
@@ -1009,7 +1010,8 @@ export const getMarketDataFromDate = (symbol: string, date: Date) => {
 // 1765497629467;Up;BUY;0.55;19.581817
 // 1765497629473;Down;SELL;0.45;20
 export const getMarketChartData = async (filePath: string | null = null,
-	 _symbol: string | null = null, _date: string | null = null) => {
+	 // _symbol: string | null = null, _date: string | null = null
+	) => {
 	filePath = filePath || 'A:/DATA/polymarket/markets/btc/2025-12-13/btc-updown-15m-1765584900.log'
 		
 	const fileContent = await fsPromises.readFile(filePath, 'utf8')
@@ -1058,15 +1060,15 @@ export const getChartTickerData = async (symbol: string, dateString: string, sou
 // get chart data by minute. price is average of the minute.
 export const getChartMinuteData = async (data: { timestamp: number, price: number }[]):
 	Promise<{ timestamp: number, price: number }[]> => {
-	let min = 60000
-	let currentMinute = Math.floor(data[0].timestamp / min) * min
+	const min = 60000
+	const currentMinute = Math.floor(data[0].timestamp / min) * min
 	let nextMinute = currentMinute + min
 	let candle = {
 		timestamp: currentMinute,
 		price: 0,
 		count: 0,
 	}
-	let chart = [candle]
+	const chart = [candle]
 	let lastTimestamp = data[0].timestamp
 
 	data.forEach((item) => {
@@ -1518,8 +1520,9 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 			if (entry.isDirectory()) continue
 			// const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
 			const dateString = entry.name.split('.')[0]		//yyyy-mm-dd
-// const date = new Date(dateString)
-// if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
+
+const date = new Date(dateString)
+if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
 // if (date.getTime() < new Date('2026-02-01').getTime()) continue
 
 			const data_ = await getChartTickerData(symbol, dateString, 'coinbase')
@@ -1536,29 +1539,36 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 	const normalizedData = normalizeData(minuteData)
 
 	const ranges: any = [] as any
+	const steps = 40
 
 	// only ranges with valid start and end data are considered
 	for (let t = 1; t <= 15; t++) {
-		ranges[t] = [] as any
-		for (let v = 0; v < 40; v++) ranges[t][v] = 0
+		const r = [] as any
+		r._total = 0
+		for (let v = 0; v < steps; v++) r[v] = 0
 		for (let i = 0; i < normalizedData.length - t; i++) {
 			if (!normalizedData[i].valid || !normalizedData[i + t].valid) continue
 			
 			const firstPrice = normalizedData[i].price		//first valid price of the range
 			const lastPrice = normalizedData[i + t].price	//last valid price of the range
 			const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
-			let value = Math.floor(priceRatio) + 20				//round to the nearest integer (-20 - 19)
-			if (value < 0 || value > 39) continue
+			let value = Math.floor(priceRatio) + steps / 2				//round to the nearest integer (-20 - 19)
+			if (value < 0 || value >= steps) continue
 
-			ranges[t][value]++
+			r[value]++
+			r._total++
 		}
+		r._max = Math.max(...r)
+		ranges[t] = r.map((count: number, index: number) => ({
+			index: index - steps / 2,
+			count: count,
+			value: count / r._max,
+ratio: 0
+		}))
 	}
-	console.log('ranges:', ranges)
+	// console.log('ranges:', ranges)
 
-	const distribution = Object.entries(ranges[range]).map(([value, count]) => ({
-		value: parseInt(value),
-		count: count,
-	}))//.sort((a, b) => a.value - b.value)
+	const distribution = ranges[range]
 
 	// console.log('distribution:', distribution.length, distribution)
 	return distribution

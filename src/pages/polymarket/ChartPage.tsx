@@ -431,7 +431,7 @@ export default function ChartPage() {
 				...barChartOptions,
 				series: [{
 					...barChartOptions.series[0],
-					data: data.map((item) => [item.value, item.count])
+					data: data.map((item) => [item.index, item.count])
 				}],
 			})
 			return
