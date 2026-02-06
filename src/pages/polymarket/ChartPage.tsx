@@ -424,20 +424,20 @@ export default function ChartPage() {
 
 		if (chartType === 'bar'){
 			console.log('updateChart:', symbol, chartType)
-			const data = await PolymarketChart.getChartDistributionData(symbol, null, 15)
-			if (!data.length) return
+			const data = await PolymarketChart.getChartDistributionData(symbol, null)
+			if (!data?.[15].length) return
 
 			setChartOptions({
 				...barChartOptions,
 				series: [{
 					...barChartOptions.series[0],
-					data: data.map((item) => [item.index, item.count])
+					data: data[15].map((item) => [item.index, item.value_s])
 				}],
 			})
 			return
 		}
 
-		let chartData = selectedMarket?.data?.chartData
+		const chartData = selectedMarket?.data?.chartData
 		if (!chartData) return setChartOptions({})
 
 		switch (chartType) {
@@ -446,18 +446,18 @@ export default function ChartPage() {
 				break
 
 			case 'heatmap':
-				if (!chartData.heatmap){
-					const data2 = await PolymarketChart.heatmapData()
-					console.log('data:', data2)
-					chartData.heatmap = data2
-				}
-				setChartOptions({
-					...heatmapChartOptions,
-					series: [{
-						...heatmapChartOptions.series[0],
-						data: chartData.heatmap[asset.value][side].map((item) => [item.col, item.row, item.value]),
-					}],
-				})
+				// if (!chartData.heatmap){
+				// 	const data2 = await PolymarketChart.heatmapData()
+				// 	console.log('data:', data2)
+				// 	chartData.heatmap = data2
+				// }
+				// setChartOptions({
+				// 	...heatmapChartOptions,
+				// 	series: [{
+				// 		...heatmapChartOptions.series[0],
+				// 		data: chartData.heatmap[asset.value][side].map((item) => [item.col, item.row, item.value]),
+				// 	}],
+				// })
 				break
 
 			case 'scatter':
@@ -735,11 +735,18 @@ const MarketItem = ({ market }: { market: any }) => {
 					onClick={e => {
 						e.stopPropagation()
 						PolymarketChart.updateMarketData_clob(market.slug, market.filePath, false)
-					}}
-					>Update</Button>
+						.then(({market: _market, updated}) => {
+							if (updated) {
+								console.log('updated market:', _market)
+								setData(_market)
+								market.data = _market
+							}
+						})
+					}}>Update</Button>
 				<span
 					className={`inline-block w-3 h-3 rounded-full mr-2 ${data?.closed
-						? (data?.chartData?.ticker?.chainlink?.length > 100) ? 'bg-green-500' : 'bg-yellow-500'
+						? (data?.chartData?.ticker?.chainlink?._complete && data?.chartData?.clob?._complete)
+						? 'bg-green-500' : 'bg-yellow-500'
 						: 'bg-red-500'}`}
 				></span>
 			</div>

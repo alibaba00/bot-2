@@ -76,7 +76,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		inValid: 0,
 		valid: 0,
 		up: {
-			limit: 1.002,
+			limit: 1.003,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -85,7 +85,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 			trades: [] as any[],
 		},
 		dn: {
-			limit: 1.002,
+			limit: 1.003,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -100,7 +100,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 
 	// 1769698800000
 	// const limitTimestamp = new Date('2026-01-29 16:00:00').getTime()	//2026-01-01
-	const limitTimestamp = new Date('2026-02-04').getTime()
+	const limitTimestamp = new Date('2026-02-06').getTime()
 
 	for (const market of markets) {
 
@@ -129,15 +129,12 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 
 // ---------------------------------------------------------------------------- parseTickerData
 const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
-	const ups = market.chartData.clob.up
-	const downs = market.chartData.clob.down
-	if (!ups.length || !downs.length) return null
-
-	if (ups[0][0] - market.startTimestamp > 3 * 60 * 1000) return null
-	if (market.endTimestamp - downs[downs.length-1][0] > 3 * 60 * 1000) return null
+	if (!market.chartData?.clob?._complete) return null
 
 	stats.valid++
 
+	const ups = market.chartData.clob.up
+	const downs = market.chartData.clob.down
 	const startPrice = tickerData[0][1]
 	const upPrice = startPrice * stats.up.limit
 	const downPrice = startPrice / stats.dn.limit
@@ -147,11 +144,11 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 
 	let item = tickerData.find((e: any) => e[1] >= upPrice)
 	if (item){
-		up = ups.find((e: any) => e[0] >= item[0] && e[1] <= 0.8)	//get up price at current timestamp  && e[1] <= 0.6
+		up = ups.find((e: any) => e[0] >= item[0] && e[1] <= 0.7)	//get up price at current timestamp  && e[1] <= 0.6
 	}
 	item = tickerData.find((e: any) => e[1] <= downPrice)
 	if (item){
-		dn = downs.find((e: any) => e[0] >= item[0] && e[1] <= 0.8)	//get down price at current timestamp  && e[1] <= 0.6
+		dn = downs.find((e: any) => e[0] >= item[0] && e[1] <= 0.7)	//get down price at current timestamp  && e[1] <= 0.6
 	}
 
 	// if (up && !dn?.[0] || (dn?.[0] > up?.[0])){
@@ -671,7 +668,8 @@ export const updateTickerData = async (type: string = 'binance') => {
 export const updateClobData = async () => {
 	console.log('Updating clob data...')
 
-	const importPath = 'H:/DEV/PY/polymarket/clob_market_ticker/logs/'
+	// const importPath = 'H:/DEV/PY/polymarket/clob_market_ticker/logs/'	//old
+	const importPath = 'H:/DEV/TRADE/POLY/bot-3/logs/clob'	//new
 	const exportPath = 'A:/DATA/polymarket/'
 	const importList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
 
@@ -708,7 +706,6 @@ export const updateClobData = async () => {
 
 	console.log('stat:', stat)
 }
-
 
 
 
@@ -823,7 +820,7 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 			updated = true
 		}
 
-		if (!useCache || !market.chartData?._complete) {		
+		if (!useCache || !market.chartData?._complete) {
 			market.chartData = await getChartData_csv(market, csvPath)
 			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
 			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
@@ -873,6 +870,13 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 			}
 		})
 	}
+	const clob = {up, down, _complete: false}
+	const limit = 3 * 60 * 1000	//3 minutes
+	clob._complete = up.length > 20 && down.length > 20
+		&& up[0][0] - market.startTimestamp < limit
+		&& market.endTimestamp - up[up.length-1][0] < limit
+		&& down[0][0] - market.startTimestamp < limit
+		&& market.endTimestamp - down[down.length-1][0] < limit
 
 	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
 	const firstTimestamp = market.startTimestamp + 5 * 60 * 1000	//5 minutes
@@ -903,7 +907,7 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 	}
 
 	return {
-		clob: {up, down},
+		clob: clob,
 		ticker: tickers
 	} as any
 }
@@ -1506,7 +1510,7 @@ const initData = async () => {
 
 
 // ---------------------------------------------------------------------------- getChartDistributionData
-export const getChartDistributionData = async (symbol: string, dateString: string | null = null, range: number = 15) => {
+export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
 	let data: any[] = []
 	if (dateString) {
 		data = await getChartTickerData(symbol, dateString)
@@ -1522,8 +1526,8 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 			const dateString = entry.name.split('.')[0]		//yyyy-mm-dd
 
 const date = new Date(dateString)
-if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
-// if (date.getTime() < new Date('2026-02-01').getTime()) continue
+// if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
+if (date.getTime() < new Date('2026-02-01').getTime()) continue
 
 			const data_ = await getChartTickerData(symbol, dateString, 'coinbase')
 			console.log(entry.path + '/' + entry.name, data_.length)
@@ -1545,6 +1549,7 @@ if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
 	for (let t = 1; t <= 15; t++) {
 		const r = [] as any
 		r._total = 0
+		r._off = 0
 		for (let v = 0; v < steps; v++) r[v] = 0
 		for (let i = 0; i < normalizedData.length - t; i++) {
 			if (!normalizedData[i].valid || !normalizedData[i + t].valid) continue
@@ -1552,27 +1557,64 @@ if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
 			const firstPrice = normalizedData[i].price		//first valid price of the range
 			const lastPrice = normalizedData[i + t].price	//last valid price of the range
 			const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
-			let value = Math.floor(priceRatio) + steps / 2				//round to the nearest integer (-20 - 19)
+			const value = Math.floor(priceRatio) + steps / 2				//round to the nearest integer (-20 - 19)
+
+			r._total++
+			if (value < 0) r._off++
 			if (value < 0 || value >= steps) continue
 
 			r[value]++
-			r._total++
 		}
+
 		r._max = Math.max(...r)
-		ranges[t] = r.map((count: number, index: number) => ({
-			index: index - steps / 2,
-			count: count,
-			value: count / r._max,
-ratio: 0
-		}))
+
+		ranges[t] = r.map((count: number, index: number) => {
+			const range = {
+				index: index - steps / 2,
+				count: count,
+				value: count / r._max,
+				// ratio: (volume + count / 2) / r._total
+			}
+			// volume += count
+			return range
+		})
+		ranges[t]._total = r._total
+
+		smoothValues(ranges[t], 3)
+
+		let volume = r._off
+		ranges[t].forEach((item: any) => {
+			item.ratio_s = (volume + item.count / 2) / item._total
+			volume += item.count
+		})
 	}
-	// console.log('ranges:', ranges)
+	console.log('ranges:', ranges)
 
-	const distribution = ranges[range]
-
+	// const distribution = ranges[range]
 	// console.log('distribution:', distribution.length, distribution)
-	return distribution
+	// return distribution
+	return ranges
 }
+
+
+// ---------------------------------------------------------------------------- smoothRatios
+// Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
+	const smoothValues = (arr: any[], window: number = 3): void => {
+		for (let i = 0; i < arr.length; i++) {
+			let sum = 0
+			let count = 0
+			// Glättung über das Fenster (z.B. 3er-Mittelwert)
+			for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
+				const idx = i + j
+				if (idx >= 0 && idx < arr.length) {
+					sum += arr[idx].value
+					count++
+				}
+			}
+			arr[i].value_s = sum / count
+		}
+	}
+
 
 
 // ---------------------------------------------------------------------------- getChartDistributionData
