@@ -50,7 +50,8 @@ const heatmapChartOptions = {
 	yAxis: {
 		type: 'category',
 		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
-		data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
+		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
+		data: Array.from({length: 40}, (_, i) => (i - 20).toString()),
 	},
 	visualMap: {
 		min: -1,
@@ -437,6 +438,21 @@ export default function ChartPage() {
 			return
 		}
 
+		if (chartType === 'heatmap'){
+			console.log('updateChart:', symbol, chartType)
+			const data = await PolymarketChart.getChartDistributionData(symbol, null)
+			if (!data?.length) return
+
+			setChartOptions({
+				...heatmapChartOptions,
+				series: [{
+					...heatmapChartOptions.series[0],
+					// data: data.map((item) => [item.index, item.value_s]),
+				}],
+			})
+			return
+		}
+
 		const chartData = selectedMarket?.data?.chartData
 		if (!chartData) return setChartOptions({})
 
@@ -445,7 +461,7 @@ export default function ChartPage() {
 				parseLineData(chartData)
 				break
 
-			case 'heatmap':
+			// case 'heatmap':
 				// if (!chartData.heatmap){
 				// 	const data2 = await PolymarketChart.heatmapData()
 				// 	console.log('data:', data2)
@@ -458,7 +474,7 @@ export default function ChartPage() {
 				// 		data: chartData.heatmap[asset.value][side].map((item) => [item.col, item.row, item.value]),
 				// 	}],
 				// })
-				break
+				// break
 
 			case 'scatter':
 				if (!chartData.scatter){

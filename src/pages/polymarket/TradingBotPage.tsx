@@ -60,12 +60,26 @@ export default function TradingBotPage() {
 	const [liveTrading, setLiveTrading] = useState<boolean>(false)
 
 	const setup = useRef({
-		symbol: 'sol',
+		symbol: 'btc',
 		liveTrading: false as boolean,
 		currentMarket: null as MarketData | null,
 		baseTimestamp: 0,
 		basePrice: 0,
-		priceOffset: 0.02,
+		up : {
+			enabled: true,
+			priceLimit: 0.25,	//ticker price trigger limit in % of base price
+			size: 15,			//buy size in USD
+			buyLimit: 0.7,		//buy limit market price
+			buyOffset: 0.02,	//buy offset to buy limit
+		},
+		down : {
+			enabled: true,
+			priceLimit: 0.25,	//ticker price trigger limit in % of base price
+			size: 15,			//buy size in USD
+			buyLimit: 0.7,		//buy limit market price
+			buyOffset: 0.02,	//buy offset to buy limit
+		},
+		tradeMode: 'none' as 'none' | 'up' | 'down' | 'up-and-down' | 'up-or-down',
 		nextTimestamp: Infinity,
 		tickerValues: {
 			coinbase: {timestamp: 0, price: 0},
@@ -73,10 +87,6 @@ export default function TradingBotPage() {
 				up: {timestamp: 0, price: 0},
 				down: {timestamp: 0, price: 0}
 			}
-		},
-		events: {
-			up: {limit: 1.00025, timestamp: 0, price: 0},
-			down: {limit: 1 / 1.00025, timestamp: 0, price: 0}
 		},
 		trade: null as Trade | null,		//current trade
 		_updateTrade: null as ((type: string, value: any) => void) | null,
@@ -270,6 +280,11 @@ const TradesList = ({market: market, setup}: {market: MarketData, setup: any}) =
 	// ---------------------------------------------------------------------------- createTrade
 	const createTrade = (): Trade => {
 		console.log('---TradesList createTrade:', market)
+		const upLimit = (setup.up.priceLimit / 100) + 1
+		const downLimit = (setup.down.priceLimit / 100) + 1
+		const upOpenPrice = setup.basePrice * upLimit
+		const downOpenPrice = setup.basePrice / downLimit
+
 		const trade: Trade = {
 			slug: market.slug,
 			conditionId: market.conditionId,
@@ -278,21 +293,21 @@ const TradesList = ({market: market, setup}: {market: MarketData, setup: any}) =
 				outcome: 'up',
 				tokenId: market.outcomes.find((outcome) => outcome.title === 'Up')?.id || '',
 				price: 0,
-				limit: 1.001,
-				openPrice: setup.basePrice * 1.001,
+				limit: setup.up.priceLimit,
+				openPrice: upOpenPrice,
 				trades: [],
 				state: 'pending',
-				enabled: false,
+				enabled: setup.up.enabled,
 			},
 			down: {
 				outcome: 'down',
 				tokenId: market.outcomes.find((outcome) => outcome.title === 'Down')?.id || '',
 				price: 0,
-				limit: 1 / 1.001,
-				openPrice: setup.basePrice / 1.001,
+				limit: setup.down.priceLimit,
+				openPrice: downOpenPrice,
 				trades: [],
 				state: 'pending',
-				enabled: true,
+				enabled: setup.down.enabled,
 			},
 			state: 'pending',
 			outcome: null,
@@ -316,7 +331,7 @@ const TradesList = ({market: market, setup}: {market: MarketData, setup: any}) =
 // ============================================================================ TradeItem
 const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 	const [state, _setState] = useState<string>(trade.state)
-	const [tickerPrice, _setTickerPrice] = useState<number>(0)
+	// const [tickerPrice, _setTickerPrice] = useState<number>(0)
 
 	useEffect(() => {
 		if (trade.slug === setup.currentMarket?.slug){
@@ -350,25 +365,27 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 	// ---------------------------------------------------------------------------- setTickerPrice
 	const setTickerPrice = (timestamp: number, price: number) => {
 		if (trade.state === 'open'){
-			if (trade.up.enabled && trade.up.state === 'pending' && price >= trade.up.openPrice && trade.up.price <= 0.8){
+			const up = trade.up
+			const down = trade.down
+			if (up.enabled && up.state === 'pending' && price >= up.openPrice && up.price <= setup.up.buyLimit){
 				setTrade(trade, {
 					type		:'BUY',
 					outcome		:'up',
-					price		:trade.up.price + setup.priceOffset,
+					price		:up.price + setup.buyOffset,
 					timestamp,
-					size		:5
+					size		:setup.up.size,
 				})
 			}
-			if (trade.down.enabled && trade.down.state === 'pending' && price <= trade.down.openPrice && trade.down.price <= 0.8){	
+			if (down.enabled && down.state === 'pending' && price <= down.openPrice && down.price <= setup.down.buyLimit){	
 				setTrade(trade, {
 					type		:'BUY',
 					outcome		:'down',
-					price		:trade.down.price + setup.priceOffset,
+					price		:down.price + setup.buyOffset,
 					timestamp,
-					size		:10
+					size		:setup.down.size,
 				})
 			}
-			_setTickerPrice(price)
+			// _setTickerPrice(price)
 		}
 	}
 
@@ -400,7 +417,7 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 			case 'closed':		//market is closed from TradeList market update
 				delete setup._updateTrade
 				closeTrade(trade, setup.basePrice)
-				_setTickerPrice(0)
+				// _setTickerPrice(0)
 				break
 		}
 		trade.state = state
@@ -423,8 +440,10 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 				<div>{trade.slug}</div>
 				<div>{state + (state === 'closed' && trade.outcome ? ' [' + trade.outcome?.toUpperCase() + ']' : '')}</div>
 				<div>{trade.basePrice}</div>
-				<div>{tickerPrice}</div>
-				<div>{(tickerPrice / trade.basePrice).toFixed(6)}</div>
+				{/* <div>{tickerPrice}</div> */}
+				{/* <div>{(tickerPrice / trade.basePrice).toFixed(6)}</div> */}
+				<div></div>
+				<div></div>
 				<div style={{
 					color: trade.up.state === 'active'
 						? '#00f' // Tailwind blue-500 hex
@@ -435,7 +454,7 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 					UP
 				</div>
 				<TradeState trade={trade} side='up' />
-				<div>{trade.up.openPrice.toFixed(2) + ' (' + parseNumber(trade.up.limit) + ')'}</div>
+				<div>{trade.up.openPrice.toFixed(2) + ' (+' + parseNumber(trade.up.limit) + '%)'}</div>
 				<div>{trade.up.trades[0]?.orderData?.quantity}</div>
 				<div>{trade.up.trades[0]?.price.toFixed(2)}</div>
 				<div style={{
@@ -448,7 +467,7 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 					DOWN
 				</div>
 				<TradeState trade={trade} side='down' />
-				<div>{trade.down.openPrice.toFixed(2) + ' (' + parseNumber(trade.down.limit) + ')'}</div>
+				<div>{trade.down.openPrice.toFixed(2) + ' (-' + parseNumber(trade.down.limit) + '%)'}</div>
 				<div>{trade.down.trades[0]?.orderData?.quantity}</div>
 				<div>{trade.down.trades[0]?.price.toFixed(2)}</div>
 			</div>

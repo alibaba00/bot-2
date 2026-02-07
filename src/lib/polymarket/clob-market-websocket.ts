@@ -60,6 +60,7 @@ export interface CLOBMarketCallbacks {
 
 const CLOB_MARKET_WS_URL = 'wss://ws-subscriptions-clob.polymarket.com/ws/market'
 const PING_INTERVAL = 10000 // 10 seconds
+const RECONNECT_DELAY_MS = 5000 // wie Coinbase: nach Error/Close ~5s neu verbinden
 
 export class CLOBMarketWebSocket {
 	private ws: WebSocket | null = null
@@ -67,12 +68,12 @@ export class CLOBMarketWebSocket {
 	private pingInterval: number | null = null
 	private reconnectAttempts = 0
 	private maxReconnectAttempts = 5
-	private reconnectDelay = 3000
 	private isConnecting = false
 	private isConnected = false
 	private shouldReconnect = true
 	private assetIds: string[] = [] // Asset IDs (not market addresses!)
 	private lastSubscriptionKey: string | null = null
+	private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null
 
 	constructor(assetIds: string[] = [], callbacks: CLOBMarketCallbacks = {}) {
 		this.assetIds = assetIds
@@ -209,6 +210,8 @@ export class CLOBMarketWebSocket {
 						: 'CLOB Market WebSocket connection error'
 
 				this.callbacks.onError?.(new Error(errorMessage))
+				// Verbindung schließen → onclose übernimmt Reconnect nach RECONNECT_DELAY_MS
+				this.ws?.close()
 			}
 
 			this.ws.onclose = (event) => {
@@ -220,23 +223,23 @@ export class CLOBMarketWebSocket {
 
 				this.isConnecting = false
 				this.isConnected = false
+				this.ws = null
 				this.stopPing()
 
 				this.callbacks.onDisconnect?.()
 
-				// Auto-reconnect if enabled
+				// Auto-reconnect nach festem Delay (wie Coinbase), solange gewünscht
 				if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
 					this.reconnectAttempts++
-					const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 3)
-
-					setTimeout(() => {
+					this.reconnectTimeoutId = setTimeout(() => {
+						this.reconnectTimeoutId = null
 						if (this.shouldReconnect) {
 							console.log(
 								`🔄 CLOB Market: Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
 							)
 							this.connect()
 						}
-					}, delay)
+					}, RECONNECT_DELAY_MS)
 				} else if (!this.shouldReconnect) {
 					console.log('⏸️ CLOB Market: Auto-reconnect disabled')
 				} else {
@@ -366,6 +369,10 @@ export class CLOBMarketWebSocket {
 		console.log('🛑 CLOB Market: Disconnecting WebSocket...')
 
 		this.shouldReconnect = false
+		if (this.reconnectTimeoutId !== null) {
+			clearTimeout(this.reconnectTimeoutId)
+			this.reconnectTimeoutId = null
+		}
 
 		this.stopPing()
 

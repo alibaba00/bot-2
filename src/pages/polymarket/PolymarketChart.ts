@@ -76,7 +76,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		inValid: 0,
 		valid: 0,
 		up: {
-			limit: 1.003,
+			limit: 1.002,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -85,7 +85,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 			trades: [] as any[],
 		},
 		dn: {
-			limit: 1.003,
+			limit: 1.002,
 			count: 0,
 			won: 0,
 			lost: 0,

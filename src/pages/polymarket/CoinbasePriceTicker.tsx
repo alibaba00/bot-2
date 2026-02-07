@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-type WsStatus = 'disconnected' | 'connecting' | 'connected'
+type WsStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
-const COINBASE_TICKER_FLUSH_MS = 120
+const COINBASE_TICKER_FLUSH_MS = 250
+const COINBASE_RECONNECT_DELAY_MS = 5000
 
 export default function CoinbasePriceTicker({ symbol, onUpdate }:
 	{ symbol: string, onUpdate?: (timestamp: number, price: number) => void }) {
@@ -14,12 +15,16 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 	const [timestamp, setTimestamp] = useState<number | null>(null)
 	const [isActive, setIsActive] = useState(false)
 	const [status, setStatus] = useState<WsStatus>('disconnected')
+	const [reconnectTrigger, setReconnectTrigger] = useState(0)
 	const wsRef = useRef<WebSocket | null>(null)
 	const onUpdateRef = useRef(onUpdate)
 	const throttleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const pendingTimestampRef = useRef<number | null>(null)
+	const isActiveRef = useRef(isActive)
+	const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	onUpdateRef.current = onUpdate
+	isActiveRef.current = isActive
 
 	const toggleTicker = () => {
 		setIsActive((prev) => !prev)
@@ -27,6 +32,10 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 
 	useEffect(() => {
 		if (!isActive) {
+			if (reconnectTimeoutRef.current) {
+				clearTimeout(reconnectTimeoutRef.current)
+				reconnectTimeoutRef.current = null
+			}
 			if (throttleRef.current) {
 				clearTimeout(throttleRef.current)
 				throttleRef.current = null
@@ -78,9 +87,21 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 			}
 		}
 
+		const scheduleReconnect = () => {
+			if (reconnectTimeoutRef.current) return
+			reconnectTimeoutRef.current = setTimeout(() => {
+				reconnectTimeoutRef.current = null
+				if (isActiveRef.current) {
+					setReconnectTrigger((t) => t + 1)
+				}
+			}, COINBASE_RECONNECT_DELAY_MS)
+		}
+
 		ws.onerror = (error) => {
 			console.error('Coinbase WebSocket error:', error)
-			setStatus('disconnected')
+			setStatus('reconnecting')
+			ws.close()
+			scheduleReconnect()
 		}
 
 		ws.onclose = () => {
@@ -88,13 +109,18 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 		}
 
 		return () => {
+			if (reconnectTimeoutRef.current) {
+				clearTimeout(reconnectTimeoutRef.current)
+				reconnectTimeoutRef.current = null
+			}
 			if (throttleRef.current) {
 				clearTimeout(throttleRef.current)
 				throttleRef.current = null
 			}
 			ws.close()
+			wsRef.current = null
 		}
-	}, [isActive, symbol])
+	}, [isActive, symbol, reconnectTrigger])
 
 	const formatPrice = (value: number | null): string => {
 		if (value === null) return '—'
@@ -106,11 +132,12 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 
 	const formatTimestamp = (value: number | null): string => {
 		if (!value) return ''
-		return new Date(value).toLocaleTimeString('en-US', {
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit'
-		})
+		return new Date(value).toLocaleTimeString()
+		// return new Date(value).toLocaleTimeString('en-US', {
+		// 	hour: '2-digit',
+		// 	minute: '2-digit',
+		// 	second: '2-digit'
+		// })
 	}
 
 	return (
@@ -126,7 +153,11 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 					>
 						<div
 							className={`h-2 w-2 rounded-full ${
-								status === 'connected' ? 'bg-green-500' : 'bg-gray-400'
+								status === 'connected'
+									? 'bg-green-500'
+									: status === 'reconnecting'
+										? 'bg-yellow-500'
+										: 'bg-gray-400'
 							}`}
 						/>
 						{isActive ? 'Stop Coinbase' : 'Start Coinbase'}
@@ -156,7 +187,9 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 						className={`h-3 w-3 rounded-full ${
 							status === 'connected' && lastPrice.current !== 0
 								? 'bg-green-500 animate-pulse'
-								: 'bg-gray-300'
+								: status === 'reconnecting'
+									? 'bg-yellow-500 animate-pulse'
+									: 'bg-gray-400'
 						}`}
 					/>
 				</div>
