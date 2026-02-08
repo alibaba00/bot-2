@@ -8,7 +8,6 @@ import * as PolymarketChart from "./PolymarketChart";
 import PolymarketApi from "./PolymarketApi";
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -327,7 +326,7 @@ export default function ChartPage() {
 	const [marketType, setMarketType] = useState('all')
 	const [side, setSide] = useState('up')
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
-	const isLogging = PolymarketApi.use('loggingActive')
+	// const isLogging = PolymarketApi.use('loggingActive')
 
 
 	const parseLineData = (chartData: any) => {
@@ -426,13 +425,13 @@ export default function ChartPage() {
 		if (chartType === 'bar'){
 			console.log('updateChart:', symbol, chartType)
 			const data = await PolymarketChart.getChartDistributionData(symbol, null)
-			if (!data?.[15].length) return
+			if (!data?.[14].length) return
 
 			setChartOptions({
 				...barChartOptions,
 				series: [{
 					...barChartOptions.series[0],
-					data: data[15].map((item) => [item.index, item.value_s])
+					data: data[0].map((item) => [item.index, item.value_s])
 				}],
 			})
 			return
@@ -579,11 +578,11 @@ export default function ChartPage() {
 				<div className='h-full w-full flex flex-col gap-4 p-4'>
 					<div className='flex flex-row items-center justify-center gap-4'>
 						<Label className='text-sm text-muted-foreground ml-4'>Logging</Label>
-						<Switch
+						{/* <Switch
 							checked={isLogging}
 							onCheckedChange={() => PolymarketApi.set('loggingActive', !isLogging)}
 							className='ml-0'
-						/>
+						/> */}
 
 						<Button onClick={() => PolymarketChart.updateLogfiles()}>
 							Update logfiles

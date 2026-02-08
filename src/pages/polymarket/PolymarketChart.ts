@@ -67,7 +67,9 @@ console.log('update:', filePath)
 export const dataTest_2 = async (symbol: string, source: string = 'coinbase') => {
 	console.log('dataTest_2 running', symbol, '...')
 
-	const markets = await PolymarketApi.getAllMarkets((symbol !== 'all'? symbol + '-updown-15m' : 'updown-15m'))
+	const _symbol = symbol !== 'all'? symbol + '-updown-15m' : 'updown-15m'
+	const markets = await PolymarketApi.getAllMarkets(_symbol, new Date('2026-02-07').getTime())
+	if (!markets.length) return
 
 	const stats = {
 		source: source,
@@ -77,6 +79,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		valid: 0,
 		up: {
 			limit: 1.002,
+			priceLimit: 0.7,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -86,6 +89,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		},
 		dn: {
 			limit: 1.002,
+			priceLimit: 0.7,
 			count: 0,
 			won: 0,
 			lost: 0,
@@ -100,17 +104,18 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 
 	// 1769698800000
 	// const limitTimestamp = new Date('2026-01-29 16:00:00').getTime()	//2026-01-01
-	const limitTimestamp = new Date('2026-02-06').getTime()
+	// const limitTimestamp = new Date('2026-02-07').getTime()
+	// console.log('limitTimestamp:', limitTimestamp, new Date(limitTimestamp).toISOString())
 
 	for (const market of markets) {
 
-		if (!market.closed) continue
-		if (market.startTimestamp < limitTimestamp) continue
+		// if (!market.closed) continue
+		// if (market.startTimestamp < limitTimestamp) continue
 
-		stats.total++
+		// stats.total++
 
-		if (!market.chartData?._complete) continue
-		if (!market.chartData?.ticker?.[source]?._complete) continue
+		// if (!market.chartData?._complete) continue
+		// if (!market.chartData?.ticker?.[source]?._complete) continue
 
 		const tickerData = market.chartData.ticker[source]
 		parseTickerData(tickerData, market, stats)
@@ -131,7 +136,7 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 	if (!market.chartData?.clob?._complete) return null
 
-	stats.valid++
+	stats.total++
 
 	const ups = market.chartData.clob.up
 	const downs = market.chartData.clob.down
@@ -144,15 +149,16 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 
 	let item = tickerData.find((e: any) => e[1] >= upPrice)
 	if (item){
-		up = ups.find((e: any) => e[0] >= item[0] && e[1] <= 0.7)	//get up price at current timestamp  && e[1] <= 0.6
+		up = ups.find((e: any) => e[0] >= item[0] && e[1] <= stats.up.priceLimit)	//get up price at current timestamp  && e[1] <= 0.6
 	}
 	item = tickerData.find((e: any) => e[1] <= downPrice)
 	if (item){
-		dn = downs.find((e: any) => e[0] >= item[0] && e[1] <= 0.7)	//get down price at current timestamp  && e[1] <= 0.6
+		dn = downs.find((e: any) => e[0] >= item[0] && e[1] <= stats.dn.priceLimit)	//get down price at current timestamp  && e[1] <= 0.6
 	}
 
 	// if (up && !dn?.[0] || (dn?.[0] > up?.[0])){
 	if (up){
+		stats.valid++
 		stats.up.count++
 		if (market.outcome === 'up'){
 			pnl = parseNum((1 / up[1]) - 1)
@@ -166,6 +172,7 @@ const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 	}
 	// }else if (dn){
 	if (dn){
+		stats.valid++
 		stats.dn.count++
 		if (market.outcome === 'down'){
 			pnl = parseNum((1 / dn[1]) - 1)
@@ -1546,53 +1553,42 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 	const steps = 40
 
 	// only ranges with valid start and end data are considered
-	for (let t = 1; t <= 15; t++) {
+	for (let t = 0; t < 15; t++) {
 		const r = [] as any
-		r._total = 0
-		r._off = 0
+		let total = 0
+		let off = 0
 		for (let v = 0; v < steps; v++) r[v] = 0
-		for (let i = 0; i < normalizedData.length - t; i++) {
-			if (!normalizedData[i].valid || !normalizedData[i + t].valid) continue
+
+		for (let i = 0; i < normalizedData.length + t - 15; i++) {
+			if (!normalizedData[i].valid || !normalizedData[i + 15 - t].valid) continue
 			
 			const firstPrice = normalizedData[i].price		//first valid price of the range
-			const lastPrice = normalizedData[i + t].price	//last valid price of the range
+			const lastPrice = normalizedData[i + 15 - t].price	//last valid price of the range
 			const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
 			const value = Math.floor(priceRatio) + steps / 2				//round to the nearest integer (-20 - 19)
 
-			r._total++
-			if (value < 0) r._off++
+			total++
+			if (value < 0) off++
 			if (value < 0 || value >= steps) continue
 
 			r[value]++
 		}
 
-		r._max = Math.max(...r)
-
-		ranges[t] = r.map((count: number, index: number) => {
-			const range = {
-				index: index - steps / 2,
-				count: count,
-				value: count / r._max,
-				// ratio: (volume + count / 2) / r._total
-			}
-			// volume += count
-			return range
-		})
-		ranges[t]._total = r._total
+		const max = Math.max(...r)
+		ranges[t] = r.map((count: number, index: number) => (
+			{index: index - steps / 2, count: count, value: count / max})
+		)
+		ranges[t]._total = total
 
 		smoothValues(ranges[t], 3)
 
-		let volume = r._off
+		let volume = off
 		ranges[t].forEach((item: any) => {
-			item.ratio_s = (volume + item.count / 2) / item._total
+			item.ratio = (volume + item.count / 2) / total
 			volume += item.count
 		})
 	}
-	console.log('ranges:', ranges)
-
-	// const distribution = ranges[range]
-	// console.log('distribution:', distribution.length, distribution)
-	// return distribution
+	// console.log('ranges:', ranges)
 	return ranges
 }
 
@@ -1655,7 +1651,7 @@ export const _getChartDistributionData = async (symbol: string, dateString: stri
 		const firstPrice = normalizedData[i].price			//first valid price of the range
 		const lastPrice = normalizedData[i + range].price	//last valid price of the range
 		const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
-		let value = Math.floor(priceRatio)				//round to the nearest integer
+		const value = Math.floor(priceRatio)				//round to the nearest integer
 		if (value > 19 || value < -20) continue
 
 		values.push(priceRatio)					

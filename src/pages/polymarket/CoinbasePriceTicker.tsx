@@ -99,13 +99,18 @@ export default function CoinbasePriceTicker({ symbol, onUpdate }:
 
 		ws.onerror = (error) => {
 			console.error('Coinbase WebSocket error:', error)
-			setStatus('reconnecting')
+			// setStatus('reconnecting')
 			ws.close()
-			scheduleReconnect()
+			// scheduleReconnect()
 		}
 
 		ws.onclose = () => {
 			setStatus('disconnected')
+			if (isActiveRef.current) {
+				console.log('!!!!!!!!!!!!!!!!!! Coinbase WebSocket disconnected, reconnecting ...')
+				setStatus('reconnecting')
+				scheduleReconnect()
+			}
 		}
 
 		return () => {

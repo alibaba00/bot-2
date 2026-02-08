@@ -43,6 +43,7 @@ type Trade = {
 	slug: string
 	conditionId: string
 	basePrice: number
+	tickerPrice: number
 	up: TradeSide
 	down: TradeSide
 	state: State
@@ -67,14 +68,14 @@ export default function TradingBotPage() {
 		basePrice: 0,
 		up : {
 			enabled: true,
-			priceLimit: 0.25,	//ticker price trigger limit in % of base price
+			priceLimit: 0.2,	//ticker price trigger limit in % of base price
 			size: 15,			//buy size in USD
 			buyLimit: 0.7,		//buy limit market price
 			buyOffset: 0.02,	//buy offset to buy limit
 		},
 		down : {
 			enabled: true,
-			priceLimit: 0.25,	//ticker price trigger limit in % of base price
+			priceLimit: 0.2,	//ticker price trigger limit in % of base price
 			size: 15,			//buy size in USD
 			buyLimit: 0.7,		//buy limit market price
 			buyOffset: 0.02,	//buy offset to buy limit
@@ -289,6 +290,7 @@ const TradesList = ({market: market, setup}: {market: MarketData, setup: any}) =
 			slug: market.slug,
 			conditionId: market.conditionId,
 			basePrice: setup.basePrice,
+			tickerPrice: 0,
 			up: {
 				outcome: 'up',
 				tokenId: market.outcomes.find((outcome) => outcome.title === 'Up')?.id || '',
@@ -364,28 +366,10 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 
 	// ---------------------------------------------------------------------------- setTickerPrice
 	const setTickerPrice = (timestamp: number, price: number) => {
+		trade.tickerPrice = price
 		if (trade.state === 'open'){
-			const up = trade.up
-			const down = trade.down
-			if (up.enabled && up.state === 'pending' && price >= up.openPrice && up.price <= setup.up.buyLimit){
-				setTrade(trade, {
-					type		:'BUY',
-					outcome		:'up',
-					price		:up.price + setup.buyOffset,
-					timestamp,
-					size		:setup.up.size,
-				})
-			}
-			if (down.enabled && down.state === 'pending' && price <= down.openPrice && down.price <= setup.down.buyLimit){	
-				setTrade(trade, {
-					type		:'BUY',
-					outcome		:'down',
-					price		:down.price + setup.buyOffset,
-					timestamp,
-					size		:setup.down.size,
-				})
-			}
-			// _setTickerPrice(price)
+			checkTrade('up', timestamp)
+			checkTrade('down', timestamp)
 		}
 	}
 
@@ -394,13 +378,32 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 	const setMarketPrice = (timestamp: number, outcome: 'up' | 'down', price: number) => {
 		if (outcome === 'up'){
 			trade.up.price = price
-			// trade.up.trades.push({type:'close', outcome:'up', price:marketPrice, timestamp:timestamp})
-			// setState('completed')
+			if (trade.state === 'open') checkTrade('up', timestamp)
 		}else if (outcome === 'down'){
 			trade.down.price = price
-			// trade.down.trades.push({type:'close', outcome:'down', price:marketPrice, timestamp:timestamp})
-			// setState('completed')
+			if (trade.state === 'open') checkTrade('down', timestamp)
 		}
+	}
+
+
+	// ---------------------------------------------------------------------------- checkTrade
+	const checkTrade = (side: 'up' | 'down', timestamp: number) => {
+		if (trade.state !== 'open') return
+
+		const tradeSide = trade[side as 'up' | 'down']
+		if (!tradeSide.enabled) return
+		if (tradeSide.state !== 'pending') return
+		if (side === 'up' ? trade.tickerPrice < tradeSide.openPrice : trade.tickerPrice > tradeSide.openPrice) return
+		if (tradeSide.price > setup[side].buyLimit) return
+
+		setTrade(trade, {
+			type		:'BUY',
+			outcome		:side,
+			price		:tradeSide.price + setup[side].buyOffset,
+			timestamp,
+			size		:setup[side].size,
+		})
+		setState('active')
 	}
 
 
@@ -446,7 +449,7 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 				<div></div>
 				<div style={{
 					color: trade.up.state === 'active'
-						? '#00f' // Tailwind blue-500 hex
+						? 'orange' // Tailwind blue-500 hex
 						: trade.up.state === 'completed' || trade.up.state === 'cancelled'
 							? '#3c3' // Tailwind green-400 hex
 							: '#999' // Tailwind gray-500 hex
@@ -454,12 +457,12 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 					UP
 				</div>
 				<TradeState trade={trade} side='up' />
-				<div>{trade.up.openPrice.toFixed(2) + ' (+' + parseNumber(trade.up.limit) + '%)'}</div>
+				<div>{trade.up.openPrice.toFixed(2) + ' (+' + parseNumber(trade.up.limit) + '% / ' + setup.up.buyLimit.toFixed(2) + ')'}</div>
 				<div>{trade.up.trades[0]?.orderData?.quantity}</div>
 				<div>{trade.up.trades[0]?.price.toFixed(2)}</div>
 				<div style={{
 					color: trade.down.state === 'active'
-						? '#00f' // Tailwind blue-500 hex
+						? 'orange' // Tailwind blue-500 hex
 						: trade.down.state === 'completed'
 							? '#3c3' // Tailwind green-400 hex
 							: '#999' // Tailwind gray-500 hex
@@ -467,7 +470,7 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 					DOWN
 				</div>
 				<TradeState trade={trade} side='down' />
-				<div>{trade.down.openPrice.toFixed(2) + ' (-' + parseNumber(trade.down.limit) + '%)'}</div>
+				<div>{trade.down.openPrice.toFixed(2) + ' (-' + parseNumber(trade.down.limit) + '% / ' + setup.down.buyLimit.toFixed(2) + ')'}</div>
 				<div>{trade.down.trades[0]?.orderData?.quantity}</div>
 				<div>{trade.down.trades[0]?.price.toFixed(2)}</div>
 			</div>
@@ -480,13 +483,20 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 // ---------------------------------------------------------------------------- TradeState
 const TradeState = ({trade, side}: {trade: Trade, side: 'up' | 'down'}) => {
 	const tradeSide = trade[side as 'up' | 'down']
+	const [enabled, setEnabled] = useState<boolean>(tradeSide.enabled)
 
 	return (
 		<div className='flex flex-row justify-between items-center'>
 			<div>{tradeSide.state}</div>
 			{trade.state === 'open' && (
 				<div
-					className={`rounded-full w-3 h-3 cursor-pointer ${tradeSide.enabled ? 'bg-green-600' : 'bg-red-600'}`}
+					className={`rounded-full w-3 h-3 cursor-pointer ${enabled ? 'bg-green-600' : 'bg-red-600'}`}
+					onClick={() => {
+						setEnabled(enabled => {
+							tradeSide.enabled = !enabled
+							return !enabled
+						})
+					}}
 				></div>
 			)}
 		</div>
@@ -616,6 +626,8 @@ const loadTrades = async () => {
 // ---------------------------------------------------------------------------- openTrade
 const setTrade = async (trade: Trade, action: TradeAction) => {
 	const side = action.outcome === 'up' ? trade.up : trade.down
+	if (!side.enabled) return trade
+
 	side.trades.push(action)
 	side.state = action.type === 'BUY' ? 'active' : action.type === 'SELL' ? 'completed' : 'cancelled'
 
@@ -631,7 +643,7 @@ const setTrade = async (trade: Trade, action: TradeAction) => {
 	}
 
 	action.orderData = orderData
-	console.log('!!!!!!!!!!!!!!!! orderData:', trade.isLive, orderData);
+	console.log('!!!!!!!!!!!!!!!! orderData:', trade, trade.isLive, orderData);
 
 	if (trade.isLive) {
 		const order = await placeOrder(orderData)
