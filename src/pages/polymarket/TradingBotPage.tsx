@@ -41,6 +41,7 @@ type TradeSide = {
 
 type Trade = {
 	slug: string
+	question: string
 	conditionId: string
 	basePrice: number
 	tickerPrice: number
@@ -288,6 +289,7 @@ const TradesList = ({market: market, setup}: {market: MarketData, setup: any}) =
 
 		const trade: Trade = {
 			slug: market.slug,
+			question: market.question,
 			conditionId: market.conditionId,
 			basePrice: setup.basePrice,
 			tickerPrice: 0,
@@ -367,10 +369,8 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 	// ---------------------------------------------------------------------------- setTickerPrice
 	const setTickerPrice = (timestamp: number, price: number) => {
 		trade.tickerPrice = price
-		if (trade.state === 'open'){
-			checkTrade('up', timestamp)
-			checkTrade('down', timestamp)
-		}
+		checkTrade('up', timestamp)
+		checkTrade('down', timestamp)
 	}
 
 
@@ -378,10 +378,10 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 	const setMarketPrice = (timestamp: number, outcome: 'up' | 'down', price: number) => {
 		if (outcome === 'up'){
 			trade.up.price = price
-			if (trade.state === 'open') checkTrade('up', timestamp)
+			checkTrade('up', timestamp)
 		}else if (outcome === 'down'){
 			trade.down.price = price
-			if (trade.state === 'open') checkTrade('down', timestamp)
+			checkTrade('down', timestamp)
 		}
 	}
 
@@ -393,7 +393,11 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 		const tradeSide = trade[side as 'up' | 'down']
 		if (!tradeSide.enabled) return
 		if (tradeSide.state !== 'pending') return
-		if (side === 'up' ? trade.tickerPrice < tradeSide.openPrice : trade.tickerPrice > tradeSide.openPrice) return
+		if (!trade.tickerPrice) return
+		if (!tradeSide.price) return
+		if (!tradeSide.openPrice) return
+		if (side === 'up' && trade.tickerPrice < tradeSide.openPrice) return
+		if (side === 'down' && trade.tickerPrice > tradeSide.openPrice) return
 		if (tradeSide.price > setup[side].buyLimit) return
 
 		setTrade(trade, {
@@ -440,12 +444,10 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 					console.log('TradeItem:', trade)
 				}}
 				>
+				<div>{trade.question}</div>
 				<div>{trade.slug}</div>
 				<div>{state + (state === 'closed' && trade.outcome ? ' [' + trade.outcome?.toUpperCase() + ']' : '')}</div>
 				<div>{trade.basePrice}</div>
-				{/* <div>{tickerPrice}</div> */}
-				{/* <div>{(tickerPrice / trade.basePrice).toFixed(6)}</div> */}
-				<div></div>
 				<div></div>
 				<div style={{
 					color: trade.up.state === 'active'
@@ -457,7 +459,10 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 					UP
 				</div>
 				<TradeState trade={trade} side='up' />
-				<div>{trade.up.openPrice.toFixed(2) + ' (+' + parseNumber(trade.up.limit) + '% / ' + setup.up.buyLimit.toFixed(2) + ')'}</div>
+				<div>{trade.up.openPrice.toFixed(2)	+ ' | +'
+					+ parseNumber(trade.up.limit).toFixed(2) + '% | '
+					+ setup.up.buyLimit.toFixed(2) + ' | '
+					+ setup.up.size.toFixed(2)}</div>
 				<div>{trade.up.trades[0]?.orderData?.quantity}</div>
 				<div>{trade.up.trades[0]?.price.toFixed(2)}</div>
 				<div style={{
@@ -470,7 +475,10 @@ const TradeItem = ({trade, setup}: {trade: Trade, setup: any}) => {
 					DOWN
 				</div>
 				<TradeState trade={trade} side='down' />
-				<div>{trade.down.openPrice.toFixed(2) + ' (-' + parseNumber(trade.down.limit) + '% / ' + setup.down.buyLimit.toFixed(2) + ')'}</div>
+				<div>{trade.down.openPrice.toFixed(2) + ' | -' +
+					+ parseNumber(trade.down.limit).toFixed(2) + '% | '
+					+ setup.down.buyLimit.toFixed(2) + ' | '
+					+ setup.down.size.toFixed(2)}</div>
 				<div>{trade.down.trades[0]?.orderData?.quantity}</div>
 				<div>{trade.down.trades[0]?.price.toFixed(2)}</div>
 			</div>
@@ -643,11 +651,11 @@ const setTrade = async (trade: Trade, action: TradeAction) => {
 	}
 
 	action.orderData = orderData
-	console.log('!!!!!!!!!!!!!!!! orderData:', trade, trade.isLive, orderData);
+	console.log('!!!!!!!!!!!!!!!! setTrade:', trade, trade.isLive, orderData);
 
 	if (trade.isLive) {
 		const order = await placeOrder(orderData)
-		console.log('!!!!!!!!!!!!!!!! order:', order);
+		console.log('--- order:', order);
 		action.orderId = order.orderId
 	}
 

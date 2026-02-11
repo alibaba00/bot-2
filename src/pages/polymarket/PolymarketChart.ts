@@ -64,6 +64,94 @@ console.log('update:', filePath)
 
 
 // ---------------------------------------------------------------------------- dataTest
+export const dataTest_3 = async (symbol: string, source: string = 'coinbase') => {
+	console.log('dataTest_3 running', symbol, '...')
+
+	const _symbol = symbol !== 'all'? symbol + '-updown-15m' : 'updown-15m'
+	const markets = await PolymarketApi.getAllMarkets(_symbol, new Date('2026-02-01').getTime())
+	if (!markets.length) return
+
+	const heatmap = await PolymarketApi.store.getItem('heatmap') || {}
+	console.log('heatmap:', heatmap)
+
+	const steps = 20
+
+	const s2 = steps / 2
+	const map = Array.from({ length: 15 }, (_, t) =>
+		Array.from({ length: steps }, (_, v) => ({ t, value:(v-s2)/10, count:0, c_up:0, c_down:0, up:0, down:0, weight:0 }))
+	)
+	const stats = {
+		map,
+		total: markets.length,
+		inValid: 0,
+		valid: 0,
+		timestamp: new Date().getTime(),
+	} as any
+
+	for (const market of markets) {
+		const tickerData = market.chartData?.ticker?.[source]
+		if (!tickerData?._complete) continue
+
+		stats.valid++
+
+		const basePrice = tickerData[0][1]
+		const baseGrid = Array.from({ length: 15 }, () => Array(steps).fill(0))
+		// console.log('baseGrid:', baseGrid)
+
+		for (const item of tickerData) {
+			const t = Math.floor((item[0] - market.startTimestamp) / 60000)	//minute value (0-14)
+			if (t < 0 || t > 14) continue
+
+			const ratio = Math.floor(((item[1] / basePrice) - 1) * 1000) + s2	//+- 1%
+			const value = Math.max(Math.min(ratio, steps-1), 0)	//min:0, max:19, med:10
+			baseGrid[t][value] = 1
+		}
+
+		for (let t = 0; t < 15; t++) {
+			for (let value = 0; value < steps; value++) {
+				if (baseGrid[t][value] === 0) continue
+
+				map[t][value].count++
+				if (market.outcome === 'up') map[t][value].c_up++
+				else map[t][value].c_down++
+			}
+		}
+	}
+
+	// smoothValues(ranges[t])
+
+	for (let t = 0; t < 15; t++) {
+		for (let value = 0; value < steps; value++) {
+			const cell = map[t][value]
+			if (cell.c_up === 0 && cell.c_down === 0){
+				cell.up = 0
+				cell.down = 0
+			}else if (cell.c_up === 0){
+				cell.up = 0
+				cell.down = 1
+			}else if (cell.c_down === 0){
+				cell.up = 1
+				cell.down = 0
+			}else{
+				const ratio = cell.c_up / cell.c_down
+				cell.up = ratio > 1 ? ratio / (ratio + 1) : 1 / ((1 / ratio) + 1)
+				cell.up = parseFloat(cell.up.toFixed(2))
+				cell.down = parseFloat((1 - cell.up).toFixed(2))
+			}
+			cell.weight = cell.count === 0 ? 0 : cell.count / stats.valid 
+		}
+	}
+
+	stats.inValid = stats.total - stats.valid
+
+	console.log(stats)
+
+	heatmap[_symbol] = stats
+	await PolymarketApi.store.setItem('heatmap', heatmap)
+}
+
+
+// ---------------------------------------------------------------------------- dataTest
 export const dataTest_2 = async (symbol: string, source: string = 'coinbase') => {
 	console.log('dataTest_2 running', symbol, '...')
 
@@ -72,9 +160,9 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 	if (!markets.length) return
 
 	const stats = {
-		source: source,
+		source: source,		//coinbase, binance, etc.
 		symbol: symbol,
-		total: 0,
+		total: markets.length,
 		inValid: 0,
 		valid: 0,
 		up: {
@@ -102,23 +190,9 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 		value: 0,
 	}
 
-	// 1769698800000
-	// const limitTimestamp = new Date('2026-01-29 16:00:00').getTime()	//2026-01-01
-	// const limitTimestamp = new Date('2026-02-07').getTime()
-	// console.log('limitTimestamp:', limitTimestamp, new Date(limitTimestamp).toISOString())
-
 	for (const market of markets) {
-
-		// if (!market.closed) continue
-		// if (market.startTimestamp < limitTimestamp) continue
-
-		// stats.total++
-
-		// if (!market.chartData?._complete) continue
-		// if (!market.chartData?.ticker?.[source]?._complete) continue
-
-		const tickerData = market.chartData.ticker[source]
-		parseTickerData(tickerData, market, stats)
+		const tickerData = market.chartData?.ticker?.[source]
+		if (tickerData) parseTickerData(tickerData, market, stats)
 	}
 
 	stats.inValid = stats.total - stats.valid
@@ -135,8 +209,6 @@ export const dataTest_2 = async (symbol: string, source: string = 'coinbase') =>
 // ---------------------------------------------------------------------------- parseTickerData
 const parseTickerData = (tickerData: any[], market: Market, stats: any) => {
 	if (!market.chartData?.clob?._complete) return null
-
-	stats.total++
 
 	const ups = market.chartData.clob.up
 	const downs = market.chartData.clob.down
@@ -715,39 +787,6 @@ export const updateClobData = async () => {
 }
 
 
-
-// ---------------------------------------------------------------------------- updateAllMarketData_clob
-export const updateAllMarketData_clob = async () => {
-	if (isRunning){
-		console.log('updateAllMarketData_clob canceled!')
-		isRunning = false
-		return
-	}
-	isRunning = true
-
-	await PolymarketApi.store.setItem('lastUpdate_clobData', Date.now())
-
-	const dataFiles = await getAllMarkets_clob()
-	console.log('Updating all market data from clob', dataFiles.length, 'files ...', lastUpdate_logfiles)
-
-	const stat = {
-		totalMarkets: dataFiles.length,
-		updated: 0,
-		openMarkets: 0,
-	}
-
-	for (const file of dataFiles) {
-		if (!isRunning) break
-		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
-		if (updated) stat.updated++
-		if (market && !market.closed) stat.openMarkets++
-	}
-
-	console.log('complete!', stat)
-	isRunning = false
-}
-
-
 // ---------------------------------------------------------------------------- updateMarketData
 export const getMarket = async (slug: string, filePath: string | null = null, useCache: boolean = true): Promise<Market | null> => {
 	// get market from cache ...
@@ -765,6 +804,114 @@ export const getMarket = async (slug: string, filePath: string | null = null, us
 	}
 
 	return market
+}
+
+
+// ---------------------------------------------------------------------------- updateAllMarketData_clob
+export const updateAllMarketData_clob = async () => {
+	if (isRunning){
+		console.log('updateAllMarketData_clob canceled!')
+		isRunning = false
+		return
+	}
+	isRunning = true
+
+	await PolymarketApi.store.setItem('lastUpdate_clobData', Date.now())
+
+	const dataFiles = await getAllMarkets_clob()
+	console.log('Updating all market data from clob (', dataFiles.length,
+		'files, lastUpdate:', new Date(lastUpdate_logfiles).toISOString(), ') ...')
+
+	const stat = {
+		totalMarkets: dataFiles.length,
+		closedMarkets: 0,
+		updated: 0,
+		newMarkets: 0,
+		openMarkets: 0,
+	}
+
+	const marketKeys = await PolymarketApi.cache.keys()
+	const marketLookup = marketKeys.reduce((acc: any, key: string) => {
+		acc[key] = true
+		return acc
+	}, {})
+
+	const openMarkets = await PolymarketApi.store.getItem('openMarkets') || []
+	const openMarketsLookup = openMarkets.reduce((acc: any, slug: string) => {
+		acc[slug] = true
+		return acc
+	}, {})
+	console.log('openMarkets:', openMarkets.length)
+
+	for (const file of dataFiles) {
+		if (!isRunning) break
+
+		if (marketLookup[file.slug]) {		//market exists in cache
+			if (!openMarketsLookup[file.slug]){		//market is closed
+				stat.closedMarkets++
+				continue
+			}
+		}else{
+			stat.newMarkets++
+		}
+
+		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
+		if (updated) stat.updated++
+		if (market && !market.closed){
+			stat.openMarkets++
+			openMarketsLookup[file.slug] = true
+		}else{
+			delete openMarketsLookup[file.slug]
+			stat.closedMarkets++
+		}
+	}
+
+	await PolymarketApi.store.setItem('openMarkets', Object.keys(openMarketsLookup))
+
+	console.log('complete!', stat)
+	isRunning = false
+}
+
+
+// ---------------------------------------------------------------------------- updateMarketData
+export const updateTestData = async (market: any): Promise<any> => {
+	console.log('updateTestData:', market)
+	if (!market) return
+
+	const heatmap = await PolymarketApi.store.getItem('heatmap') || {}
+	const map = heatmap[market.symbol + '-updown-15m']
+	if (!map?.map) return
+	const data = map.map
+	console.log('data:', data)
+
+	const tickerData = market.chartData?.ticker?.coinbase
+	if (!tickerData?._complete) return
+
+	const chartData: any[] = []
+	let last: number | null = null
+
+	const basePrice = tickerData[0][1]
+	for (const item of tickerData) {
+		const t = Math.floor((item[0] - market.startTimestamp) / 60000)	//minute value (0-14)
+		if (t < 0 || t > 14) continue
+
+		const value = Math.floor(((item[1] / basePrice) - 1) * 1000) + 10	//+- 1%
+		const index = Math.max(Math.min(value, 19), 0)	//min:0, max:19, med:10
+
+		const cell = data[t][index]
+		if (cell){
+			const up = cell.up
+			if (up !== last){
+				last = up
+				chartData.push([item[0], up] as any)
+			}
+		}
+	}
+
+	market.chartData._grid = chartData
+
+	///
+
 }
 
 
@@ -1580,7 +1727,7 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 		)
 		ranges[t]._total = total
 
-		smoothValues(ranges[t], 3)
+		smoothValues(ranges[t])
 
 		let volume = off
 		ranges[t].forEach((item: any) => {
@@ -1595,7 +1742,7 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 
 // ---------------------------------------------------------------------------- smoothRatios
 // Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
-	const smoothValues = (arr: any[], window: number = 3): void => {
+	const smoothValues = (arr: any[], window: number = 3, valueField: string = 'value'): void => {
 		for (let i = 0; i < arr.length; i++) {
 			let sum = 0
 			let count = 0
@@ -1603,11 +1750,11 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 			for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
 				const idx = i + j
 				if (idx >= 0 && idx < arr.length) {
-					sum += arr[idx].value
+					sum += arr[idx][valueField]
 					count++
 				}
 			}
-			arr[i].value_s = sum / count
+			arr[i][valueField + '_s'] = sum / count
 		}
 	}
 

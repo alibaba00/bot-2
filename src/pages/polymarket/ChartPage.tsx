@@ -1,13 +1,12 @@
 import { Button } from "@/components/ui/button";
+import { Label } from '@/components/ui/label';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
-import * as PolymarketChart from "./PolymarketChart";
 import PolymarketApi from "./PolymarketApi";
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
+import * as PolymarketChart from "./PolymarketChart";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -50,7 +49,7 @@ const heatmapChartOptions = {
 		type: 'category',
 		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
 		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
-		data: Array.from({length: 40}, (_, i) => (i - 20).toString()),
+		data: Array.from({length: 20}, (_, i) => ((i - 10)/10).toFixed(1)),
 	},
 	visualMap: {
 		min: -1,
@@ -62,7 +61,7 @@ const heatmapChartOptions = {
 		inRange: {
 			color: [
 			'#f00c',
-			'#3303',
+			'#3333',
 			'#3f0c',
 			]
 		  }
@@ -250,6 +249,7 @@ const lineChartOptions = {
 			tooltip: {
 				show: true,
 			},
+			name: "up",
 		},
 		{
 			type: 'line',
@@ -263,6 +263,7 @@ const lineChartOptions = {
 			tooltip: {
 				show: true,
 			},
+			name: "down",
 		},
 		{
 			type: 'line',
@@ -277,6 +278,7 @@ const lineChartOptions = {
 			tooltip: {
 				show: false,
 			},
+			name: "chainlink",
 		},
 		{
 			type: 'line',
@@ -291,6 +293,7 @@ const lineChartOptions = {
 			tooltip: {
 				show: false,
 			},
+			name: "polling",
 		},
 		{
 			type: 'line',
@@ -305,6 +308,22 @@ const lineChartOptions = {
 			tooltip: {
 				show: false,
 			},
+			name: "coinbase",
+		},
+
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: 'green',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			step: 'end',
+			tooltip: {
+				show: false,
+			},
+			name: "grid",
 		}
 	],
 	grid: {
@@ -357,6 +376,7 @@ export default function ChartPage() {
 		const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
 		const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
 		const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
+		// const scale = 5
 
 		// const firstPrice = chartData.ticker?.binance?.[0]?.[1]
 		// const binanceData = chartData.ticker?.binance?.map((item: any) => {
@@ -373,6 +393,10 @@ export default function ChartPage() {
 		const firstPrice = chartData.ticker?.polling?.[0]?.[1]
 		const pollingData = chartData.ticker?.polling?.map((item: any) => {
 			return [item[0], ((item[1] / firstPrice) - 1 ) * 1000] as any
+		})
+
+		const gridUpData = chartData._grid?.map((item: any) => {
+			return [item[0], item[1]] as any
 		})
 
 		setChartOptions({
@@ -410,6 +434,10 @@ export default function ChartPage() {
 				{
 					...lineChartOptions.series[4],
 					data: coinbaseData
+				},
+				{
+					...lineChartOptions.series[5],
+					data: gridUpData
 				}
 			],
 		})
@@ -424,14 +452,24 @@ export default function ChartPage() {
 
 		if (chartType === 'bar'){
 			console.log('updateChart:', symbol, chartType)
-			const data = await PolymarketChart.getChartDistributionData(symbol, null)
-			if (!data?.[14].length) return
+			// const data = await PolymarketChart.getChartDistributionData(symbol, '2026-02-08')
+			// if (!data?.[14].length) return
+			const heatmap = await PolymarketApi.store.getItem('heatmap')
+			if (!heatmap) return
+			const map = heatmap[symbol + '-updown-15m']
+			if (!map?.map){
+				setChartOptions({})
+				return
+			}
+			const data = map.map
+			console.log('data:', data)
 
 			setChartOptions({
 				...barChartOptions,
 				series: [{
 					...barChartOptions.series[0],
-					data: data[0].map((item) => [item.index, item.value_s])
+					// data: data[0].map((item) => [item.index, item.value_s])
+					data: data[14].map((item) => [item.value, item.count])
 				}],
 			})
 			return
@@ -439,14 +477,28 @@ export default function ChartPage() {
 
 		if (chartType === 'heatmap'){
 			console.log('updateChart:', symbol, chartType)
-			const data = await PolymarketChart.getChartDistributionData(symbol, null)
-			if (!data?.length) return
+			// const data = await PolymarketChart.getChartDistributionData(symbol, '2026-02-08')
+			const heatmap = await PolymarketApi.store.getItem('heatmap')
+			if (!heatmap) return
+			const map = heatmap[symbol + '-updown-15m']
+			if (!map?.map){
+				setChartOptions({})
+				return
+			}
 
+			const data = map.map
+			console.log('data:', data)
+			const hmap: any[] = []
+			data.forEach((item, colIndex) => {
+				item.forEach((row, rowIndex) => {
+					hmap.push([colIndex, rowIndex, ((row.up * 2) - 1) * 6 * row.weight])
+				})
+			})
 			setChartOptions({
 				...heatmapChartOptions,
 				series: [{
 					...heatmapChartOptions.series[0],
-					// data: data.map((item) => [item.index, item.value_s]),
+					data: hmap,
 				}],
 			})
 			return
@@ -610,7 +662,7 @@ export default function ChartPage() {
 							<ToggleGroupItem value='down' variant='outline'>Down</ToggleGroupItem>
 						</ToggleGroup>
 
-						<Button onClick={() => PolymarketChart.dataTest_2(asset?.value)}>
+						<Button onClick={() => PolymarketChart.dataTest_3(asset?.value)}>
 							data test
 						</Button>
 						{/* <Button onClick={() => PolymarketChart.fixingClobData()}>
@@ -749,14 +801,16 @@ const MarketItem = ({ market }: { market: any }) => {
 				<Button variant='outline' className='text-xs text-gray-500 h-auto px-2 py-1'
 					onClick={e => {
 						e.stopPropagation()
-						PolymarketChart.updateMarketData_clob(market.slug, market.filePath, false)
-						.then(({market: _market, updated}) => {
-							if (updated) {
-								console.log('updated market:', _market)
-								setData(_market)
-								market.data = _market
-							}
-						})
+						PolymarketChart.updateTestData(market.data as any)
+
+						// PolymarketChart.updateMarketData_clob(market.slug, market.filePath, false)
+						// .then(({market: _market, updated}) => {
+						// 	if (updated) {
+						// 		console.log('updated market:', _market)
+						// 		setData(_market)
+						// 		market.data = _market
+						// 	}
+						// })
 					}}>Update</Button>
 				<span
 					className={`inline-block w-3 h-3 rounded-full mr-2 ${data?.closed
