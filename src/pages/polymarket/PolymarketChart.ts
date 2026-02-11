@@ -68,17 +68,17 @@ export const dataTest_3 = async (symbol: string, source: string = 'coinbase') =>
 	console.log('dataTest_3 running', symbol, '...')
 
 	const _symbol = symbol !== 'all'? symbol + '-updown-15m' : 'updown-15m'
-	const markets = await PolymarketApi.getAllMarkets(_symbol, new Date('2026-02-01').getTime())
+	const markets = await PolymarketApi.getAllMarkets(_symbol, new Date('2026-01-01').getTime())
 	if (!markets.length) return
 
 	const heatmap = await PolymarketApi.store.getItem('heatmap') || {}
 	console.log('heatmap:', heatmap)
 
-	const steps = 20
+	const steps = 40
 
 	const s2 = steps / 2
 	const map = Array.from({ length: 15 }, (_, t) =>
-		Array.from({ length: steps }, (_, v) => ({ t, value:(v-s2)/10, count:0, c_up:0, c_down:0, up:0, down:0, weight:0 }))
+		Array.from({ length: steps }, (_, v) => ({ t, value:(v-s2)/20, count:0, c_up:0, c_down:0, up:0, down:0, weight:0 }))
 	)
 	const stats = {
 		map,
@@ -102,7 +102,7 @@ export const dataTest_3 = async (symbol: string, source: string = 'coinbase') =>
 			const t = Math.floor((item[0] - market.startTimestamp) / 60000)	//minute value (0-14)
 			if (t < 0 || t > 14) continue
 
-			const ratio = Math.floor(((item[1] / basePrice) - 1) * 1000) + s2	//+- 1%
+			const ratio = Math.floor(((item[1] / basePrice) - 1) * 1000 * 2) + s2	//+- 1%
 			const value = Math.max(Math.min(ratio, steps-1), 0)	//min:0, max:19, med:10
 			baseGrid[t][value] = 1
 		}
@@ -895,9 +895,8 @@ export const updateTestData = async (market: any): Promise<any> => {
 		const t = Math.floor((item[0] - market.startTimestamp) / 60000)	//minute value (0-14)
 		if (t < 0 || t > 14) continue
 
-		const value = Math.floor(((item[1] / basePrice) - 1) * 1000) + 10	//+- 1%
-		const index = Math.max(Math.min(value, 19), 0)	//min:0, max:19, med:10
-
+		const value = Math.floor(((item[1] / basePrice) - 1) * 1000 * 2) + 20	//+- 1%
+		const index = Math.max(Math.min(value, 39), 0)	//min:0, max:39, med:20
 		const cell = data[t][index]
 		if (cell){
 			const up = cell.up

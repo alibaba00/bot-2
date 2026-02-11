@@ -49,7 +49,7 @@ const heatmapChartOptions = {
 		type: 'category',
 		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
 		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
-		data: Array.from({length: 20}, (_, i) => ((i - 10)/10).toFixed(1)),
+		data: Array.from({length: 40}, (_, i) => ((i - 20)/20).toFixed(1)),
 	},
 	visualMap: {
 		min: -1,
@@ -491,7 +491,7 @@ export default function ChartPage() {
 			const hmap: any[] = []
 			data.forEach((item, colIndex) => {
 				item.forEach((row, rowIndex) => {
-					hmap.push([colIndex, rowIndex, ((row.up * 2) - 1) * 6 * row.weight])
+					hmap.push([colIndex, rowIndex, ((row.up * 2) - 1) * 8 * row.weight])
 				})
 			})
 			setChartOptions({

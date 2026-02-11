@@ -10,7 +10,7 @@ import { getAccountInfo, getTransactionHistory, getWalletBalance } from "@/lib/p
 import { fetchMarketBySlugFromGamma, fetchMarkets } from "@/lib/polymarket/markets";
 import { cancelOrder, getOpenOrders, placeOrder } from "@/lib/polymarket/orders";
 // import { Side } from "@polymarket/clob-client";
-
+import { Strategy1, Strategy2 } from "./Strategy";
 
 export default function TradingPage() {
 	const { status, connect } = usePolymarketConnection()
@@ -101,19 +101,20 @@ export default function TradingPage() {
 		console.log('order:', order);
 	}
 
-	// const handleFetchMarketFromConditionId = async () => {
-	// 	console.log('handleFetchMarketFromConditionId ...')
-	// 	const conditionId = '0xb44e63b37ed73f1ce8e69a8ed4f894e27ca7dcaf2b112f0e16876c1c07d1f390';
-	// 	const prices = await fetchMarketPricesFromClob(conditionId);
-	// 	console.log(prices);
-	// }
 
-	// const handleFetchMarket = async () => {
-	// 	console.log('handleFetchMarket ...')
-	// 	const conditionId = '0xb44e63b37ed73f1ce8e69a8ed4f894e27ca7dcaf2b112f0e16876c1c07d1f390';
-	// 	const market = await fetchMarket(conditionId);
-	// 	console.log(market);
-	// }
+	const handleStrategy1 = async () => {
+		console.log('handleStrategy1 ...')
+		Strategy1.run()
+	}
+
+	const handleStrategy2 = async () => {
+		console.log('handleStrategy2 ...')
+		Strategy2.run()
+	}
+
+	const handleStrategy3 = async () => {
+		console.log('handleStrategy3 ...')
+	}
 
 
 	console.log('status:', status)
@@ -131,6 +132,12 @@ export default function TradingPage() {
 				<Button variant='default' onClick={handleFetchMarketBySlugFromGamma}>Fetch Market By Slug From Gamma</Button>
 				<Button variant='default' onClick={handleSetOrder}>Set Order</Button>
 				<Button variant='default' onClick={handleCancelOrder}>Cancel Order</Button>
+			</div>
+			<h2>Strategies:</h2>
+			<div className="flex gap-2 flex-wrap">
+				<Button variant='default' onClick={handleStrategy1}>Strategy 1</Button>
+				<Button variant='default' onClick={handleStrategy2}>Strategy 2</Button>
+				<Button variant='default' onClick={handleStrategy3}>Strategy 3</Button>
 			</div>
 				{/* <Button onClick={() => {
 					handleFetchMarketBySlugFromGamma()
