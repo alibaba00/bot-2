@@ -19,6 +19,8 @@ import { getAccountInfo, getTransactionHistory, getWalletBalance } from "@/lib/p
 import { fetchMarketBySlugFromGamma, fetchMarkets } from "@/lib/polymarket/markets";
 import { cancelOrder, getOpenOrders, placeOrder } from "@/lib/polymarket/orders";
 import { useUserChannelWebSocket } from "@/hooks/use-user-channel-websocket";
+import type { Order, WalletBalance } from "@/lib/polymarket/types";
+import { RefreshCw } from "lucide-react";
 // import { Side } from "@polymarket/clob-client";
 import { Strategy1, Strategy2 } from "./Strategy";
 
@@ -32,6 +34,30 @@ export default function TradingPage() {
 	const [size, setSize] = useState('')
 	const [logEntries, setLogEntries] = useState<Array<{ timestamp: string; action: string; data: any }>>([])
 	const [selectedOrderId, setSelectedOrderId] = useState('')
+	const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null)
+	const [orderStats, setOrderStats] = useState<{ total: number; open: number; pending: number }>({
+		total: 0,
+		open: 0,
+		pending: 0
+	})
+
+	// Helper function to add log entry
+	const addLogEntry = (action: string, data: any) => {
+		const entry = {
+			timestamp: new Date().toISOString(),
+			action,
+			data
+		}
+		setLogEntries(prev => [entry, ...prev])
+	}
+
+	// Helper to update order statistics shown in header
+	const updateOrderStats = (orders: Order[]) => {
+		const total = orders.length
+		const open = orders.filter(o => o.status === 'OPEN').length
+		const pending = orders.filter(o => o.status === 'PENDING').length
+		setOrderStats({ total, open, pending })
+	}
 
 	// User Channel WebSocket for real-time order/trade updates
 	const userChannelWs = useUserChannelWebSocket({
@@ -68,19 +94,26 @@ export default function TradingPage() {
 		// handleConnect()
 	}, [])
 
-	// Helper function to add log entry
-	const addLogEntry = (action: string, data: any) => {
-		const entry = {
-			timestamp: new Date().toISOString(),
-			action,
-			data
-		}
-		setLogEntries(prev => [entry, ...prev])
-	}
-
 	const handleConnect = async () => {	
 		console.log('handleConnect ...')
-		await connect()		
+		await connect()
+
+		// Nach dem Connect gleich Balance & Orders aktualisieren
+		try {
+			const balance = await getWalletBalance()
+			setWalletBalance(balance)
+			addLogEntry('Auto Get Balance after Connect', balance)
+		} catch (error: any) {
+			addLogEntry('Auto Get Balance Error', { error: error.message || String(error) })
+		}
+
+		try {
+			const orders = await getOpenOrders()
+			updateOrderStats(orders)
+			addLogEntry('Auto Get Orders after Connect', orders)
+		} catch (error: any) {
+			addLogEntry('Auto Get Orders Error', { error: error.message || String(error) })
+		}
 	}
 
 	// --- get Account Info
@@ -95,6 +128,8 @@ export default function TradingPage() {
 		console.log('handleGetBalance ...')
 		const balance = await getWalletBalance();
 		console.log(balance);
+		setWalletBalance(balance);
+		addLogEntry('Get Balance', balance)
 	}
 
 	// --- get orders
@@ -102,6 +137,8 @@ export default function TradingPage() {
 		console.log('handleGetOrders ...')
 		const orders = await getOpenOrders();
 		console.log(orders);
+		updateOrderStats(orders);
+		addLogEntry('Get Orders (Top Buttons)', orders)
 	}
 
 	// --- get transaction history
@@ -270,6 +307,7 @@ export default function TradingPage() {
 		try {
 			addLogEntry('Get Orders - Start', {})
 			const orders = await getOpenOrders()
+			updateOrderStats(orders)
 			addLogEntry('Get Orders - Success', orders)
 		} catch (error: any) {
 			addLogEntry('Get Orders - Error', { error: error.message || String(error) })
@@ -319,6 +357,63 @@ export default function TradingPage() {
 
 			<h2>Trading Console:</h2>
 			<div className="border rounded-lg p-4 space-y-4">
+				{/* Trading console header with balance and order statistics */}
+				<div className="flex flex-wrap items-center justify-between gap-4">
+					<div>
+						<div className="text-xs text-muted-foreground uppercase tracking-wide">
+							Balance
+						</div>
+						<div className="text-sm font-semibold">
+							{walletBalance
+								? `${walletBalance.total.toFixed(2)} ${walletBalance.currency || "USDC"}`
+								: "—"}
+						</div>
+					</div>
+
+					<div className="flex gap-6 text-sm ml-auto">
+						<div>
+							<span className="block text-xs text-muted-foreground uppercase tracking-wide">
+								Laufende Orders
+							</span>
+							<span className="font-semibold">
+								{orderStats.open + orderStats.pending}
+							</span>
+						</div>
+						<div>
+							<span className="block text-xs text-muted-foreground uppercase tracking-wide">
+								Offene Orders
+							</span>
+							<span className="font-semibold">{orderStats.open}</span>
+						</div>
+					</div>
+
+					<div className="flex-shrink-0">
+						<Button
+							variant="outline"
+							size="icon"
+							className="h-8 w-8"
+							onClick={async () => {
+								try {
+									// Update balance
+									const balance = await getWalletBalance()
+									setWalletBalance(balance)
+									addLogEntry('Update Balance', balance)
+									
+									// Update orders
+									const orders = await getOpenOrders()
+									updateOrderStats(orders)
+									addLogEntry('Update Orders', orders)
+								} catch (error: any) {
+									addLogEntry('Update Error', { error: error.message || String(error) })
+								}
+							}}
+							title="Update Balance & Orders"
+						>
+							<RefreshCw className="h-4 w-4" />
+						</Button>
+					</div>
+				</div>
+
 				{/* User Channel WebSocket Status */}
 				<div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
 					<span className="text-sm font-medium">User Channel WebSocket:</span>
@@ -442,3 +537,76 @@ export default function TradingPage() {
 		</div>
 	)
 }
+
+/*
+user channel websocket examples:
+
+order placement:
+{
+    "id": "0x75e0888f1c91704db329ae582d30c4d1b0a31e0ac2335adaf48dfa11aae782fe",
+    "type": "PLACEMENT",
+    "side": "BUY",
+    "price": "0.01",
+    "original_size": "100",
+    "size_matched": "0",
+    "asset_id": "57061352122631432781883234753452233313802472679003458000984345030541545099404",
+    "market": "0xc0e5e40386a753109cd818c4689b4ab19ff2c7fc2fa60152ebaf41f46516b7c0"
+}
+source data:
+{
+  "id": "0x75e0888f1c91704db329ae582d30c4d1b0a31e0ac2335adaf48dfa11aae782fe",
+  "owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
+  "market": "0xc0e5e40386a753109cd818c4689b4ab19ff2c7fc2fa60152ebaf41f46516b7c0",
+  "asset_id": "57061352122631432781883234753452233313802472679003458000984345030541545099404",
+  "side": "BUY",
+  "order_owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
+  "original_size": "100",
+  "size_matched": "0",
+  "price": "0.01",
+  "associate_trades": [],
+  "outcome": "Up",
+  "type": "PLACEMENT",
+  "created_at": "1770900788",
+  "expiration": "0",
+  "order_type": "GTC",
+  "status": "LIVE",
+  "maker_address": "0xC41997C65144683AB62051EDd1f80B034756E588",
+  "timestamp": "1770900788146",
+  "event_type": "order"
+}
+
+//--------------------------------
+trade update:
+{
+    "id": "0x75e0888f1c91704db329ae582d30c4d1b0a31e0ac2335adaf48dfa11aae782fe",
+    "type": "CANCELLATION",
+    "side": "BUY",
+    "price": "0.01",
+    "original_size": "100",
+    "size_matched": "0",
+    "asset_id": "57061352122631432781883234753452233313802472679003458000984345030541545099404",
+    "market": "0xc0e5e40386a753109cd818c4689b4ab19ff2c7fc2fa60152ebaf41f46516b7c0"
+}
+source data:
+{
+    "id": "0x75e0888f1c91704db329ae582d30c4d1b0a31e0ac2335adaf48dfa11aae782fe",
+    "owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
+    "market": "0xc0e5e40386a753109cd818c4689b4ab19ff2c7fc2fa60152ebaf41f46516b7c0",
+    "asset_id": "57061352122631432781883234753452233313802472679003458000984345030541545099404",
+    "side": "BUY",
+    "order_owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
+    "original_size": "100",
+    "size_matched": "0",
+    "price": "0.01",
+    "associate_trades": [],
+    "outcome": "Up",
+    "type": "CANCELLATION",
+    "created_at": "1770900788",
+    "expiration": "0",
+    "order_type": "GTC",
+    "status": "CANCELED",
+    "maker_address": "0xC41997C65144683AB62051EDd1f80B034756E588",
+    "timestamp": "1770900818485",
+    "event_type": "order"
+}
+*/
