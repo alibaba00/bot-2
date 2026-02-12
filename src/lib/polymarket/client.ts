@@ -280,3 +280,17 @@ export async function reconnect(): Promise<any> {
 	resetClient()
 	return await initializeClient()
 }
+
+/**
+ * Get API credentials from storage
+ * Useful for WebSocket authentication
+ */
+export function getApiCredentials(): { key: string; secret: string; passphrase: string } | null {
+	try {
+		const config = getValidatedConfig()
+		const apiCredsKey = `polymarketApiCreds:${config.userId}`
+		return getStoredApiCreds(apiCredsKey)
+	} catch {
+		return null
+	}
+}

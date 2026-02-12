@@ -22,28 +22,28 @@ class _Strategy1 {
 		console.log('Strategy 1 constructor...')
 	}
 
-	async run(): Promise<void> {
-		console.log('Strategy 1 running...')
+	async run(symbol: string = 'btc'): Promise<void> {
+		console.log('Strategy 1 running', symbol, '...')
 		const keys = await PolymarketApi.cache.keys()
-		console.log('Strategy 1 keys:', keys.length)
+		console.log('   total keys:', keys.length)
 
-		let data = await STORE.getItem('strategie1') as any
+		let data = await STORE.getItem('strategie1-' + symbol) as any
 		if (!data){
 			data = {
+				symbol: symbol,
 				markets: {},
 				total: 0,
 				new: 0,
 				valid: 0,
 				invalid: 0,
 			}
-			await STORE.setItem('strategie1', data)
+			await STORE.setItem('strategie1-' + symbol, data)
 		}
 
 		data.new = 0
-		const symbol = 'btc'
 		const marketKey = symbol + '-updown-15m'
 
-		console.log('Strategy 1 check for new markets ...')
+		console.log('   check for new markets ...')
 		for (const key of keys) {
 			if (!key.includes(marketKey)) continue
 
@@ -65,16 +65,14 @@ class _Strategy1 {
 			data.total = data.valid + data.invalid
 		}
 
-		console.log('Strategy 1 Data:', data)
-		if (data.new > 0) {
-			console.log('Strategy 1 new markets found:', data.new)
-			await STORE.setItem('strategie1', data)
-		}
+		console.log('   new markets found:', data.new)
 
 		const stats = {
 			total: 0,
 			openLimit: 0.01,
+			openTimeLimit: 1 * 60 * 1000,	//1 minute
 			closeLimit: 0.02,
+			closeTimeLimit: 2 * 1000,	//2 seconds
 			up: {
 				count: 0,
 				won: 0,
@@ -86,30 +84,32 @@ class _Strategy1 {
 				lost: 0,
 			},
 		}
-		console.log('calc ...');
+		console.log('   calc ...');
 
 		for (const key in data.markets) {
 			if (data.markets[key] !== 'valid') continue
 
 			stats.total++
 			const market = await PolymarketApi.cache.getItem(key)
-			// const startTimestamp = market.startTimestamp
+			const startTimestamp = market.startTimestamp
+
 			const up = market.chartData?.clob?.up
-			const openUp = up.find((e: any) => e[1] <= stats.openLimit)
+			const openUp = up.find((e: any) => e[1] <= stats.openLimit && e[0] >= startTimestamp + stats.openTimeLimit)
 			if (openUp){
 				stats.up.count++
-				const closeUp = up.find((e: any) => e[0] > openUp[0] && e[1] >= stats.closeLimit)
+				const closeUp = up.find((e: any) => e[0] > openUp[0] + stats.closeTimeLimit && e[1] >= stats.closeLimit)
 				if (closeUp){
 					stats.up.won++
 				}else{
 					stats.up.lost++
 				}
 			}
+
 			const down = market.chartData?.clob?.down
-			const openDown = down.find((e: any) => e[1] <= stats.openLimit)
+			const openDown = down.find((e: any) => e[1] <= stats.openLimit && e[0] >= startTimestamp + stats.openTimeLimit)
 			if (openDown){
 				stats.down.count++
-				const closeDown = down.find((e: any) => e[0] > openDown[0] && e[1] >= stats.closeLimit)
+				const closeDown = down.find((e: any) => e[0] > openDown[0] + stats.closeTimeLimit && e[1] >= stats.closeLimit)
 				if (closeDown){
 					stats.down.won++
 				}else{
@@ -118,9 +118,9 @@ class _Strategy1 {
 			}
 		}
 
-		console.log('Strategy 1 Stats:', stats)
+		console.table(stats)
 		data.stats = stats
-		await STORE.setItem('strategie1', data)
+		await STORE.setItem('strategie1-' + symbol, data)
 	}
 
 
