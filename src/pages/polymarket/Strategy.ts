@@ -71,11 +71,12 @@ class _Strategy1 {
 		console.log('   new markets found:', data.new)
 
 		const stats = {
-			total: 0,
 			openLimit: 0.01,
-			openTimeLimit: 1 * 60 * 1000,	//1 minute
+			openTimeLimit: 1 * 60 * 1000,	//2 minute
 			closeLimit: 0.02,
-			closeTimeLimit: 3 * 1000,	//3 seconds
+			closeTimeDelay: 5 * 1000,		//5 seconds
+			total: 0,
+			count: 0,						//total valid markets checked
 			up: {
 				count: 0,
 				won: 0,
@@ -95,36 +96,44 @@ class _Strategy1 {
 
 			stats.total++
 			const market = await PolymarketApi.cache.getItem(key)
-			const startTimestamp = market.startTimestamp
-
-			const up = market.chartData?.clob?.up
-			const openUp = up.find((e: any) => e[1] <= stats.openLimit && e[0] >= startTimestamp + stats.openTimeLimit)
-			if (openUp){
-				stats.up.count++
-				const closeUp = up.find((e: any) => e[0] > openUp[0] + stats.closeTimeLimit && e[1] >= stats.closeLimit)
-				if (closeUp){
-					stats.up.won++
-				}else{
-					stats.up.lost++
-				}
-			}
-
-			const down = market.chartData?.clob?.down
-			const openDown = down.find((e: any) => e[1] <= stats.openLimit && e[0] >= startTimestamp + stats.openTimeLimit)
-			if (openDown){
-				stats.down.count++
-				const closeDown = down.find((e: any) => e[0] > openDown[0] + stats.closeTimeLimit && e[1] >= stats.closeLimit)
-				if (closeDown){
-					stats.down.won++
-				}else{
-					stats.down.lost++
-				}
-			}
+			await this.checkData(market as Market, stats)
 		}
 
 		console.table(stats)
 		data.stats = stats
 		await STORE.setItem('strategie1-' + symbol, data)
+	}
+
+
+	async checkData(market: Market, stats: any): Promise<void> {
+		// const startTimestamp = market.startTimestamp
+		const endTimestamp = market.endTimestamp
+
+		const up = market.chartData?.clob?.up
+		const openUp = up.find((e: any) => e[1] <= stats.openLimit && e[0] <= endTimestamp - stats.openTimeLimit)
+		if (openUp){
+			stats.count++
+			stats.up.count++
+			const closeUp = up.find((e: any) => e[0] > openUp[0] + stats.closeTimeDelay && e[1] >= stats.closeLimit)
+			if (closeUp){
+				stats.up.won++
+			}else{
+				stats.up.lost++
+			}
+		}
+
+		const down = market.chartData?.clob?.down
+		const openDown = down.find((e: any) => e[1] <= stats.openLimit && e[0] <= endTimestamp - stats.openTimeLimit)
+		if (openDown){
+			stats.count++
+			stats.down.count++
+			const closeDown = down.find((e: any) => e[0] > openDown[0] + stats.closeTimeDelay && e[1] >= stats.closeLimit)
+			if (closeDown){
+				stats.down.won++
+			}else{
+				stats.down.lost++
+			}
+		}
 	}
 
 

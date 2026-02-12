@@ -7,6 +7,7 @@ import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import PolymarketApi from "./PolymarketApi";
 import * as PolymarketChart from "./PolymarketChart";
+import { Strategy1 } from "./Strategy";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -801,7 +802,8 @@ const MarketItem = ({ market }: { market: any }) => {
 				<Button variant='outline' className='text-xs text-gray-500 h-auto px-2 py-1'
 					onClick={e => {
 						e.stopPropagation()
-						PolymarketChart.updateTestData(market.data as any)
+
+						// PolymarketChart.updateTestData(market.data as any)
 
 						// PolymarketChart.updateMarketData_clob(market.slug, market.filePath, false)
 						// .then(({market: _market, updated}) => {

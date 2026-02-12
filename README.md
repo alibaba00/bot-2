@@ -107,3 +107,18 @@ real utc-price tickers ab 2026-01-29 15:00:00
 first: btc-updown-15m-1769698800
 
 timestamp:1769698800
+
+
+-> handle combined trade
+	-> fetch market data
+	-> determine outcome title
+	-> find outcome token ID
+	-> place buy order
+	-> store active combined trade info for auto-sell
+	-> update orders after placing
+	-> execute sell order automatically
+	-> clear active combined trade
+	-> update orders after placing
+	-> update balance
+	-> update trades
+

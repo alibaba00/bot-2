@@ -4,7 +4,7 @@
 import { usePolymarketConnection } from "@/lib/polymarket/store";
 // import { getTransactionHistory, getWalletBalance } from "@/lib/polymarket/wallet";
 // import { Side } from "@polymarket/clob-client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ import { RefreshCw, X } from "lucide-react";
 import { Strategy1, Strategy2 } from "./Strategy";
 
 export default function TradingPage() {
-	const { status, connect } = usePolymarketConnection()
+	const { connect } = usePolymarketConnection()
 
 	// Trading console state
 	const [marketSlug, setMarketSlug] = useState('btc-updown-15m-1770896700')
@@ -38,11 +38,15 @@ export default function TradingPage() {
 	const [openOrders, setOpenOrders] = useState<Order[]>([])
 	const [activeCombinedTrade, setActiveCombinedTrade] = useState<{
 		buyOrderId: string
-		marketSlug: string
-		orderType: 'up' | 'down'
 		sellPrice: string
 		sellSize: string
 	} | null>(null)
+	const combinedTradeMarketRef = useRef<{ market: any; orderType: 'up' | 'down'; outcomeObj: any } | null>(null)
+	// Ref so WebSocket callback always sees current value (avoids stale closure)
+	const activeCombinedTradeRef = useRef<typeof activeCombinedTrade>(null)
+	useEffect(() => {
+		activeCombinedTradeRef.current = activeCombinedTrade
+	}, [activeCombinedTrade])
 
 	// Helper function to add log entry
 	const addLogEntry = (action: string, data: any) => {
@@ -61,6 +65,27 @@ export default function TradingPage() {
 		const pending = orders.filter(o => o.status === 'PENDING').length
 		setOrderStats({ total, open, pending })
 		setOpenOrders(orders.filter(o => o.status === 'OPEN' || o.status === 'PENDING'))
+	}
+
+	// Helper function to find outcome object from market
+	const findOutcome = (market: any, orderType: 'up' | 'down') => {
+		const targetOutcomeTitle = orderType === 'up' ? 'UP' : 'DOWN'
+		
+		// Try exact match first
+		let outcomeObj = market.outcomes.find((o: any) => 
+			o.title.toUpperCase() === targetOutcomeTitle.toUpperCase()
+		)
+
+		// Fallback: if UP/DOWN not found, try YES/NO
+		if (!outcomeObj) {
+			if (orderType === 'up') {
+				outcomeObj = market.outcomes.find((o: any) => o.title.toUpperCase() === 'YES')
+			} else {
+				outcomeObj = market.outcomes.find((o: any) => o.title.toUpperCase() === 'NO')
+			}
+		}
+
+		return outcomeObj
 	}
 
 	// User Channel WebSocket for real-time order/trade updates
@@ -88,10 +113,11 @@ export default function TradingPage() {
 				market: order.market
 			})
 
-			// Check if this is the buy order from active combined trade that was fully filled
+			// Check if this is the buy order from active combined trade that was fully filled (use ref to avoid stale closure)
+			const currentCombined = activeCombinedTradeRef.current
 			if (
-				activeCombinedTrade &&
-				activeCombinedTrade.buyOrderId === order.id &&
+				currentCombined &&
+				currentCombined.buyOrderId === order.id &&
 				order.side === 'BUY'
 			) {
 				const sizeMatched = parseFloat(order.size_matched || '0')
@@ -103,16 +129,43 @@ export default function TradingPage() {
 						orderId: order.id,
 						size_matched: order.size_matched,
 						original_size: order.original_size,
-						type: order.type
+						type: order.type,
+						asset_id: order.asset_id,
+						outcome: order.outcome,
+						market: order.market
 					})
 
-					// Execute sell order automatically
-					try {
-						await executeSellOrderForCombinedTrade()
-					} catch (error: any) {
-						addLogEntry('Combined Trade - Auto Sell Error', {
-							error: error.message || String(error)
-						})
+					// Retry sell every 2s until success (settlement can take a few seconds)
+					const RETRY_INTERVAL_MS = 2000
+					const MAX_ATTEMPTS = 10 // ~20 seconds max
+					const filledOrder = {
+						asset_id: order.asset_id,
+						outcome: order.outcome ?? '',
+						market: order.market
+					}
+					let attempt = 0
+					while (attempt < MAX_ATTEMPTS) {
+						try {
+							await executeSellOrderForCombinedTrade(filledOrder)
+							break
+						} catch (error: any) {
+							attempt++
+							addLogEntry('Combined Trade - Auto Sell Retry', {
+								attempt,
+								maxAttempts: MAX_ATTEMPTS,
+								error: error.message || String(error),
+								nextInMs: attempt < MAX_ATTEMPTS ? RETRY_INTERVAL_MS : 0
+							})
+							if (attempt >= MAX_ATTEMPTS) {
+								addLogEntry('Combined Trade - Auto Sell Failed (max retries)', {
+									error: error.message || String(error)
+								})
+								setActiveCombinedTrade(null)
+								combinedTradeMarketRef.current = null
+								break
+							}
+							await new Promise((r) => setTimeout(r, RETRY_INTERVAL_MS))
+						}
 					}
 				} else if (order.type === 'CANCELLATION') {
 					// Order was cancelled, clear active combined trade
@@ -284,34 +337,18 @@ export default function TradingPage() {
 			addLogEntry('Market Data', market)
 
 			// Log available outcomes for debugging
-			addLogEntry('Available Outcomes', market.outcomes.map(o => ({ title: o.title, id: o.id })))
+			addLogEntry('Available Outcomes', market.outcomes.map((o: any) => ({ title: o.title, id: o.id })))
 
-			// Determine outcome title based on orderType (Up/Down)
-			const targetOutcomeTitle: string = orderType === 'up' ? 'UP' : 'DOWN'
-
-			// Find outcome token ID - try exact match first, then fallback to YES/NO
-			let outcomeObj = market.outcomes.find(o => 
-				o.title.toUpperCase() === targetOutcomeTitle.toUpperCase()
-			)
-
-			// Fallback: if UP/DOWN not found, try YES/NO
-			if (!outcomeObj) {
-				if (orderType === 'up') {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
-				} else {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'NO')
-				}
-			}
-
+			// Find outcome object
+			const outcomeObj = findOutcome(market, orderType)
 			if (!outcomeObj) {
 				addLogEntry('Buy Now - Error', { 
-					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map(o => o.title).join(', ')}`,
-					availableOutcomes: market.outcomes.map(o => o.title)
+					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map((o: any) => o.title).join(', ')}`,
+					availableOutcomes: market.outcomes.map((o: any) => o.title)
 				})
 				return
 			}
 
-			// Use the actual outcome title from the market for the API call
 			const actualOutcome = outcomeObj.title.toUpperCase()
 
 			// Place buy order
@@ -362,34 +399,18 @@ export default function TradingPage() {
 			addLogEntry('Market Data', market)
 
 			// Log available outcomes for debugging
-			addLogEntry('Available Outcomes', market.outcomes.map(o => ({ title: o.title, id: o.id })))
+			addLogEntry('Available Outcomes', market.outcomes.map((o: any) => ({ title: o.title, id: o.id })))
 
-			// Determine outcome title based on orderType (Up/Down)
-			const targetOutcomeTitle: string = orderType === 'up' ? 'UP' : 'DOWN'
-
-			// Find outcome token ID - try exact match first, then fallback to YES/NO
-			let outcomeObj = market.outcomes.find(o => 
-				o.title.toUpperCase() === targetOutcomeTitle.toUpperCase()
-			)
-
-			// Fallback: if UP/DOWN not found, try YES/NO
-			if (!outcomeObj) {
-				if (orderType === 'up') {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
-				} else {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'NO')
-				}
-			}
-
+			// Find outcome object
+			const outcomeObj = findOutcome(market, orderType)
 			if (!outcomeObj) {
 				addLogEntry('Sell Now - Error', { 
-					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map(o => o.title).join(', ')}`,
-					availableOutcomes: market.outcomes.map(o => o.title)
+					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map((o: any) => o.title).join(', ')}`,
+					availableOutcomes: market.outcomes.map((o: any) => o.title)
 				})
 				return
 			}
 
-			// Use the actual outcome title from the market for the API call
 			const actualOutcome = outcomeObj.title.toUpperCase()
 
 			// Place sell order
@@ -419,70 +440,42 @@ export default function TradingPage() {
 		}
 	}
 
-	// Helper function to execute sell order for combined trade
-	const executeSellOrderForCombinedTrade = async () => {
-		if (!activeCombinedTrade) {
-			addLogEntry('Combined Trade - Auto Sell Error', { error: 'No active combined trade found' })
+	// Helper: execute sell for combined trade using the filled buy order's token (so we sell what we actually bought)
+	const executeSellOrderForCombinedTrade = async (filledOrder: { asset_id: string; outcome: string; market: string }) => {
+		const current = activeCombinedTradeRef.current
+		if (!current || !combinedTradeMarketRef.current) {
+			addLogEntry('Combined Trade - Auto Sell Error', { error: 'No active combined trade or market data found' })
+			setActiveCombinedTrade(null)
+			combinedTradeMarketRef.current = null
 			return
 		}
 
-		const { marketSlug, orderType, sellPrice, sellSize } = activeCombinedTrade
+		const { sellPrice, sellSize } = current
+		const { market } = combinedTradeMarketRef.current
 
 		try {
-			addLogEntry('Combined Trade - Auto Sell Start', { marketSlug, orderType, sellPrice, sellSize })
+			addLogEntry('Combined Trade - Auto Sell Start', { sellPrice, sellSize })
 
-			// Fetch market data from slug
-			const market = await fetchMarketBySlugFromGamma(marketSlug)
-			
-			if (!market) {
-				addLogEntry('Combined Trade - Auto Sell Error', { error: 'Market not found' })
-				setActiveCombinedTrade(null)
-				return
-			}
+			// Use token and outcome from the filled buy order so we sell exactly what was bought (avoids wrong outcome → "not enough balance")
+			const outcomeId = filledOrder.asset_id
+			const outcomeLabel = (filledOrder.outcome || '').toUpperCase() || 'YES'
 
-			// Determine outcome title based on orderType (Up/Down)
-			const targetOutcomeTitle: string = orderType === 'up' ? 'UP' : 'DOWN'
-
-			// Find outcome token ID
-			let outcomeObj = market.outcomes.find(o => 
-				o.title.toUpperCase() === targetOutcomeTitle.toUpperCase()
-			)
-
-			// Fallback: if UP/DOWN not found, try YES/NO
-			if (!outcomeObj) {
-				if (orderType === 'up') {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
-				} else {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'NO')
-				}
-			}
-
-			if (!outcomeObj) {
-				addLogEntry('Combined Trade - Auto Sell Error', { 
-					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map(o => o.title).join(', ')}`
-				})
-				setActiveCombinedTrade(null)
-				return
-			}
-
-			const actualOutcome = outcomeObj.title.toUpperCase()
-
-			// Place sell order
 			const orderParams = {
-				marketId: market.conditionId,
+				marketId: filledOrder.market || market.conditionId,
 				price: parseFloat(sellPrice),
 				quantity: parseFloat(sellSize),
 				side: 'SELL' as const,
-				outcome: actualOutcome,
-				outcomeId: outcomeObj.id
+				outcome: outcomeLabel,
+				outcomeId
 			}
 
 			addLogEntry('Combined Trade - Place Auto Sell Order', orderParams)
 			const result = await placeOrder(orderParams)
 			addLogEntry('Combined Trade - Auto Sell Success', result)
 			
-			// Clear active combined trade
+			// Clear active combined trade and market ref
 			setActiveCombinedTrade(null)
+			combinedTradeMarketRef.current = null
 
 			// Update orders after placing
 			try {
@@ -494,6 +487,7 @@ export default function TradingPage() {
 		} catch (error: any) {
 			addLogEntry('Combined Trade - Auto Sell Error', { error: error.message || String(error) })
 			setActiveCombinedTrade(null)
+			combinedTradeMarketRef.current = null
 			console.error('Error placing auto sell order:', error)
 		}
 	}
@@ -518,26 +512,11 @@ export default function TradingPage() {
 
 			addLogEntry('Combined Trade - Market Data', market)
 
-			// Determine outcome title based on orderType (Up/Down)
-			const targetOutcomeTitle: string = orderType === 'up' ? 'UP' : 'DOWN'
-
-			// Find outcome token ID
-			let outcomeObj = market.outcomes.find(o => 
-				o.title.toUpperCase() === targetOutcomeTitle.toUpperCase()
-			)
-
-			// Fallback: if UP/DOWN not found, try YES/NO
-			if (!outcomeObj) {
-				if (orderType === 'up') {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
-				} else {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'NO')
-				}
-			}
-
+			// Find outcome object
+			const outcomeObj = findOutcome(market, orderType)
 			if (!outcomeObj) {
 				addLogEntry('Combined Trade - Error', { 
-					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map(o => o.title).join(', ')}`
+					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map((o: any) => o.title).join(', ')}`
 				})
 				return
 			}
@@ -558,11 +537,16 @@ export default function TradingPage() {
 			const result = await placeOrder(orderParams)
 			addLogEntry('Combined Trade - Buy Order Placed', result)
 
+			// Store market data in ref for auto-sell
+			combinedTradeMarketRef.current = {
+				market,
+				orderType,
+				outcomeObj
+			}
+
 			// Store active combined trade info for auto-sell
 			setActiveCombinedTrade({
 				buyOrderId: result.orderId,
-				marketSlug,
-				orderType,
 				sellPrice,
 				sellSize
 			})
@@ -577,6 +561,7 @@ export default function TradingPage() {
 		} catch (error: any) {
 			addLogEntry('Combined Trade - Error', { error: error.message || String(error) })
 			setActiveCombinedTrade(null)
+			combinedTradeMarketRef.current = null
 			console.error('Error placing combined trade:', error)
 		}
 	}
@@ -589,6 +574,7 @@ export default function TradingPage() {
 			if (activeCombinedTrade && activeCombinedTrade.buyOrderId === orderId) {
 				addLogEntry('Combined Trade - Buy Order Cancelled', { orderId })
 				setActiveCombinedTrade(null)
+				combinedTradeMarketRef.current = null
 			}
 
 			const result = await cancelOrder(orderId)
@@ -607,7 +593,6 @@ export default function TradingPage() {
 		}
 	}
 
-	console.log('status:', status)
 
 	return (
 		<div className="flex flex-col gap-2 p-4">
@@ -954,6 +939,28 @@ export default function TradingPage() {
 }
 
 /*
+oder data:
+buy order:
+{
+    "marketId": "0x11753e2708b9427a3766f3681f4758652a80f6b48abe2a283ebcbd458d60043f",
+    "price": 0.01,
+    "quantity": 100,
+    "side": "BUY",
+    "outcome": "DOWN",
+    "outcomeId": "39696540418960500191296396204225370190197778181882395335664201345066938947463"
+}
+sell order:		
+{
+    "marketId": "0x11753e2708b9427a3766f3681f4758652a80f6b48abe2a283ebcbd458d60043f",
+    "price": 0.02,
+    "quantity": 100,
+    "side": "SELL",
+    "outcome": "DOWN",
+    "outcomeId": "39696540418960500191296396204225370190197778181882395335664201345066938947463"
+}
+
+--------------------------
+
 user channel websocket examples:
 
 order placement:
