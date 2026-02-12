@@ -14,7 +14,7 @@ import { fetchMarketBySlugFromGamma, fetchMarkets } from "@/lib/polymarket/marke
 import { cancelOrder, getOpenOrders, placeOrder } from "@/lib/polymarket/orders";
 import { useUserChannelWebSocket } from "@/hooks/use-user-channel-websocket";
 import type { Order, WalletBalance } from "@/lib/polymarket/types";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 // import { Side } from "@polymarket/clob-client";
 import { Strategy1, Strategy2 } from "./Strategy";
 
@@ -36,6 +36,13 @@ export default function TradingPage() {
 		pending: 0
 	})
 	const [openOrders, setOpenOrders] = useState<Order[]>([])
+	const [activeCombinedTrade, setActiveCombinedTrade] = useState<{
+		buyOrderId: string
+		marketSlug: string
+		orderType: 'up' | 'down'
+		sellPrice: string
+		sellSize: string
+	} | null>(null)
 
 	// Helper function to add log entry
 	const addLogEntry = (action: string, data: any) => {
@@ -69,7 +76,7 @@ export default function TradingPage() {
 				market: trade.market
 			})
 		},
-		onOrderUpdate: (order) => {
+		onOrderUpdate: async (order) => {
 			addLogEntry('Order Update (WebSocket)', {
 				id: order.id,
 				type: order.type,
@@ -80,6 +87,49 @@ export default function TradingPage() {
 				asset_id: order.asset_id,
 				market: order.market
 			})
+
+			// Check if this is the buy order from active combined trade that was fully filled
+			if (
+				activeCombinedTrade &&
+				activeCombinedTrade.buyOrderId === order.id &&
+				order.side === 'BUY'
+			) {
+				const sizeMatched = parseFloat(order.size_matched || '0')
+				const originalSize = parseFloat(order.original_size || '0')
+				const isFullyFilled = sizeMatched >= originalSize && originalSize > 0
+
+				if (isFullyFilled && order.type === 'UPDATE') {
+					addLogEntry('Combined Trade - Buy Order Fully Filled', {
+						orderId: order.id,
+						size_matched: order.size_matched,
+						original_size: order.original_size,
+						type: order.type
+					})
+
+					// Execute sell order automatically
+					try {
+						await executeSellOrderForCombinedTrade()
+					} catch (error: any) {
+						addLogEntry('Combined Trade - Auto Sell Error', {
+							error: error.message || String(error)
+						})
+					}
+				} else if (order.type === 'CANCELLATION') {
+					// Order was cancelled, clear active combined trade
+					addLogEntry('Combined Trade - Buy Order Cancelled', {
+						orderId: order.id
+					})
+					setActiveCombinedTrade(null)
+				}
+			}
+
+			// Update orders list
+			try {
+				const orders = await getOpenOrders()
+				updateOrderStats(orders)
+			} catch {
+				// Ignore update error
+			}
 		},
 		onError: (error) => {
 			addLogEntry('User Channel Error', { error: error.message })
@@ -369,9 +419,178 @@ export default function TradingPage() {
 		}
 	}
 
+	// Helper function to execute sell order for combined trade
+	const executeSellOrderForCombinedTrade = async () => {
+		if (!activeCombinedTrade) {
+			addLogEntry('Combined Trade - Auto Sell Error', { error: 'No active combined trade found' })
+			return
+		}
+
+		const { marketSlug, orderType, sellPrice, sellSize } = activeCombinedTrade
+
+		try {
+			addLogEntry('Combined Trade - Auto Sell Start', { marketSlug, orderType, sellPrice, sellSize })
+
+			// Fetch market data from slug
+			const market = await fetchMarketBySlugFromGamma(marketSlug)
+			
+			if (!market) {
+				addLogEntry('Combined Trade - Auto Sell Error', { error: 'Market not found' })
+				setActiveCombinedTrade(null)
+				return
+			}
+
+			// Determine outcome title based on orderType (Up/Down)
+			const targetOutcomeTitle: string = orderType === 'up' ? 'UP' : 'DOWN'
+
+			// Find outcome token ID
+			let outcomeObj = market.outcomes.find(o => 
+				o.title.toUpperCase() === targetOutcomeTitle.toUpperCase()
+			)
+
+			// Fallback: if UP/DOWN not found, try YES/NO
+			if (!outcomeObj) {
+				if (orderType === 'up') {
+					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
+				} else {
+					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'NO')
+				}
+			}
+
+			if (!outcomeObj) {
+				addLogEntry('Combined Trade - Auto Sell Error', { 
+					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map(o => o.title).join(', ')}`
+				})
+				setActiveCombinedTrade(null)
+				return
+			}
+
+			const actualOutcome = outcomeObj.title.toUpperCase()
+
+			// Place sell order
+			const orderParams = {
+				marketId: market.conditionId,
+				price: parseFloat(sellPrice),
+				quantity: parseFloat(sellSize),
+				side: 'SELL' as const,
+				outcome: actualOutcome,
+				outcomeId: outcomeObj.id
+			}
+
+			addLogEntry('Combined Trade - Place Auto Sell Order', orderParams)
+			const result = await placeOrder(orderParams)
+			addLogEntry('Combined Trade - Auto Sell Success', result)
+			
+			// Clear active combined trade
+			setActiveCombinedTrade(null)
+
+			// Update orders after placing
+			try {
+				const orders = await getOpenOrders()
+				updateOrderStats(orders)
+			} catch {
+				// Ignore update error
+			}
+		} catch (error: any) {
+			addLogEntry('Combined Trade - Auto Sell Error', { error: error.message || String(error) })
+			setActiveCombinedTrade(null)
+			console.error('Error placing auto sell order:', error)
+		}
+	}
+
+	const handleCombinedTrade = async () => {
+		try {
+			addLogEntry('Combined Trade - Start', { marketSlug, orderType, buyPrice, buySize, sellPrice, sellSize })
+			
+			if (!marketSlug || !buyPrice || !buySize || !sellPrice || !sellSize) {
+				addLogEntry('Combined Trade - Error', { error: 'Please fill in all fields (market slug, buy price/size, sell price/size)' })
+				return
+			}
+
+			// Fetch market data from slug
+			addLogEntry('Combined Trade - Fetch Market', { slug: marketSlug })
+			const market = await fetchMarketBySlugFromGamma(marketSlug)
+			
+			if (!market) {
+				addLogEntry('Combined Trade - Error', { error: 'Market not found' })
+				return
+			}
+
+			addLogEntry('Combined Trade - Market Data', market)
+
+			// Determine outcome title based on orderType (Up/Down)
+			const targetOutcomeTitle: string = orderType === 'up' ? 'UP' : 'DOWN'
+
+			// Find outcome token ID
+			let outcomeObj = market.outcomes.find(o => 
+				o.title.toUpperCase() === targetOutcomeTitle.toUpperCase()
+			)
+
+			// Fallback: if UP/DOWN not found, try YES/NO
+			if (!outcomeObj) {
+				if (orderType === 'up') {
+					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
+				} else {
+					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'NO')
+				}
+			}
+
+			if (!outcomeObj) {
+				addLogEntry('Combined Trade - Error', { 
+					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map(o => o.title).join(', ')}`
+				})
+				return
+			}
+
+			const actualOutcome = outcomeObj.title.toUpperCase()
+
+			// Place buy order
+			const orderParams = {
+				marketId: market.conditionId,
+				price: parseFloat(buyPrice),
+				quantity: parseFloat(buySize),
+				side: 'BUY' as const,
+				outcome: actualOutcome,
+				outcomeId: outcomeObj.id
+			}
+
+			addLogEntry('Combined Trade - Place Buy Order', orderParams)
+			const result = await placeOrder(orderParams)
+			addLogEntry('Combined Trade - Buy Order Placed', result)
+
+			// Store active combined trade info for auto-sell
+			setActiveCombinedTrade({
+				buyOrderId: result.orderId,
+				marketSlug,
+				orderType,
+				sellPrice,
+				sellSize
+			})
+
+			// Update orders after placing
+			try {
+				const orders = await getOpenOrders()
+				updateOrderStats(orders)
+			} catch {
+				// Ignore update error
+			}
+		} catch (error: any) {
+			addLogEntry('Combined Trade - Error', { error: error.message || String(error) })
+			setActiveCombinedTrade(null)
+			console.error('Error placing combined trade:', error)
+		}
+	}
+
 	const handleCancelOrder = async (orderId: string) => {
 		try {
 			addLogEntry('Cancel Order - Start', { orderId })
+			
+			// If canceling the buy order from active combined trade, clear it
+			if (activeCombinedTrade && activeCombinedTrade.buyOrderId === orderId) {
+				addLogEntry('Combined Trade - Buy Order Cancelled', { orderId })
+				setActiveCombinedTrade(null)
+			}
+
 			const result = await cancelOrder(orderId)
 			addLogEntry('Cancel Order - Success', result)
 			
@@ -604,6 +823,34 @@ export default function TradingPage() {
 					</div>
 				</div>
 
+				{/* Combined Trade Button */}
+				<div className="flex justify-center">
+					<Button
+						variant="default"
+						onClick={handleCombinedTrade}
+						disabled={
+							userChannelWs.status !== 'connected' ||
+							openOrders.length > 0 ||
+							!marketSlug ||
+							!buyPrice ||
+							!buySize ||
+							!sellPrice ||
+							!sellSize
+						}
+						className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{activeCombinedTrade ? 'Combined Trade Active...' : 'Combined Trade (Buy → Auto Sell)'}
+					</Button>
+				</div>
+
+				{activeCombinedTrade && (
+					<div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+						<div className="text-sm text-blue-800">
+							<strong>Combined Trade Active:</strong> Waiting for Buy Order ({activeCombinedTrade.buyOrderId.substring(0, 20)}...) to fill, then Sell Order will execute automatically.
+						</div>
+					</div>
+				)}
+
 				{/* Open Orders Display */}
 				{openOrders.length > 0 && (
 					<div className="space-y-3">
@@ -666,7 +913,20 @@ export default function TradingPage() {
 				)}
 
 				<div className="space-y-2">
-					<Label>Log View</Label>
+					<div className="flex items-center justify-between">
+						<Label>Log View</Label>
+						{logEntries.length > 0 && (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={() => setLogEntries([])}
+								className="h-7 px-2"
+								title="Clear Log"
+							>
+								<X className="h-3 w-3" />
+							</Button>
+						)}
+					</div>
 					<div className="border rounded-md p-4 bg-muted/50 max-h-96 overflow-y-auto">
 						{logEntries.length === 0 ? (
 							<div className="text-muted-foreground text-sm">No log entries yet...</div>

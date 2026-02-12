@@ -26,7 +26,7 @@ class _Strategy1 {
 		console.log('Strategy 1 running', symbol, '...')
 		// const keys = await PolymarketApi.cache.keys()
 		// const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m')
-		const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m', new Date('2026-01-01').getTime())
+		const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m', new Date('2026-02-01').getTime())
 
 		console.log('   total keys:', keys.length)
 
@@ -75,7 +75,7 @@ class _Strategy1 {
 			openLimit: 0.01,
 			openTimeLimit: 1 * 60 * 1000,	//1 minute
 			closeLimit: 0.02,
-			closeTimeLimit: 2 * 1000,	//2 seconds
+			closeTimeLimit: 3 * 1000,	//3 seconds
 			up: {
 				count: 0,
 				won: 0,
