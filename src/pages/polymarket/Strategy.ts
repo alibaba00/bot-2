@@ -24,7 +24,10 @@ class _Strategy1 {
 
 	async run(symbol: string = 'btc'): Promise<void> {
 		console.log('Strategy 1 running', symbol, '...')
-		const keys = await PolymarketApi.cache.keys()
+		// const keys = await PolymarketApi.cache.keys()
+		// const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m')
+		const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m', new Date('2026-01-01').getTime())
+
 		console.log('   total keys:', keys.length)
 
 		let data = await STORE.getItem('strategie1-' + symbol) as any
@@ -41,12 +44,12 @@ class _Strategy1 {
 		}
 
 		data.new = 0
-		const marketKey = symbol + '-updown-15m'
 
 		console.log('   check for new markets ...')
-		for (const key of keys) {
-			if (!key.includes(marketKey)) continue
+		const useKeys = {}
 
+		for (const key of keys) {
+			useKeys[key] = true
 			if (data.markets[key]) continue //market already processed
 
 			const market = await PolymarketApi.cache.getItem(key)
@@ -88,6 +91,7 @@ class _Strategy1 {
 
 		for (const key in data.markets) {
 			if (data.markets[key] !== 'valid') continue
+			if (!useKeys[key]) continue
 
 			stats.total++
 			const market = await PolymarketApi.cache.getItem(key)

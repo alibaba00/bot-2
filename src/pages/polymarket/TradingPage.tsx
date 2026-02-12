@@ -8,13 +8,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue
-} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getAccountInfo, getTransactionHistory, getWalletBalance } from "@/lib/polymarket/wallet";
 import { fetchMarketBySlugFromGamma, fetchMarkets } from "@/lib/polymarket/markets";
 import { cancelOrder, getOpenOrders, placeOrder } from "@/lib/polymarket/orders";
@@ -29,17 +23,19 @@ export default function TradingPage() {
 
 	// Trading console state
 	const [marketSlug, setMarketSlug] = useState('btc-updown-15m-1770896700')
-	const [orderType, setOrderType] = useState<'up' | 'down' | 'buy' | 'sell'>('up')
-	const [price, setPrice] = useState('')
-	const [size, setSize] = useState('')
+	const [orderType, setOrderType] = useState<'up' | 'down'>('up')
+	const [buyPrice, setBuyPrice] = useState('')
+	const [sellPrice, setSellPrice] = useState('')
+	const [buySize, setBuySize] = useState('')
+	const [sellSize, setSellSize] = useState('')
 	const [logEntries, setLogEntries] = useState<Array<{ timestamp: string; action: string; data: any }>>([])
-	const [selectedOrderId, setSelectedOrderId] = useState('')
 	const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null)
 	const [orderStats, setOrderStats] = useState<{ total: number; open: number; pending: number }>({
 		total: 0,
 		open: 0,
 		pending: 0
 	})
+	const [openOrders, setOpenOrders] = useState<Order[]>([])
 
 	// Helper function to add log entry
 	const addLogEntry = (action: string, data: any) => {
@@ -57,6 +53,7 @@ export default function TradingPage() {
 		const open = orders.filter(o => o.status === 'OPEN').length
 		const pending = orders.filter(o => o.status === 'PENDING').length
 		setOrderStats({ total, open, pending })
+		setOpenOrders(orders.filter(o => o.status === 'OPEN' || o.status === 'PENDING'))
 	}
 
 	// User Channel WebSocket for real-time order/trade updates
@@ -187,15 +184,17 @@ export default function TradingPage() {
 		console.log(order);
 	}
 
-	// --- cancel order
-	const handleCancelOrder = async () => {
-		console.log('handleCancelOrder ...')
+	// --- cancel order (old function for top buttons - kept for compatibility)
+	const handleCancelOrderTop = async () => {
+		console.log('handleCancelOrderTop ...')
 		// const orderId = '0x3eb73f7df073f02049648d90871d2d411b2f3c4eefd3c8d84ea7d344d0a37f03';
 		const orders = await getOpenOrders();
-		const orderId = orders[0].id;
-		console.log('orderId:', orderId);
-		const order = await cancelOrder(orderId);
-		console.log('order:', order);
+		if (orders.length > 0) {
+			const orderId = orders[0].id;
+			console.log('orderId:', orderId);
+			const order = await cancelOrder(orderId);
+			console.log('order:', order);
+		}
 	}
 
 
@@ -214,12 +213,12 @@ export default function TradingPage() {
 	}
 
 	// Trading console handlers
-	const handleOrderNow = async () => {
+	const handleBuyNow = async () => {
 		try {
-			addLogEntry('Order Now - Start', { marketSlug, orderType, price, size })
+			addLogEntry('Buy Now - Start', { marketSlug, orderType, buyPrice, buySize })
 			
-			if (!marketSlug || !price || !size) {
-				addLogEntry('Order Now - Error', { error: 'Please fill in all fields' })
+			if (!marketSlug || !buyPrice || !buySize) {
+				addLogEntry('Buy Now - Error', { error: 'Please fill in market slug, buy price, and buy size' })
 				return
 			}
 
@@ -237,25 +236,8 @@ export default function TradingPage() {
 			// Log available outcomes for debugging
 			addLogEntry('Available Outcomes', market.outcomes.map(o => ({ title: o.title, id: o.id })))
 
-			// Determine side and outcome title based on orderType
-			let side: 'BUY' | 'SELL' = 'BUY'
-			let targetOutcomeTitle: string = ''
-
-			if (orderType === 'up') {
-				side = 'BUY'
-				targetOutcomeTitle = 'UP'
-			} else if (orderType === 'down') {
-				side = 'BUY'
-				targetOutcomeTitle = 'DOWN'
-			} else if (orderType === 'buy') {
-				side = 'BUY'
-				// For buy, try UP first, then YES as fallback
-				targetOutcomeTitle = 'UP'
-			} else if (orderType === 'sell') {
-				side = 'SELL'
-				// For sell, try UP first, then YES as fallback
-				targetOutcomeTitle = 'UP'
-			}
+			// Determine outcome title based on orderType (Up/Down)
+			const targetOutcomeTitle: string = orderType === 'up' ? 'UP' : 'DOWN'
 
 			// Find outcome token ID - try exact match first, then fallback to YES/NO
 			let outcomeObj = market.outcomes.find(o => 
@@ -264,17 +246,15 @@ export default function TradingPage() {
 
 			// Fallback: if UP/DOWN not found, try YES/NO
 			if (!outcomeObj) {
-				if (orderType === 'up' || orderType === 'buy') {
+				if (orderType === 'up') {
 					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
-				} else if (orderType === 'down') {
+				} else {
 					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'NO')
-				} else if (orderType === 'sell') {
-					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
 				}
 			}
 
 			if (!outcomeObj) {
-				addLogEntry('Order Now - Error', { 
+				addLogEntry('Buy Now - Error', { 
 					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map(o => o.title).join(', ')}`,
 					availableOutcomes: market.outcomes.map(o => o.title)
 				})
@@ -284,48 +264,124 @@ export default function TradingPage() {
 			// Use the actual outcome title from the market for the API call
 			const actualOutcome = outcomeObj.title.toUpperCase()
 
-			// Place order
+			// Place buy order
 			const orderParams = {
 				marketId: market.conditionId,
-				price: parseFloat(price),
-				quantity: parseFloat(size),
-				side,
+				price: parseFloat(buyPrice),
+				quantity: parseFloat(buySize),
+				side: 'BUY' as const,
 				outcome: actualOutcome,
 				outcomeId: outcomeObj.id
 			}
 
-			addLogEntry('Place Order', orderParams)
+			addLogEntry('Place Buy Order', orderParams)
 			const result = await placeOrder(orderParams)
-			addLogEntry('Order Now - Success', result)
+			addLogEntry('Buy Now - Success', result)
+			
+			// Update orders after placing
+			try {
+				const orders = await getOpenOrders()
+				updateOrderStats(orders)
+			} catch {
+				// Ignore update error
+			}
 		} catch (error: any) {
-			addLogEntry('Order Now - Error', { error: error.message || String(error) })
-			console.error('Error placing order:', error)
+			addLogEntry('Buy Now - Error', { error: error.message || String(error) })
+			console.error('Error placing buy order:', error)
 		}
 	}
 
-	const handleConsoleGetOrders = async () => {
+	const handleSellNow = async () => {
 		try {
-			addLogEntry('Get Orders - Start', {})
-			const orders = await getOpenOrders()
-			updateOrderStats(orders)
-			addLogEntry('Get Orders - Success', orders)
-		} catch (error: any) {
-			addLogEntry('Get Orders - Error', { error: error.message || String(error) })
-			console.error('Error getting orders:', error)
-		}
-	}
-
-	const handleConsoleCancelOrder = async () => {
-		try {
-			if (!selectedOrderId) {
-				addLogEntry('Cancel Order - Error', { error: 'Please select an order ID' })
+			addLogEntry('Sell Now - Start', { marketSlug, orderType, sellPrice, sellSize })
+			
+			if (!marketSlug || !sellPrice || !sellSize) {
+				addLogEntry('Sell Now - Error', { error: 'Please fill in market slug, sell price, and sell size' })
 				return
 			}
 
-			addLogEntry('Cancel Order - Start', { orderId: selectedOrderId })
-			const result = await cancelOrder(selectedOrderId)
+			// Fetch market data from slug
+			addLogEntry('Fetch Market', { slug: marketSlug })
+			const market = await fetchMarketBySlugFromGamma(marketSlug)
+			
+			if (!market) {
+				addLogEntry('Fetch Market - Error', { error: 'Market not found' })
+				return
+			}
+
+			addLogEntry('Market Data', market)
+
+			// Log available outcomes for debugging
+			addLogEntry('Available Outcomes', market.outcomes.map(o => ({ title: o.title, id: o.id })))
+
+			// Determine outcome title based on orderType (Up/Down)
+			const targetOutcomeTitle: string = orderType === 'up' ? 'UP' : 'DOWN'
+
+			// Find outcome token ID - try exact match first, then fallback to YES/NO
+			let outcomeObj = market.outcomes.find(o => 
+				o.title.toUpperCase() === targetOutcomeTitle.toUpperCase()
+			)
+
+			// Fallback: if UP/DOWN not found, try YES/NO
+			if (!outcomeObj) {
+				if (orderType === 'up') {
+					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'YES')
+				} else {
+					outcomeObj = market.outcomes.find(o => o.title.toUpperCase() === 'NO')
+				}
+			}
+
+			if (!outcomeObj) {
+				addLogEntry('Sell Now - Error', { 
+					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map(o => o.title).join(', ')}`,
+					availableOutcomes: market.outcomes.map(o => o.title)
+				})
+				return
+			}
+
+			// Use the actual outcome title from the market for the API call
+			const actualOutcome = outcomeObj.title.toUpperCase()
+
+			// Place sell order
+			const orderParams = {
+				marketId: market.conditionId,
+				price: parseFloat(sellPrice),
+				quantity: parseFloat(sellSize),
+				side: 'SELL' as const,
+				outcome: actualOutcome,
+				outcomeId: outcomeObj.id
+			}
+
+			addLogEntry('Place Sell Order', orderParams)
+			const result = await placeOrder(orderParams)
+			addLogEntry('Sell Now - Success', result)
+			
+			// Update orders after placing
+			try {
+				const orders = await getOpenOrders()
+				updateOrderStats(orders)
+			} catch {
+				// Ignore update error
+			}
+		} catch (error: any) {
+			addLogEntry('Sell Now - Error', { error: error.message || String(error) })
+			console.error('Error placing sell order:', error)
+		}
+	}
+
+	const handleCancelOrder = async (orderId: string) => {
+		try {
+			addLogEntry('Cancel Order - Start', { orderId })
+			const result = await cancelOrder(orderId)
 			addLogEntry('Cancel Order - Success', result)
-			setSelectedOrderId('') // Clear selection
+			
+			// Refresh orders after cancellation
+			try {
+				const orders = await getOpenOrders()
+				updateOrderStats(orders)
+			} catch {
+				// Ignore update error
+			}
 		} catch (error: any) {
 			addLogEntry('Cancel Order - Error', { error: error.message || String(error) })
 			console.error('Error cancelling order:', error)
@@ -346,7 +402,7 @@ export default function TradingPage() {
 				<Button variant='default' onClick={handleFetchMarkets}>Fetch Markets</Button>
 				<Button variant='default' onClick={handleFetchMarketBySlugFromGamma}>Fetch Market By Slug From Gamma</Button>
 				<Button variant='default' onClick={handleSetOrder}>Set Order</Button>
-				<Button variant='default' onClick={handleCancelOrder}>Cancel Order</Button>
+				<Button variant='default' onClick={handleCancelOrderTop}>Cancel Order</Button>
 			</div>
 			<h2>Strategies:</h2>
 			<div className="flex gap-2 flex-wrap">
@@ -434,7 +490,8 @@ export default function TradingPage() {
 						<span className="text-xs text-red-600">{userChannelWs.error.message}</span>
 					)}
 				</div>
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div className="space-y-4">
+					{/* Market Slug */}
 					<div className="space-y-2">
 						<Label htmlFor="market-slug">Market Slug</Label>
 						<Input
@@ -445,70 +502,168 @@ export default function TradingPage() {
 						/>
 					</div>
 
+					{/* Order Type: Up/Down Toggle */}
 					<div className="space-y-2">
-						<Label htmlFor="order-type">Order Type</Label>
-						<Select value={orderType} onValueChange={(v: 'up' | 'down' | 'buy' | 'sell') => setOrderType(v)}>
-							<SelectTrigger id="order-type">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="up">Up (Buy YES)</SelectItem>
-								<SelectItem value="down">Down (Buy NO)</SelectItem>
-								<SelectItem value="buy">Buy</SelectItem>
-								<SelectItem value="sell">Sell</SelectItem>
-							</SelectContent>
-						</Select>
+						<Label>Order Type</Label>
+						<ToggleGroup
+							type="single"
+							value={orderType}
+							onValueChange={(value) => {
+								if (value) setOrderType(value as 'up' | 'down')
+							}}
+							variant="outline"
+						>
+							<ToggleGroupItem value="up" aria-label="Up">
+								Up
+							</ToggleGroupItem>
+							<ToggleGroupItem value="down" aria-label="Down">
+								Down
+							</ToggleGroupItem>
+						</ToggleGroup>
 					</div>
 
-					<div className="space-y-2">
-						<Label htmlFor="price">Price (0-1)</Label>
-						<Input
-							id="price"
-							type="number"
-							step="0.01"
-							min="0"
-							max="1"
-							value={price}
-							onChange={(e) => setPrice(e.target.value)}
-							placeholder="0.50"
-						/>
-					</div>
+					{/* Buy and Sell Sections */}
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						{/* Buy Section */}
+						<div className="border rounded-lg p-4 space-y-3">
+							<div className="flex items-center justify-between">
+								<h3 className="text-sm font-semibold text-green-600">Buy (Open Order)</h3>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="buy-price">Buy Price (0-1)</Label>
+								<Input
+									id="buy-price"
+									type="number"
+									step="0.01"
+									min="0"
+									max="1"
+									value={buyPrice}
+									onChange={(e) => setBuyPrice(e.target.value)}
+									placeholder="0.50"
+								/>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="buy-size">Buy Size (Shares)</Label>
+								<Input
+									id="buy-size"
+									type="number"
+									step="0.1"
+									min="0"
+									value={buySize}
+									onChange={(e) => setBuySize(e.target.value)}
+									placeholder="10"
+								/>
+							</div>
+							<Button 
+								variant="default" 
+								onClick={handleBuyNow}
+								className="w-full bg-green-600 hover:bg-green-700"
+							>
+								Buy Now
+							</Button>
+						</div>
 
-					<div className="space-y-2">
-						<Label htmlFor="size">Size (Shares)</Label>
-						<Input
-							id="size"
-							type="number"
-							step="0.1"
-							min="0"
-							value={size}
-							onChange={(e) => setSize(e.target.value)}
-							placeholder="10"
-						/>
+						{/* Sell Section */}
+						<div className="border rounded-lg p-4 space-y-3">
+							<div className="flex items-center justify-between">
+								<h3 className="text-sm font-semibold text-red-600">Sell (Close Order)</h3>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="sell-price">Sell Price (0-1)</Label>
+								<Input
+									id="sell-price"
+									type="number"
+									step="0.01"
+									min="0"
+									max="1"
+									value={sellPrice}
+									onChange={(e) => setSellPrice(e.target.value)}
+									placeholder="0.50"
+								/>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="sell-size">Sell Size (Shares)</Label>
+								<Input
+									id="sell-size"
+									type="number"
+									step="0.1"
+									min="0"
+									value={sellSize}
+									onChange={(e) => setSellSize(e.target.value)}
+									placeholder="10"
+								/>
+							</div>
+							<Button 
+								variant="default" 
+								onClick={handleSellNow}
+								className="w-full bg-red-600 hover:bg-red-700"
+							>
+								Sell Now
+							</Button>
+						</div>
 					</div>
 				</div>
 
-				<div className="flex gap-2 flex-wrap">
-					<Button variant="default" onClick={handleOrderNow}>
-						Order Now
-					</Button>
-					<Button variant="default" onClick={handleConsoleGetOrders}>
-						Get Orders
-					</Button>
-					<Button variant="default" onClick={handleConsoleCancelOrder}>
-						Cancel Order
-					</Button>
-				</div>
-
-				<div className="space-y-2">
-					<Label htmlFor="order-id">Order ID (for cancel)</Label>
-					<Input
-						id="order-id"
-						value={selectedOrderId}
-						onChange={(e) => setSelectedOrderId(e.target.value)}
-						placeholder="Enter order ID to cancel"
-					/>
-				</div>
+				{/* Open Orders Display */}
+				{openOrders.length > 0 && (
+					<div className="space-y-3">
+						<Label>Open Orders</Label>
+						<div className="space-y-2">
+							{openOrders.map((order) => (
+								<div
+									key={order.id}
+									className={`flex items-center justify-between p-3 border rounded-lg ${
+										order.side === 'BUY' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+									}`}
+								>
+									<div className="flex-1">
+										<div className="flex items-center gap-2">
+											<span
+												className={`text-xs font-semibold px-2 py-1 rounded ${
+													order.side === 'BUY'
+														? 'bg-green-600 text-white'
+														: 'bg-red-600 text-white'
+												}`}
+											>
+												{order.side}
+											</span>
+											<span className="text-xs text-muted-foreground">
+												{order.outcome}
+											</span>
+											<span
+												className={`text-xs px-2 py-1 rounded ${
+													order.status === 'OPEN'
+														? 'bg-blue-100 text-blue-700'
+														: 'bg-yellow-100 text-yellow-700'
+												}`}
+											>
+												{order.status}
+											</span>
+										</div>
+										<div className="mt-1 text-xs text-muted-foreground">
+											<span>Price: {order.price.toFixed(4)}</span>
+											<span className="mx-2">•</span>
+											<span>
+												Size: {order.quantity} ({order.filledQuantity || 0} filled)
+											</span>
+										</div>
+										<div className="mt-1 text-xs font-mono text-muted-foreground truncate">
+											ID: {order.id}
+										</div>
+									</div>
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => handleCancelOrder(order.id)}
+										className="ml-4"
+									>
+										Cancel
+									</Button>
+								</div>
+							))}
+						</div>
+					</div>
+				)}
 
 				<div className="space-y-2">
 					<Label>Log View</Label>

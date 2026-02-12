@@ -125,6 +125,31 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- getAllKeys
+	// symbol: e.g. btc
+	// fromDate: e.g. 1765406700 from btc-updown-15m-1765406700
+	// return: string[]
+	async getAllKeys(symbol: string, fromDate: number = 0): Promise<string[]> {
+		if (fromDate && fromDate > 1e12) fromDate = Math.floor(fromDate / 1000)	//convert milliseconds to seconds
+		const keys = await this.cache.keys()
+		console.log('getAllKeys:', symbol, 'from', keys.length, '...')
+
+		const out: string[] = []
+		for (const key of keys) {
+			if (!key.includes(symbol)) continue
+			if (fromDate) {
+				const keyDateString = parseInt(key.split('-')[3])	//e.g. 1765406700
+				if (String(keyDateString).length !== 10) continue	//e.g. 1765406700 -> 10 digits
+				if (keyDateString < fromDate) continue
+			}
+			out.push(key)
+		}
+		
+		console.log('getAllKeys complete!', symbol, out.length)
+		return out
+	}
+
+
 	// ---------------------------------------------------------------------------- getAllMarkets
 	// symbol: e.g. btc
 	// dateString: e.g. 1765406700 from btc-updown-15m-1765406700
