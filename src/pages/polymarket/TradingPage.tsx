@@ -17,6 +17,8 @@ import type { Order, WalletBalance } from "@/lib/polymarket/types";
 import { RefreshCw, X } from "lucide-react";
 // import { Side } from "@polymarket/clob-client";
 import { Strategy1, Strategy2 } from "./Strategy";
+import moment from "moment";
+
 
 export default function TradingPage() {
 	const { connect } = usePolymarketConnection()
@@ -113,7 +115,7 @@ export default function TradingPage() {
 			updatingSellSizeRef.current = false
 		}
 	}
-	const [logEntries, setLogEntries] = useState<Array<{ timestamp: string; action: string; data: any }>>([])
+	const [logEntries, setLogEntries] = useState<Array<{ timestamp: string; action: string; data: any, open: boolean }>>([])
 	const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null)
 	const [orderStats, setOrderStats] = useState<{ total: number; open: number; pending: number }>({
 		total: 0,
@@ -136,9 +138,13 @@ export default function TradingPage() {
 	// Helper function to add log entry
 	const addLogEntry = (action: string, data: any) => {
 		const entry = {
-			timestamp: new Date().toISOString(),
+			// timestamp: new Date().toISOString(),
+			// timestamp: new Date().toISOString().replace('T', ' ').replace('Z', '').slice(0, 23),
+			// timestamp: new Date().toLocaleString(undefined, { hour12: false }).replace(',', ''),
+			timestamp: moment().format('YYYY-MM-DD HH:mm:ss.SSS'),
 			action,
-			data
+			data,
+			open: true
 		}
 		setLogEntries(prev => [entry, ...prev])
 	}
@@ -683,6 +689,11 @@ export default function TradingPage() {
 		}
 	}
 
+	const handleLogEntryClick = (entry: any) => {
+		console.log('handleLogEntryClick:', entry)
+		entry.open = !entry.open
+		setLogEntries(prev => [...prev])
+	}
 
 	return (
 		<div className="flex flex-col gap-2 p-4">
@@ -1033,13 +1044,15 @@ export default function TradingPage() {
 							<div className="space-y-2 font-mono text-xs">
 								{logEntries.map((entry, index) => (
 									<div key={index} className="border-b pb-2 last:border-0">
-										<div className="flex gap-2 mb-1">
+										<div className="flex gap-2 mb-1 cursor-pointer" onClick={() => handleLogEntryClick(entry)}>
 											<span className="text-muted-foreground">{entry.timestamp}</span>
 											<span className="font-semibold">{entry.action}</span>
 										</div>
-										<pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words">
-											{JSON.stringify(entry.data, null, 2)}
-										</pre>
+										{entry.open && (
+											<pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words">
+												{JSON.stringify(entry.data, null, 2)}
+											</pre>
+										)}
 									</div>
 								))}
 							</div>
