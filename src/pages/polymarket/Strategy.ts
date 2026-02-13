@@ -27,8 +27,26 @@ class _Strategy1 {
 		// const keys = await PolymarketApi.cache.keys()
 		// const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m')
 		const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m', new Date('2026-02-01').getTime())
-
 		console.log('   total keys:', keys.length)
+
+		const stats = {
+			openLimit: 0.01,
+			openTimeLimit: 2 * 60 * 1000,	//2 minute
+			closeLimit: 0.04,
+			closeTimeDelay: 5 * 1000,		//5 seconds
+			total: 0,
+			count: 0,						//total valid markets checked
+			up: {
+				count: 0,
+				won: 0,
+				lost: 0,
+			},
+			down: {
+				count: 0,
+				won: 0,
+				lost: 0,
+			},
+		}
 
 		let data = await STORE.getItem('strategie1-' + symbol) as any
 		if (!data){
@@ -69,25 +87,6 @@ class _Strategy1 {
 		}
 
 		console.log('   new markets found:', data.new)
-
-		const stats = {
-			openLimit: 0.01,
-			openTimeLimit: 1 * 60 * 1000,	//2 minute
-			closeLimit: 0.02,
-			closeTimeDelay: 5 * 1000,		//5 seconds
-			total: 0,
-			count: 0,						//total valid markets checked
-			up: {
-				count: 0,
-				won: 0,
-				lost: 0,
-			},
-			down: {
-				count: 0,
-				won: 0,
-				lost: 0,
-			},
-		}
 		console.log('   calc ...');
 
 		for (const key in data.markets) {

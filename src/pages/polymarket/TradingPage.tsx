@@ -28,6 +28,91 @@ export default function TradingPage() {
 	const [sellPrice, setSellPrice] = useState('')
 	const [buySize, setBuySize] = useState('')
 	const [sellSize, setSellSize] = useState('')
+	const [buyAmount, setBuyAmount] = useState('')
+	const [sellAmount, setSellAmount] = useState('')
+	// Refs to prevent circular updates when calculating between Amount/Size
+	const updatingBuyAmountRef = useRef(false)
+	const updatingBuySizeRef = useRef(false)
+	const updatingSellAmountRef = useRef(false)
+	const updatingSellSizeRef = useRef(false)
+
+	// Helper: Calculate amount from price × size
+	const calculateAmount = (price: string, size: string): string => {
+		const p = parseFloat(price)
+		const s = parseFloat(size)
+		if (isNaN(p) || isNaN(s) || p <= 0 || s <= 0) return ''
+		return (p * s).toFixed(6)
+	}
+
+	// Helper: Calculate size from amount / price
+	const calculateSize = (amount: string, price: string): string => {
+		const a = parseFloat(amount)
+		const p = parseFloat(price)
+		if (isNaN(a) || isNaN(p) || a <= 0 || p <= 0) return ''
+		return (a / p).toFixed(6)
+	}
+
+	// Buy handlers with bidirectional calculation
+	const handleBuyPriceChange = (value: string) => {
+		setBuyPrice(value)
+		if (!updatingBuyAmountRef.current && buySize) {
+			updatingBuyAmountRef.current = true
+			const amount = calculateAmount(value, buySize)
+			setBuyAmount(amount)
+			updatingBuyAmountRef.current = false
+		}
+	}
+
+	const handleBuySizeChange = (value: string) => {
+		setBuySize(value)
+		if (!updatingBuyAmountRef.current && buyPrice) {
+			updatingBuyAmountRef.current = true
+			const amount = calculateAmount(buyPrice, value)
+			setBuyAmount(amount)
+			updatingBuyAmountRef.current = false
+		}
+	}
+
+	const handleBuyAmountChange = (value: string) => {
+		setBuyAmount(value)
+		if (!updatingBuySizeRef.current && buyPrice) {
+			updatingBuySizeRef.current = true
+			const size = calculateSize(value, buyPrice)
+			setBuySize(size)
+			updatingBuySizeRef.current = false
+		}
+	}
+
+	// Sell handlers with bidirectional calculation
+	const handleSellPriceChange = (value: string) => {
+		setSellPrice(value)
+		if (!updatingSellAmountRef.current && sellSize) {
+			updatingSellAmountRef.current = true
+			const amount = calculateAmount(value, sellSize)
+			setSellAmount(amount)
+			updatingSellAmountRef.current = false
+		}
+	}
+
+	const handleSellSizeChange = (value: string) => {
+		setSellSize(value)
+		if (!updatingSellAmountRef.current && sellPrice) {
+			updatingSellAmountRef.current = true
+			const amount = calculateAmount(sellPrice, value)
+			setSellAmount(amount)
+			updatingSellAmountRef.current = false
+		}
+	}
+
+	const handleSellAmountChange = (value: string) => {
+		setSellAmount(value)
+		if (!updatingSellSizeRef.current && sellPrice) {
+			updatingSellSizeRef.current = true
+			const size = calculateSize(value, sellPrice)
+			setSellSize(size)
+			updatingSellSizeRef.current = false
+		}
+	}
 	const [logEntries, setLogEntries] = useState<Array<{ timestamp: string; action: string; data: any }>>([])
 	const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null)
 	const [orderStats, setOrderStats] = useState<{ total: number; open: number; pending: number }>({
@@ -146,6 +231,7 @@ export default function TradingPage() {
 					let attempt = 0
 					while (attempt < MAX_ATTEMPTS) {
 						try {
+							console.log('!!!!!---try to executeSellOrderForCombinedTrade:', attempt)
 							await executeSellOrderForCombinedTrade(filledOrder)
 							break
 						} catch (error: any) {
@@ -362,6 +448,7 @@ export default function TradingPage() {
 			}
 
 			addLogEntry('Place Buy Order', orderParams)
+			console.log('-------------------------------------Place Buy Order:', orderParams)
 			const result = await placeOrder(orderParams)
 			addLogEntry('Buy Now - Success', result)
 			
@@ -424,13 +511,14 @@ export default function TradingPage() {
 			}
 
 			addLogEntry('Place Sell Order', orderParams)
+			console.log('-------------------------------------Place Sell Order:', orderParams)
 			const result = await placeOrder(orderParams)
 			addLogEntry('Sell Now - Success', result)
 			
 			// Update orders after placing
 			try {
-				const orders = await getOpenOrders()
-				updateOrderStats(orders)
+				// const orders = await getOpenOrders()
+				// updateOrderStats(orders)
 			} catch {
 				// Ignore update error
 			}
@@ -470,6 +558,7 @@ export default function TradingPage() {
 			}
 
 			addLogEntry('Combined Trade - Place Auto Sell Order', orderParams)
+			console.log('-------------------------------------Combined Trade - Place Auto Sell Order:', orderParams)
 			const result = await placeOrder(orderParams)
 			addLogEntry('Combined Trade - Auto Sell Success', result)
 			
@@ -479,16 +568,16 @@ export default function TradingPage() {
 
 			// Update orders after placing
 			try {
-				const orders = await getOpenOrders()
-				updateOrderStats(orders)
+				// const orders = await getOpenOrders()
+				// updateOrderStats(orders)
 			} catch {
 				// Ignore update error
 			}
 		} catch (error: any) {
 			addLogEntry('Combined Trade - Auto Sell Error', { error: error.message || String(error) })
-			setActiveCombinedTrade(null)
-			combinedTradeMarketRef.current = null
 			console.error('Error placing auto sell order:', error)
+			// Re-throw error so retry mechanism can catch it
+			throw error
 		}
 	}
 
@@ -534,6 +623,7 @@ export default function TradingPage() {
 			}
 
 			addLogEntry('Combined Trade - Place Buy Order', orderParams)
+			console.log('-------------------------------------Combined Trade - Place Buy Order:', orderParams)
 			const result = await placeOrder(orderParams)
 			addLogEntry('Combined Trade - Buy Order Placed', result)
 
@@ -553,8 +643,8 @@ export default function TradingPage() {
 
 			// Update orders after placing
 			try {
-				const orders = await getOpenOrders()
-				updateOrderStats(orders)
+				// const orders = await getOpenOrders()
+				// updateOrderStats(orders)
 			} catch {
 				// Ignore update error
 			}
@@ -742,7 +832,7 @@ export default function TradingPage() {
 									min="0"
 									max="1"
 									value={buyPrice}
-									onChange={(e) => setBuyPrice(e.target.value)}
+									onChange={(e) => handleBuyPriceChange(e.target.value)}
 									placeholder="0.50"
 								/>
 							</div>
@@ -754,8 +844,20 @@ export default function TradingPage() {
 									step="0.1"
 									min="0"
 									value={buySize}
-									onChange={(e) => setBuySize(e.target.value)}
+									onChange={(e) => handleBuySizeChange(e.target.value)}
 									placeholder="10"
+								/>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="buy-amount">Buy Amount (USDC)</Label>
+								<Input
+									id="buy-amount"
+									type="number"
+									step="0.01"
+									min="0"
+									value={buyAmount}
+									onChange={(e) => handleBuyAmountChange(e.target.value)}
+									placeholder="5.00"
 								/>
 							</div>
 							<Button 
@@ -781,7 +883,7 @@ export default function TradingPage() {
 									min="0"
 									max="1"
 									value={sellPrice}
-									onChange={(e) => setSellPrice(e.target.value)}
+									onChange={(e) => handleSellPriceChange(e.target.value)}
 									placeholder="0.50"
 								/>
 							</div>
@@ -793,8 +895,20 @@ export default function TradingPage() {
 									step="0.1"
 									min="0"
 									value={sellSize}
-									onChange={(e) => setSellSize(e.target.value)}
+									onChange={(e) => handleSellSizeChange(e.target.value)}
 									placeholder="10"
+								/>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="sell-amount">Sell Amount (USDC)</Label>
+								<Input
+									id="sell-amount"
+									type="number"
+									step="0.01"
+									min="0"
+									value={sellAmount}
+									onChange={(e) => handleSellAmountChange(e.target.value)}
+									placeholder="5.00"
 								/>
 							</div>
 							<Button 
