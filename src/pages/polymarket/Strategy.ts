@@ -26,15 +26,21 @@ class _Strategy1 {
 		console.log('Strategy 1 running', symbol, '...')
 		// const keys = await PolymarketApi.cache.keys()
 		// const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m')
-		const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m', new Date('2026-02-01').getTime())
+
+		const fromDate = new Date('2026-02-13').getTime()
+		const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m', fromDate)
 		console.log('   total keys:', keys.length)
 
 		const stats = {
-			openLimit: 0.01,
+			symbol: symbol,
+			marketType: symbol + '-updown-15m',
+			fromDate: fromDate,
+			toDate: new Date().getTime(),
+			openLimit: 0.02,
 			openTimeLimit: 2 * 60 * 1000,	//2 minute
-			closeLimit: 0.04,
+			closeLimit: 0.03,
 			closeTimeDelay: 5 * 1000,		//5 seconds
-			total: 0,
+			totalMarkets: 0,
 			count: 0,						//total valid markets checked
 			up: {
 				count: 0,
@@ -46,6 +52,8 @@ class _Strategy1 {
 				won: 0,
 				lost: 0,
 			},
+			winrate: 0,
+			pnl: 0,
 		}
 
 		let data = await STORE.getItem('strategie1-' + symbol) as any
@@ -93,7 +101,7 @@ class _Strategy1 {
 			if (data.markets[key] !== 'valid') continue
 			if (!useKeys[key]) continue
 
-			stats.total++
+			stats.totalMarkets++
 			const market = await PolymarketApi.cache.getItem(key)
 			await this.checkData(market as Market, stats)
 		}

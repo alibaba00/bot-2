@@ -7,7 +7,6 @@ import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import PolymarketApi from "./PolymarketApi";
 import * as PolymarketChart from "./PolymarketChart";
-import { Strategy1 } from "./Strategy";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -684,6 +683,7 @@ export default function ChartPage() {
 					<div className='flex flex-row items-center justify-center gap-4 w-full'>
 
 					<ToggleGroup type='single' size='sm' defaultValue='all' onValueChange={(e: string) => setMarketType(e)}>
+						<ToggleGroupItem value='5m' variant='outline' size='sm'>5m</ToggleGroupItem>
 						<ToggleGroupItem value='15m' variant='outline' size='sm'>15m</ToggleGroupItem>
 						<ToggleGroupItem value='4h' variant='outline' size='sm'>4h</ToggleGroupItem>
 						<ToggleGroupItem value='all' variant='outline' size='sm'>all</ToggleGroupItem>
@@ -741,8 +741,9 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 		PolymarketChart.getAllMarkets_clob(symbol, selectedDate)
 		.then((files) => {
 			if (!files) return
+
 			if (marketType !== 'all'){
-				files = files.filter((market) => market.slug.includes(marketType))
+				files = files.filter((market) => market.slug.includes('-' + marketType))
 			}
 			files = files.sort((b, a) => a.timestamp - b.timestamp)
 
@@ -805,14 +806,14 @@ const MarketItem = ({ market }: { market: any }) => {
 
 						// PolymarketChart.updateTestData(market.data as any)
 
-						// PolymarketChart.updateMarketData_clob(market.slug, market.filePath, false)
-						// .then(({market: _market, updated}) => {
-						// 	if (updated) {
-						// 		console.log('updated market:', _market)
-						// 		setData(_market)
-						// 		market.data = _market
-						// 	}
-						// })
+						PolymarketChart.updateMarketData_clob(market.slug, market.filePath, false)
+						.then(({market: _market, updated}) => {
+							if (updated) {
+								console.log('updated market:', _market)
+								setData(_market)
+								market.data = _market
+							}
+						})
 					}}>Update</Button>
 				<span
 					className={`inline-block w-3 h-3 rounded-full mr-2 ${data?.closed

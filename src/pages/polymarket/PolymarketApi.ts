@@ -206,8 +206,10 @@ class PolymarketApi {
 		const marketName = split[1] + '-' + split[2]	//e.g. updown-15m
 		const timestamp = parseInt(split[3])	//e.g. 1765584900
 		const marketSlug = split.join('-')	//e.g. btc-updown-15m-1765584900
-		console.log('createMarketFromSlug:', symbol, marketName, timestamp, marketSlug)
-		return await this.createMarket(symbol, marketName, timestamp, marketSlug, 15, filePath)
+		const minutes = {'5m': 5, '15m': 15, '1h': 60, '4h': 240}[split[2]] || 15
+
+		console.log('createMarketFromSlug:', symbol, marketName, timestamp, marketSlug, minutes)
+		return await this.createMarket(symbol, marketName, timestamp, marketSlug, minutes, filePath)
 	}
 
 	
@@ -283,7 +285,7 @@ class PolymarketApi {
 	// date: e.g. 2025-12-10
 	getUTCTimestamp(date: Date | number | null, minutes: number = 15, offset: number = 0): number {
 		if (!date) date = new Date()
-		let dateTime = date instanceof Date ? date.getTime() : date
+		const dateTime = date instanceof Date ? date.getTime() : date
 		const dateTimeSeconds = Math.floor(dateTime / 1000) + offset // Convert to seconds
 		const minutesSeconds = minutes * 60 // minutes in seconds
 		// Round down to the nearest minutes interval
@@ -374,7 +376,7 @@ class PolymarketApi {
 		if (!response.ok) return null
 		
 		const data = await response.json() as MarketData
-		console.log('-----> fetchMarketBySlug: data:', data.sourceData)
+		// console.log('-----> fetchMarketBySlug: data:', data.sourceData)
 		// await cache.setItem<MarketData>(slug, data)
 		return data
 	}
@@ -454,7 +456,7 @@ class PolymarketApi {
 
 	// ---------------------------------------------------------------------------- pollingOpenPrice
 	async pollingOpenPrice(market: Market): Promise<CryptoPriceResponse | null> {
-		const api = this
+		const api = this as PolymarketApi
 		return new Promise(async (resolve, reject) => {
 			if (!api.get('marketActive')) return reject('Market is not active')
 

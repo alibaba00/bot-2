@@ -793,7 +793,7 @@ export const getMarket = async (slug: string, filePath: string | null = null, us
 	let market = useCache ? await PolymarketApi.cache.getItem(slug) as Market | null : null
 
 	if (!market && filePath) {		//market not cached! load and update market from file
-		if (fs.existsSync(filePath)) {
+		if (fs.existsSync(filePath) && useCache) {
 			const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
 			market = JSON.parse(jsonFileContent) as Market
 	
@@ -874,54 +874,13 @@ export const updateAllMarketData_clob = async () => {
 
 
 // ---------------------------------------------------------------------------- updateMarketData
-export const updateTestData = async (market: any): Promise<any> => {
-	console.log('updateTestData:', market)
-	if (!market) return
-
-	const heatmap = await PolymarketApi.store.getItem('heatmap') || {}
-	const map = heatmap[market.symbol + '-updown-15m']
-	if (!map?.map) return
-	const data = map.map
-	console.log('data:', data)
-
-	const tickerData = market.chartData?.ticker?.coinbase
-	if (!tickerData?._complete) return
-
-	const chartData: any[] = []
-	let last: number | null = null
-
-	const basePrice = tickerData[0][1]
-	for (const item of tickerData) {
-		const t = Math.floor((item[0] - market.startTimestamp) / 60000)	//minute value (0-14)
-		if (t < 0 || t > 14) continue
-
-		const value = Math.floor(((item[1] / basePrice) - 1) * 1000 * 2) + 20	//+- 1%
-		const index = Math.max(Math.min(value, 39), 0)	//min:0, max:39, med:20
-		const cell = data[t][index]
-		if (cell){
-			const up = cell.up
-			if (up !== last){
-				last = up
-				chartData.push([item[0], up] as any)
-			}
-		}
-	}
-
-	market.chartData._grid = chartData
-
-	///
-
-}
-
-
-// ---------------------------------------------------------------------------- updateMarketData
 export const updateMarketData_clob = async (slug: string, csvPath: string, useCache: boolean = true)
 	: Promise<{market: Market | null, updated: boolean}> => {
 	let updated:boolean = false
 	// let market: Market | null = null
 	const filePath = csvPath.replace('.csv', '.json')
 
-	const market = await getMarket(slug, filePath, useCache)
+	const market = await getMarket(slug, filePath, useCache)	//-> createMarketFromSlug or load from file
 	if (!market){
 		console.log('market not exists!', slug)
 		return {market: null, updated: false}
@@ -974,7 +933,7 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 		}
 
 		if (!useCache || !market.chartData?._complete) {
-			market.chartData = await getChartData_csv(market, csvPath)
+			market.chartData = await getChartData(market, csvPath)
 			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
 			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
 			updated = true
@@ -992,9 +951,9 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 }
 
 
-// ---------------------------------------------------------------------------- getChartData_csv
-export const getChartData_csv = async (market: Market, csvFilePath: string) => {
-	console.log('getChartData_csv from', csvFilePath)
+// ---------------------------------------------------------------------------- getChartData
+export const getChartData = async (market: Market, csvFilePath: string) => {
+	console.log('getChartData from', csvFilePath)
 
 	const up: any = []
 	const down: any = []
@@ -1064,6 +1023,48 @@ export const getChartData_csv = async (market: Market, csvFilePath: string) => {
 		ticker: tickers
 	} as any
 }
+
+
+// ---------------------------------------------------------------------------- updateMarketData
+export const updateTestData = async (market: any): Promise<any> => {
+	console.log('updateTestData:', market)
+	if (!market) return
+
+	const heatmap = await PolymarketApi.store.getItem('heatmap') || {}
+	const map = heatmap[market.symbol + '-updown-15m']
+	if (!map?.map) return
+	const data = map.map
+	console.log('data:', data)
+
+	const tickerData = market.chartData?.ticker?.coinbase
+	if (!tickerData?._complete) return
+
+	const chartData: any[] = []
+	let last: number | null = null
+
+	const basePrice = tickerData[0][1]
+	for (const item of tickerData) {
+		const t = Math.floor((item[0] - market.startTimestamp) / 60000)	//minute value (0-14)
+		if (t < 0 || t > 14) continue
+
+		const value = Math.floor(((item[1] / basePrice) - 1) * 1000 * 2) + 20	//+- 1%
+		const index = Math.max(Math.min(value, 39), 0)	//min:0, max:39, med:20
+		const cell = data[t][index]
+		if (cell){
+			const up = cell.up
+			if (up !== last){
+				last = up
+				chartData.push([item[0], up] as any)
+			}
+		}
+	}
+
+	market.chartData._grid = chartData
+
+	///
+
+}
+
 
 
 // ---------------------------------------------------------------------------- getChartData
