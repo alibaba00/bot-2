@@ -1,12 +1,22 @@
 import type { Market } from '@/lib/polymarket/types'
 import PolymarketApi from './PolymarketApi'
 import localForage from 'localforage'
+import moment from 'moment';
 
 
 const STORE = localForage.createInstance({
 	name: 'polymarket',
 	storeName: 'polymarket-strategies'
 })
+
+export interface Strategy {
+	id: number;
+	name: string;
+	description: string;
+	active: boolean;
+	createdAt: number;
+	updatedAt: number;
+}
 
 
 // ============================================================================ Strategy1
@@ -24,24 +34,22 @@ class _Strategy1 {
 
 	async run(symbol: string = 'btc'): Promise<void> {
 		console.log('Strategy 1 running', symbol, '...')
-		// const keys = await PolymarketApi.cache.keys()
-		// const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m')
-
 		const fromDate = new Date('2026-02-13').getTime()
-		const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m', fromDate)
-		console.log('   total keys:', keys.length)
+		const marketType = symbol + '-updown-15m'
 
 		const stats = {
 			symbol: symbol,
-			marketType: symbol + '-updown-15m',
+			marketType: marketType,
 			fromDate: fromDate,
+			fromDateString: moment.utc(fromDate).format('YYYY-MM-DD HH:mm:ss'),
 			toDate: new Date().getTime(),
-			openLimit: 0.02,
+			toDateString: moment.utc(new Date()).format('YYYY-MM-DD HH:mm:ss'),
+			openLimit: 0.01,
 			openTimeLimit: 2 * 60 * 1000,	//2 minute
-			closeLimit: 0.03,
+			closeLimit: 0.02,
 			closeTimeDelay: 5 * 1000,		//5 seconds
-			totalMarkets: 0,
-			count: 0,						//total valid markets checked
+			usedMarkets: 0,
+			tradedMarkets: 0,				//total traded markets
 			up: {
 				count: 0,
 				won: 0,
@@ -56,59 +64,17 @@ class _Strategy1 {
 			pnl: 0,
 		}
 
-		let data = await STORE.getItem('strategie1-' + symbol) as any
-		if (!data){
-			data = {
-				symbol: symbol,
-				markets: {},
-				total: 0,
-				new: 0,
-				valid: 0,
-				invalid: 0,
-			}
-			await STORE.setItem('strategie1-' + symbol, data)
-		}
+		const data = await loadMarketData(symbol, marketType, fromDate)
+		stats.usedMarkets = data.usedMarkets.length
+		console.log('   calc', stats.usedMarkets, 'markets ...');
 
-		data.new = 0
-
-		console.log('   check for new markets ...')
-		const useKeys = {}
-
-		for (const key of keys) {
-			useKeys[key] = true
-			if (data.markets[key]) continue //market already processed
-
-			const market = await PolymarketApi.cache.getItem(key)
-			if (!market?.closed || !market.chartData?._complete) continue //market not closed or chart data not complete
-
-			// new market found
-			if (!market.chartData?.clob?._complete){
-				data.markets[key] = 'invalid'
-				data.invalid++
-				data.new++
-			}else{
-				data.markets[key] = 'valid'
-				data.valid++
-				data.new++
-			}
-			data.total = data.valid + data.invalid
-		}
-
-		console.log('   new markets found:', data.new)
-		console.log('   calc ...');
-
-		for (const key in data.markets) {
-			if (data.markets[key] !== 'valid') continue
-			if (!useKeys[key]) continue
-
-			stats.totalMarkets++
-			const market = await PolymarketApi.cache.getItem(key)
+		for (const market of data.usedMarkets) {
 			await this.checkData(market as Market, stats)
 		}
 
 		console.table(stats)
 		data.stats = stats
-		await STORE.setItem('strategie1-' + symbol, data)
+		await STORE.setItem('strategie1-' + marketType, data)
 	}
 
 
@@ -116,10 +82,10 @@ class _Strategy1 {
 		// const startTimestamp = market.startTimestamp
 		const endTimestamp = market.endTimestamp
 
-		const up = market.chartData?.clob?.up
+		const up = market.chartData.clob.up
 		const openUp = up.find((e: any) => e[1] <= stats.openLimit && e[0] <= endTimestamp - stats.openTimeLimit)
 		if (openUp){
-			stats.count++
+			stats.tradedMarkets++
 			stats.up.count++
 			const closeUp = up.find((e: any) => e[0] > openUp[0] + stats.closeTimeDelay && e[1] >= stats.closeLimit)
 			if (closeUp){
@@ -129,10 +95,10 @@ class _Strategy1 {
 			}
 		}
 
-		const down = market.chartData?.clob?.down
+		const down = market.chartData.clob.down
 		const openDown = down.find((e: any) => e[1] <= stats.openLimit && e[0] <= endTimestamp - stats.openTimeLimit)
 		if (openDown){
-			stats.count++
+			stats.tradedMarkets++
 			stats.down.count++
 			const closeDown = down.find((e: any) => e[0] > openDown[0] + stats.closeTimeDelay && e[1] >= stats.closeLimit)
 			if (closeDown){
@@ -143,31 +109,151 @@ class _Strategy1 {
 		}
 	}
 
-
-	async updateMarketData(market: Market): Promise<void> {
-		console.log('Strategy 1 check market:', market.slug)
-		///
-	}
 }
 export const Strategy1 = new _Strategy1()
 
 
-
 // ============================================================================ Strategy2
 class _Strategy2 {
+	id: number = 1;
+	name: string = 'Strategy 2';
+	description: string = 'Strategy 2 description';
+	active: boolean = false;
+	createdAt: number = new Date().getTime();
+	updatedAt: number = new Date().getTime();
+	trades: any = {
+		'up': [
+			{buyLimit: 40, size: 25, sellLimit: 60},
+			{buyLimit: 20, size: 50, sellLimit: 32},
+			{buyLimit: 10, size: 100, sellLimit: 20},
+			{stopLoss: 4},
+		],
+		'down': [
+			{buyLimit: 40, size: 25, sellLimit: 60},
+			{buyLimit: 20, size: 50, sellLimit: 32},
+			{buyLimit: 10, size: 100, sellLimit: 20},
+			{stopLoss: 4},
+		],
+	}
+
 	constructor() {
 		console.log('Strategy 2 constructor...')
 	}
 
-	id: number = 2;
-	name: string = 'Strategy 2';
-	description: string = 'Strategy 2 description';
-	active: boolean = true;
-	createdAt: number = new Date().getTime();
-	updatedAt: number = new Date().getTime();
+	async run(symbol: string = 'btc'): Promise<void> {
+		console.log('Strategy 2 running', symbol, '...')
+		// const keys = await PolymarketApi.cache.keys()
+		// const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m')
 
-	run(): void {
-		console.log('Strategy 2 running...')
+		const fromDate = new Date('2026-02-13').getTime()
+		const marketType = symbol + '-updown-5m'
+		const keys = await PolymarketApi.getAllKeys(marketType, fromDate)
+		console.log('   total keys:', keys.length)
+
+		const stats = {
+			symbol: symbol,
+			marketType: marketType,
+			fromDate: fromDate,
+			fromDateString: moment.utc(fromDate).format('YYYY-MM-DD HH:mm:ss'),
+			toDate: new Date().getTime(),
+			toDateString: moment.utc(new Date()).format('YYYY-MM-DD HH:mm:ss'),
+			usedMarkets: 0,
+			tradedMarkets: 0,				//total traded markets
+			up: {
+				count: 0,
+				won: 0,
+				lost: 0,
+			},
+			down: {
+				count: 0,
+				won: 0,
+				lost: 0,
+			},
+			winrate: 0,
+			pnl: 0,
+		}
+
+		const data = await loadMarketData(symbol, marketType, fromDate)
+		stats.usedMarkets = data.usedMarkets.length
+		console.log('   calc', stats.usedMarkets, 'markets ...');
+
+		for (const market of data.usedMarkets) {
+			await this.checkData(market as Market, stats)
+		}
+
+		console.table(stats)
+		data.stats = stats
+		await STORE.setItem('strategie2-' + marketType, data)
+
+	}
+
+
+	async checkData(market: Market, stats: any): Promise<void> {
+		// const startTimestamp = market.startTimestamp
+		// const endTimestamp = market.endTimestamp
+
+		for (const trade of this.trades.up) {
+			///
+		}
+
+		for (const trade of this.trades.down) {
+			///
+		}
 	}
 }
 export const Strategy2 = new _Strategy2()
+
+
+//---------------------------------------------------------------------------- loadMarketData
+export const loadMarketData = async (symbol: string, marketType: string, fromDate: number): Promise<any> => {
+	const marketKeys = await PolymarketApi.getAllKeys(marketType, fromDate)
+	console.log('   total keys:', marketKeys.length)
+
+	let data = await STORE.getItem('strategie1-' + marketType) as any
+	if (!data){
+		data = {
+			symbol: symbol,
+			marketType: marketType,
+			allMarkets: {},
+			usedMarkets: [],
+			total: 0,
+			new: 0,
+			valid: 0,
+			invalid: 0,
+		}
+		await STORE.setItem('strategie1-' + marketType, data)
+	}
+
+	data.new = 0
+	data.usedMarkets = []
+
+	console.log('   check for new markets ...')
+	const useKeys = {}
+
+	for (const key of marketKeys) {
+		useKeys[key] = true
+		if (data.allMarkets[key] === 'invalid') continue
+
+		const market = await PolymarketApi.cache.getItem(key)
+		if (!market?.closed || !market.chartData?._complete) continue //market not closed or chart data not complete
+
+		if (!data.allMarkets[key]){		// new market found
+			if (!market.chartData?.clob?._complete){
+				data.allMarkets[key] = 'invalid'
+				data.invalid++
+			}else{
+				data.allMarkets[key] = 'valid'
+				data.valid++
+			}
+			data.new++
+		}
+		data.total = data.valid + data.invalid
+
+		if (data.allMarkets[key] === 'invalid') continue
+
+		data.usedMarkets.push(market)
+	}
+
+	console.log('   new markets found:', data.new)
+	return data
+}

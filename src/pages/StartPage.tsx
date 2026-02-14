@@ -29,6 +29,7 @@ import CryptoTickers from './polymarket/CryptoTickers'
 import MuskPage from './polymarket/MuskPage'
 import TradingPage from './polymarket/TradingPage'
 import TradingBotPage from './polymarket/TradingBotPage'
+import StrategyPage from './polymarket/StrategyPage'
 
 const pages = [
 	{ id: 'demo', path: '/playground/demo', page: <DemoPage /> },
@@ -48,7 +49,8 @@ const pages = [
 	{ id: 'polymarket-musk', path: '/polymarket/musk', page: <MuskPage /> },
 	{ id: 'polymarket-chart', path: '/polymarket/chart', page: <ChartPage /> },
 	{ id: 'polymarket-trading', path: '/polymarket/trading', page: <TradingPage /> },
-	{ id: 'polymarket-trading-bot', path: '/polymarket/trading-bot', page: <TradingBotPage /> }
+	{ id: 'polymarket-trading-bot', path: '/polymarket/trading-bot', page: <TradingBotPage /> },
+	{ id: 'polymarket-strategy', path: '/polymarket/strategy', page: <StrategyPage /> }
 
 ]
 
@@ -110,6 +112,10 @@ const data = {
 				{
 					title: 'Trading Bot',
 					url: '/polymarket/trading-bot'
+				},
+				{
+					title: 'Strategy',
+					url: '/polymarket/strategy'
 				}
 			]
 		},
