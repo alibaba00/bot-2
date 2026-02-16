@@ -34,7 +34,7 @@ class _Strategy1 {
 
 	async run(symbol: string = 'btc'): Promise<void> {
 		console.log('Strategy 1 running', symbol, '...')
-		const fromDate = new Date('2026-02-13').getTime()
+		const fromDate = new Date('2026-02-14').getTime()
 		const marketType = symbol + '-updown-15m'
 
 		const stats = {
@@ -44,9 +44,9 @@ class _Strategy1 {
 			fromDateString: moment.utc(fromDate).format('YYYY-MM-DD HH:mm:ss'),
 			toDate: new Date().getTime(),
 			toDateString: moment.utc(new Date()).format('YYYY-MM-DD HH:mm:ss'),
-			openLimit: 0.01,
-			openTimeLimit: 2 * 60 * 1000,	//2 minute
-			closeLimit: 0.02,
+			openLimit: 0.03,
+			openTimeLimit: 1 * 60 * 1000,	//2 minute
+			closeLimit: 0.04,
 			closeTimeDelay: 5 * 1000,		//5 seconds
 			usedMarkets: 0,
 			tradedMarkets: 0,				//total traded markets
@@ -71,6 +71,11 @@ class _Strategy1 {
 		for (const market of data.usedMarkets) {
 			await this.checkData(market as Market, stats)
 		}
+
+		const ratio = stats.closeLimit / stats.openLimit
+		// stats.winrate = ((stats.up.won + stats.down.won) * ratio - (stats.up.lost + stats.down.lost)) / (stats.tradedMarkets)
+		stats.winrate = ((stats.up.won + stats.down.won) * ratio - (stats.up.lost + stats.down.lost)) / (stats.usedMarkets)
+		// stats.pnl = stats.up.pnl + stats.down.pnl
 
 		console.table(stats)
 		data.stats = stats

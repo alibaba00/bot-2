@@ -685,7 +685,9 @@ export default function ChartPage() {
 					<ToggleGroup type='single' size='sm' defaultValue='all' onValueChange={(e: string) => setMarketType(e)}>
 						<ToggleGroupItem value='5m' variant='outline' size='sm'>5m</ToggleGroupItem>
 						<ToggleGroupItem value='15m' variant='outline' size='sm'>15m</ToggleGroupItem>
+						<ToggleGroupItem value='1h' variant='outline' size='sm'>1h</ToggleGroupItem>
 						<ToggleGroupItem value='4h' variant='outline' size='sm'>4h</ToggleGroupItem>
+						<ToggleGroupItem value='1d' variant='outline' size='sm'>1d</ToggleGroupItem>
 						<ToggleGroupItem value='all' variant='outline' size='sm'>all</ToggleGroupItem>
 					</ToggleGroup>
 

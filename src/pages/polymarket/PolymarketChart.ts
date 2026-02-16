@@ -880,7 +880,7 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 	// let market: Market | null = null
 	const filePath = csvPath.replace('.csv', '.json')
 
-	const market = await getMarket(slug, filePath, useCache)	//-> createMarketFromSlug or load from file
+	const market = await getMarket(slug, filePath, useCache)  //-> createMarketFromSlug or load from file
 	if (!market){
 		console.log('market not exists!', slug)
 		return {market: null, updated: false}

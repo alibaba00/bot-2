@@ -176,6 +176,29 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- getMarketTypeFromPath
+	// path: e.g. A:/DATA/polymarket/markets/btc/2025-12-12/btc-updown-15m-1765584900.json
+	getMarketTypeFromPath(path: string){
+		if (path.includes('updown-5m')) return 'updown-5m'
+		if (path.includes('updown-15m')) return 'updown-15m'
+		if (path.includes('updown-1h')) return 'updown-1h'
+		if (path.includes('updown-4h')) return 'updown-4h'
+		if (path.includes('updown-1d')) return 'updown-1d'
+		return null
+	}
+
+
+	// ---------------------------------------------------------------------------- getMarketDurationFromType
+	// type: e.g. updown-15m
+	getMarketDurationFromType(type: string): number | null {
+		if (type === 'updown-5m') return 5 * 60
+		if (type === 'updown-15m') return 15 * 60
+		if (type === 'updown-1h') return 60 * 60
+		if (type === 'updown-4h') return 240 * 60
+		if (type === 'updown-1d') return 1440 * 60
+		return null
+	}
+
 
 	// ---------------------------------------------------------------------------- getMarketFromDate
 	// symbol: e.g. btc
