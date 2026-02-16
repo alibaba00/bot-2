@@ -6,7 +6,13 @@ import PolymarketApi from "./PolymarketApi";
 
 
 // export default function MarketItem(props: { market: Market }) {
-	// const market = props.market
+// const market = props.market
+// ---------------------------------------------------------------------------- MarketItem
+// symbol: e.g. btc
+// type: e.g. updown-15m
+// minutes: e.g. 15
+// offset: e.g. 0
+// return: Market
 export default function MarketItem({ symbol, type, minutes, offset }: { symbol: string, type: string, minutes: number, offset: number }) {
 	const [market, setMarket] = useState<Market | null>(null)
 	
@@ -87,8 +93,8 @@ export default function MarketItem({ symbol, type, minutes, offset }: { symbol: 
 
 	// 1766408400 - 1766404800
 	useEffect(() => {
-		console.log('---init MarketItem:', symbol, type, minutes)
-		PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000), minutes, offset)		
+		console.log('---init MarketItem:', symbol, type)
+		PolymarketApi.createMarketFromDate(symbol, type, new Date(Date.now() + 10000))		
 		.then((market) => {
 			if (!market) return;
 			console.log('market:', market)

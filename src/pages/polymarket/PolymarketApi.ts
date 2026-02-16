@@ -1,6 +1,7 @@
 import { fetchMarketBySlugFromGamma } from '@/lib/polymarket/markets'
 import type { Market, MarketData, MarketState } from '@/lib/polymarket/types'
 import localForage from 'localforage'
+import moment from 'moment'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -189,13 +190,14 @@ class PolymarketApi {
 
 
 	// ---------------------------------------------------------------------------- getMarketDurationFromType
+	// get market duration from type in minutes
 	// type: e.g. updown-15m
 	getMarketDurationFromType(type: string): number | null {
-		if (type === 'updown-5m') return 5 * 60
-		if (type === 'updown-15m') return 15 * 60
-		if (type === 'updown-1h') return 60 * 60
-		if (type === 'updown-4h') return 240 * 60
-		if (type === 'updown-1d') return 1440 * 60
+		if (type === 'updown-5m') return 5
+		if (type === 'updown-15m') return 15
+		if (type === 'updown-1h') return 60
+		if (type === 'updown-4h') return 240
+		if (type === 'updown-1d') return 1440
 		return null
 	}
 
@@ -206,17 +208,23 @@ class PolymarketApi {
 	// date: e.g. 2025-12-10
 	// minutes: e.g. 15
 	// return: Market
-	async createMarketFromDate(symbol: string, type: string, date: Date, minutes: number, offset: number = 0): Promise<Market | null> {
-		const marketName = `${symbol}-${type}`	//e.g. btc-updown-15m
-		const timestamp = this.getUTCTimestamp(date, minutes, offset)	//e.g. 1765584900
-		const marketSlug = `${marketName}-${timestamp}`	//e.g. btc-updown-15m-1765144800
-		// const marketSlug = `btc-updown-4h-1766365200`	//e.g. btc-updown-15m-1765144800-15
+	async createMarketFromDate(symbol: string, type: string, date: Date, offset: number = 0): Promise<Market | null> {
+		const duration = this.getMarketDurationFromType(type)
+		if (!duration) return null
 
-		// const cachedMarket = await cache.getItem<Market>(marketSlug)
-		// if (cachedMarket) return cachedMarket
+		const timestamp = this.getUTCTimestamp(date, duration, offset)	//e.g. 1765584900
+		const marketSlug = `${symbol}-${type}-${timestamp}`	//e.g. btc-updown-15m-1765144800
+		return await this.createMarket(symbol, type, marketSlug)
+	}
 
-		const market = await this.createMarket(symbol, marketName, timestamp, marketSlug, minutes)
-		return market
+
+	// ---------------------------------------------------------------------------- getSymbolFromSlug
+	getSymbolFromSlug(slug: string): string {
+		if (slug.includes('bitcoin')) return 'btc'
+		if (slug.includes('ethereum')) return 'eth'
+		if (slug.includes('solana')) return 'sol'
+		if (slug.includes('xrp')) return 'xrp'
+		return slug.split('-')[0]
 	}
 
 
@@ -224,15 +232,12 @@ class PolymarketApi {
 	// slug: e.g. btc-updown-15m-1765584900
 	// return: Market
 	async createMarketFromSlug(slug: string, filePath: string = ''): Promise<Market | null> {
-		const symbol = slug.split('-')[0]		//e.g. btc
-		const split = slug.split('-')
-		const marketName = split[1] + '-' + split[2]	//e.g. updown-15m
-		const timestamp = parseInt(split[3])	//e.g. 1765584900
-		const marketSlug = split.join('-')	//e.g. btc-updown-15m-1765584900
-		const minutes = {'5m': 5, '15m': 15, '1h': 60, '4h': 240}[split[2]] || 15
+		const symbol = this.getSymbolFromSlug(slug)
+		const marketType = this.getMarketTypeFromPath(filePath)
+		if (!marketType) return null
 
-		console.log('createMarketFromSlug:', symbol, marketName, timestamp, marketSlug, minutes)
-		return await this.createMarket(symbol, marketName, timestamp, marketSlug, minutes, filePath)
+		console.log('createMarketFromSlug:', symbol, marketType, slug, filePath)
+		return await this.createMarket(symbol, marketType, slug, filePath)
 	}
 
 	
@@ -243,21 +248,25 @@ class PolymarketApi {
 	// marketSlug: e.g. btc-updown-15m-1765584900
 	// return: Market
 	//
-	async createMarket(symbol: string, marketName: string, timestamp: number, marketSlug: string,
-		minutes: number = 15, filePath: string = ''): Promise<Market | null> {
-		const startTimestamp = timestamp * 1000 // Convert to milliseconds
-		const endTimestamp = startTimestamp + minutes * 60 * 1000 // Add minutes
+	async createMarket(symbol: string, marketType: string, marketSlug: string, filePath: string = ''): Promise<Market | null> {
+		const duration = this.getMarketDurationFromType(marketType)
+		if (!duration) return null
 
 		const marketData = await fetchMarketBySlugFromGamma(marketSlug)
-		if (!marketData){
-			console.log('marketData not found:', marketSlug)
+		if (!marketData?.endDate){
+			console.log('marketData not found:', marketSlug, marketData)
 			return null
 		}
+
+		const endTimestamp = new Date(marketData.endDate).getTime()
+		const startTimestamp = endTimestamp - duration * 60 * 1000
+		const timestamp = Math.floor(startTimestamp / 1000)	//e.g. 1765584900
 
 		const market: Market = {
 			filePath: filePath,
 			symbol: symbol.toLowerCase(),
-			marketName: marketName,		//e.g. btc-updown-15m
+			marketType: marketType,		//e.g. btc-updown-15m
+			duration: duration,			//e.g. 15
 			slug: marketSlug,			//e.g. btc-updown-15m-1765584900
 			timestamp,					//e.g. 1765584900
 			dayString: this.getUTCDateFormat(new Date(timestamp * 1000)),	//e.g. 2025-12-10
@@ -306,11 +315,11 @@ class PolymarketApi {
 	// ---------------------------------------------------------------------------- getUTCTimestamp
 	// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
 	// date: e.g. 2025-12-10
-	getUTCTimestamp(date: Date | number | null, minutes: number = 15, offset: number = 0): number {
+	getUTCTimestamp(date: Date | number | null, duration: number = 15, offset: number = 0): number {
 		if (!date) date = new Date()
 		const dateTime = date instanceof Date ? date.getTime() : date
 		const dateTimeSeconds = Math.floor(dateTime / 1000) + offset // Convert to seconds
-		const minutesSeconds = minutes * 60 // minutes in seconds
+		const minutesSeconds = duration * 60 // minutes in seconds
 		// Round down to the nearest minutes interval
 		const utcTimestamp = Math.floor(dateTimeSeconds / minutesSeconds) * minutesSeconds - offset
 
@@ -323,9 +332,20 @@ class PolymarketApi {
 	}
 
 
+	getCryptoPriceVariant(market: Market): string {
+		if (market.marketType === 'updown-5m') return 'five'
+		if (market.marketType === 'updown-15m') return 'fifteen'
+		if (market.marketType === 'updown-1h') return 'hourly'
+		if (market.marketType === 'updown-4h') return 'four-hourly'
+		if (market.marketType === 'updown-1d') return 'daily'
+		return 'fifteen'
+	}
+
+
 	// ---------------------------------------------------------------------------- getCryptoPrice
 	// Get price to beat for a given symbol, event start time, and end date
 	async getCryptoPrice(market: Market): Promise<CryptoPriceResponse | null> {
+		console.log('getCryptoPrice:', market.slug, moment(market.startTimestamp).format('YYYY-MM-DD HH:mm'), '->', moment(market.endTimestamp).format('HH:mm'))
 		const symbol = market.symbol
 		
 		// Format dates without milliseconds (API expects format: 2025-12-12T08:45:00Z)
@@ -341,11 +361,12 @@ class PolymarketApi {
 		const eventStartTime = formatDateWithoutMs(market.startTimestamp)
 		const endDate = formatDateWithoutMs(market.endTimestamp)
 
-		const url = `${POLYMARKET_API_BASE}/crypto/crypto-price`
+		const url = `${this.polymarketApiBase}/crypto/crypto-price`
+		const variant = this.getCryptoPriceVariant(market)
 		const params = new URLSearchParams({
 			symbol,
 			eventStartTime,
-			variant: 'fifteen',
+			variant,
 			endDate
 		})
 

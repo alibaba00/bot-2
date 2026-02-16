@@ -5,7 +5,8 @@
 export interface Market {
 	filePath: string
 	symbol: string
-	marketName: string
+	marketType: string
+	duration: number
 	slug: string
 	timestamp: number
 	dayString: string

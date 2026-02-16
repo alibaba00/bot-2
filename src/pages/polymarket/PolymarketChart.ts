@@ -507,7 +507,8 @@ export const getAllMarkets_clob = async (symbol: string | null = null, date: Dat
 
 	const fileList: any[] = dirList.filter((entry: any) => entry.isFile()
 		&& entry.name.endsWith('.csv')
-		&& (symbol ? entry.name.startsWith(symbol) : true)
+		// && (symbol ? entry.name.startsWith(symbol) : true)
+		&& (symbol ? entry.path.includes('\\' + symbol + '-') : true)
 		&& (date ? entry.path.endsWith(dateString) : true)
 	).map((entry: any) => ({
 		folder: entry.path.replaceAll('\\', '/'),
@@ -842,11 +843,14 @@ export const updateAllMarketData_clob = async () => {
 		return acc
 	}, {})
 	console.log('openMarkets:', openMarkets.length)
+	let count = 0
+	let index = 0
 
 	for (const file of dataFiles) {
+		index++
 		if (!isRunning) break
 
-		if (marketLookup[file.slug]) {		//market exists in cache
+		if (marketLookup[file.slug]) {				//market is cached
 			if (!openMarketsLookup[file.slug]){		//market is closed
 				stat.closedMarkets++
 				continue
@@ -856,6 +860,11 @@ export const updateAllMarketData_clob = async () => {
 		}
 
 		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
+		if (updated){
+			console.log('-----> update market:', index, ++count, '/', openMarkets.length, file.slug, file.filePath)
+			console.log('')
+		}
+
 		if (updated) stat.updated++
 		if (market && !market.closed){
 			stat.openMarkets++
@@ -894,6 +903,22 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 		market.marketData = await PolymarketApi.fetchMarketBySlug(slug, true)
 		if (!market.marketData) market.state = 'failed'
 		updated = true
+	}
+
+	if (market.symbol === 'bitcoin'){		//fixing wrong symbol
+		market.symbol = 'btc'
+		updated = true
+	}
+
+	if (!market.duration){
+		if (market.marketData?.endDate){
+			market.marketType = PolymarketApi.getMarketTypeFromPath(filePath) || ''
+			delete market["marketName"]		//remove marketName from market object to prevent confusion
+			market.duration = PolymarketApi.getMarketDurationFromType(market.marketType) || 0
+			market.endTimestamp = new Date(market.marketData.endDate).getTime()
+			market.startTimestamp = market.endTimestamp - market.duration * 60 * 1000
+			updated = true
+		}
 	}
 
 	if (market.marketData?.closed){
@@ -943,8 +968,6 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 	if (updated) {
 		await PolymarketApi.cacheMarket(market)
 		await PolymarketApi.saveMarket(market, true)
-		console.log('-----> update market:', market.slug, market)
-		console.log('')
 	}
 
 	return {market, updated}
