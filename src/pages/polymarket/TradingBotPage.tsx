@@ -12,6 +12,7 @@ import { MarketTimer } from "./MarketTimer";
 import PolymarketApi from "./PolymarketApi";
 import TradingBotItem from "./TradingBotItem";
 import type { Trade } from "./TradingBotItem";
+import useLog from "@/hooks/use-log";
 
 const TRADE_STORE = localForage.createInstance({
 	name: 'polymarket',
@@ -22,6 +23,7 @@ const TRADE_STORE = localForage.createInstance({
 export default function TradingBotPage() {
 	const [currentMarket, setCurrentMarket] = useState<MarketData | null>(null)
 	const [liveTrading, setLiveTrading] = useState<boolean>(false)
+	const { logView, addLog } = useLog()
 
 	const setup = useRef({
 		symbol: 'btc',
@@ -66,6 +68,7 @@ export default function TradingBotPage() {
 	// ---------------------------------------------------------------------------- onInit
 	const onInit = async () => {
 		console.log('----------------------onInit:')
+		addLog('onInit', 'onInit')
 		const sc = setup.current
 
 		// await onExpired()
@@ -189,6 +192,7 @@ export default function TradingBotPage() {
 				<TradesList market={currentMarket} setup={setup.current} />
 				</>
 			)}
+			{logView()}
 		</div>
 	)
 }

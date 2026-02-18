@@ -4,23 +4,25 @@
 import { usePolymarketConnection } from "@/lib/polymarket/store";
 // import { getTransactionHistory, getWalletBalance } from "@/lib/polymarket/wallet";
 // import { Side } from "@polymarket/clob-client";
-import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { getAccountInfo, getTransactionHistory, getWalletBalance } from "@/lib/polymarket/wallet";
+import { useUserChannelWebSocket } from "@/hooks/use-user-channel-websocket";
 import { fetchMarketBySlugFromGamma, fetchMarkets } from "@/lib/polymarket/markets";
 import { cancelOrder, getOpenOrders, placeOrder } from "@/lib/polymarket/orders";
-import { useUserChannelWebSocket } from "@/hooks/use-user-channel-websocket";
 import type { Order, WalletBalance } from "@/lib/polymarket/types";
-import { RefreshCw, X } from "lucide-react";
+import { getAccountInfo, getTransactionHistory, getWalletBalance } from "@/lib/polymarket/wallet";
+import { RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 // import { Side } from "@polymarket/clob-client";
 import { Strategy1, Strategy2 } from "./Strategy";
-import moment from "moment";
+// import moment from "moment";
+import useLog from "@/hooks/use-log";
 
 
 export default function TradingPage() {
+	const { logView, addLog } = useLog()
 	const { connect } = usePolymarketConnection()
 
 	// Trading console state
@@ -115,7 +117,7 @@ export default function TradingPage() {
 			updatingSellSizeRef.current = false
 		}
 	}
-	const [logEntries, setLogEntries] = useState<Array<{ timestamp: string; action: string; data: any, open: boolean }>>([])
+	// const [logEntries, setLogEntries] = useState<Array<{ timestamp: string; action: string; data: any, open: boolean }>>([])
 	const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null)
 	const [orderStats, setOrderStats] = useState<{ total: number; open: number; pending: number }>({
 		total: 0,
@@ -135,19 +137,6 @@ export default function TradingPage() {
 		activeCombinedTradeRef.current = activeCombinedTrade
 	}, [activeCombinedTrade])
 
-	// Helper function to add log entry
-	const addLogEntry = (action: string, data: any) => {
-		const entry = {
-			// timestamp: new Date().toISOString(),
-			// timestamp: new Date().toISOString().replace('T', ' ').replace('Z', '').slice(0, 23),
-			// timestamp: new Date().toLocaleString(undefined, { hour12: false }).replace(',', ''),
-			timestamp: moment().format('YYYY-MM-DD HH:mm:ss.SSS'),
-			action,
-			data,
-			open: true
-		}
-		setLogEntries(prev => [entry, ...prev])
-	}
 
 	// Helper to update order statistics shown in header
 	const updateOrderStats = (orders: Order[]) => {
@@ -182,7 +171,7 @@ export default function TradingPage() {
 	// User Channel WebSocket for real-time order/trade updates
 	const userChannelWs = useUserChannelWebSocket({
 		onTradeUpdate: (trade) => {
-			addLogEntry('Trade Update (WebSocket)', {
+			addLog('Trade Update (WebSocket)', {
 				id: trade.id,
 				status: trade.status,
 				side: trade.side,
@@ -193,7 +182,7 @@ export default function TradingPage() {
 			})
 		},
 		onOrderUpdate: async (order) => {
-			addLogEntry('Order Update (WebSocket)', {
+			addLog('Order Update (WebSocket)', {
 				id: order.id,
 				type: order.type,
 				side: order.side,
@@ -216,7 +205,7 @@ export default function TradingPage() {
 				const isFullyFilled = sizeMatched >= originalSize && originalSize > 0
 
 				if (isFullyFilled && order.type === 'UPDATE') {
-					addLogEntry('Combined Trade - Buy Order Fully Filled', {
+					addLog('Combined Trade - Buy Order Fully Filled', {
 						orderId: order.id,
 						size_matched: order.size_matched,
 						original_size: order.original_size,
@@ -242,14 +231,14 @@ export default function TradingPage() {
 							break
 						} catch (error: any) {
 							attempt++
-							addLogEntry('Combined Trade - Auto Sell Retry', {
+							addLog('Combined Trade - Auto Sell Retry', {
 								attempt,
 								maxAttempts: MAX_ATTEMPTS,
 								error: error.message || String(error),
 								nextInMs: attempt < MAX_ATTEMPTS ? RETRY_INTERVAL_MS : 0
 							})
 							if (attempt >= MAX_ATTEMPTS) {
-								addLogEntry('Combined Trade - Auto Sell Failed (max retries)', {
+								addLog('Combined Trade - Auto Sell Failed (max retries)', {
 									error: error.message || String(error)
 								})
 								setActiveCombinedTrade(null)
@@ -261,7 +250,7 @@ export default function TradingPage() {
 					}
 				} else if (order.type === 'CANCELLATION') {
 					// Order was cancelled, clear active combined trade
-					addLogEntry('Combined Trade - Buy Order Cancelled', {
+					addLog('Combined Trade - Buy Order Cancelled', {
 						orderId: order.id
 					})
 					setActiveCombinedTrade(null)
@@ -277,7 +266,7 @@ export default function TradingPage() {
 			}
 		},
 		onError: (error) => {
-			addLogEntry('User Channel Error', { error: error.message })
+			addLog('User Channel Error', { error: error.message })
 		},
 		autoConnect: false // Don't auto-connect, user can enable manually
 	})
@@ -294,17 +283,17 @@ export default function TradingPage() {
 		try {
 			const balance = await getWalletBalance()
 			setWalletBalance(balance)
-			addLogEntry('Auto Get Balance after Connect', balance)
+			addLog('Auto Get Balance after Connect', balance)
 		} catch (error: any) {
-			addLogEntry('Auto Get Balance Error', { error: error.message || String(error) })
+			addLog('Auto Get Balance Error', { error: error.message || String(error) })
 		}
 
 		try {
 			const orders = await getOpenOrders()
 			updateOrderStats(orders)
-			addLogEntry('Auto Get Orders after Connect', orders)
+			addLog('Auto Get Orders after Connect', orders)
 		} catch (error: any) {
-			addLogEntry('Auto Get Orders Error', { error: error.message || String(error) })
+			addLog('Auto Get Orders Error', { error: error.message || String(error) })
 		}
 	}
 
@@ -321,7 +310,7 @@ export default function TradingPage() {
 		const balance = await getWalletBalance();
 		console.log(balance);
 		setWalletBalance(balance);
-		addLogEntry('Get Balance', balance)
+		addLog('Get Balance', balance)
 	}
 
 	// --- get orders
@@ -330,7 +319,7 @@ export default function TradingPage() {
 		const orders = await getOpenOrders();
 		console.log(orders);
 		updateOrderStats(orders);
-		addLogEntry('Get Orders (Top Buttons)', orders)
+		addLog('Get Orders (Top Buttons)', orders)
 	}
 
 	// --- get transaction history
@@ -410,31 +399,31 @@ export default function TradingPage() {
 	// Trading console handlers
 	const handleBuyNow = async () => {
 		try {
-			addLogEntry('Buy Now - Start', { marketSlug, orderType, buyPrice, buySize })
+			addLog('Buy Now - Start', { marketSlug, orderType, buyPrice, buySize })
 			
 			if (!marketSlug || !buyPrice || !buySize) {
-				addLogEntry('Buy Now - Error', { error: 'Please fill in market slug, buy price, and buy size' })
+				addLog('Buy Now - Error', { error: 'Please fill in market slug, buy price, and buy size' })
 				return
 			}
 
 			// Fetch market data from slug
-			addLogEntry('Fetch Market', { slug: marketSlug })
+			addLog('Fetch Market', { slug: marketSlug })
 			const market = await fetchMarketBySlugFromGamma(marketSlug)
 			
 			if (!market) {
-				addLogEntry('Fetch Market - Error', { error: 'Market not found' })
+				addLog('Fetch Market - Error', { error: 'Market not found' })
 				return
 			}
 
-			addLogEntry('Market Data', market)
+			addLog('Market Data', market)
 
 			// Log available outcomes for debugging
-			addLogEntry('Available Outcomes', market.outcomes.map((o: any) => ({ title: o.title, id: o.id })))
+			addLog('Available Outcomes', market.outcomes.map((o: any) => ({ title: o.title, id: o.id })))
 
 			// Find outcome object
 			const outcomeObj = findOutcome(market, orderType)
 			if (!outcomeObj) {
-				addLogEntry('Buy Now - Error', { 
+				addLog('Buy Now - Error', { 
 					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map((o: any) => o.title).join(', ')}`,
 					availableOutcomes: market.outcomes.map((o: any) => o.title)
 				})
@@ -453,10 +442,10 @@ export default function TradingPage() {
 				outcomeId: outcomeObj.id
 			}
 
-			addLogEntry('Place Buy Order', orderParams)
+			addLog('Place Buy Order', orderParams)
 			console.log('-------------------------------------Place Buy Order:', orderParams)
 			const result = await placeOrder(orderParams)
-			addLogEntry('Buy Now - Success', result)
+			addLog('Buy Now - Success', result)
 			
 			// Update orders after placing
 			try {
@@ -466,38 +455,38 @@ export default function TradingPage() {
 				// Ignore update error
 			}
 		} catch (error: any) {
-			addLogEntry('Buy Now - Error', { error: error.message || String(error) })
+			addLog('Buy Now - Error', { error: error.message || String(error) })
 			console.error('Error placing buy order:', error)
 		}
 	}
 
 	const handleSellNow = async () => {
 		try {
-			addLogEntry('Sell Now - Start', { marketSlug, orderType, sellPrice, sellSize })
+			addLog('Sell Now - Start', { marketSlug, orderType, sellPrice, sellSize })
 			
 			if (!marketSlug || !sellPrice || !sellSize) {
-				addLogEntry('Sell Now - Error', { error: 'Please fill in market slug, sell price, and sell size' })
+				addLog('Sell Now - Error', { error: 'Please fill in market slug, sell price, and sell size' })
 				return
 			}
 
 			// Fetch market data from slug
-			addLogEntry('Fetch Market', { slug: marketSlug })
+			addLog('Fetch Market', { slug: marketSlug })
 			const market = await fetchMarketBySlugFromGamma(marketSlug)
 			
 			if (!market) {
-				addLogEntry('Fetch Market - Error', { error: 'Market not found' })
+				addLog('Fetch Market - Error', { error: 'Market not found' })
 				return
 			}
 
-			addLogEntry('Market Data', market)
+			addLog('Market Data', market)
 
 			// Log available outcomes for debugging
-			addLogEntry('Available Outcomes', market.outcomes.map((o: any) => ({ title: o.title, id: o.id })))
+			addLog('Available Outcomes', market.outcomes.map((o: any) => ({ title: o.title, id: o.id })))
 
 			// Find outcome object
 			const outcomeObj = findOutcome(market, orderType)
 			if (!outcomeObj) {
-				addLogEntry('Sell Now - Error', { 
+				addLog('Sell Now - Error', { 
 					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map((o: any) => o.title).join(', ')}`,
 					availableOutcomes: market.outcomes.map((o: any) => o.title)
 				})
@@ -516,10 +505,10 @@ export default function TradingPage() {
 				outcomeId: outcomeObj.id
 			}
 
-			addLogEntry('Place Sell Order', orderParams)
+			addLog('Place Sell Order', orderParams)
 			console.log('-------------------------------------Place Sell Order:', orderParams)
 			const result = await placeOrder(orderParams)
-			addLogEntry('Sell Now - Success', result)
+			addLog('Sell Now - Success', result)
 			
 			// Update orders after placing
 			try {
@@ -529,7 +518,7 @@ export default function TradingPage() {
 				// Ignore update error
 			}
 		} catch (error: any) {
-			addLogEntry('Sell Now - Error', { error: error.message || String(error) })
+			addLog('Sell Now - Error', { error: error.message || String(error) })
 			console.error('Error placing sell order:', error)
 		}
 	}
@@ -538,7 +527,7 @@ export default function TradingPage() {
 	const executeSellOrderForCombinedTrade = async (filledOrder: { asset_id: string; outcome: string; market: string }) => {
 		const current = activeCombinedTradeRef.current
 		if (!current || !combinedTradeMarketRef.current) {
-			addLogEntry('Combined Trade - Auto Sell Error', { error: 'No active combined trade or market data found' })
+			addLog('Combined Trade - Auto Sell Error', { error: 'No active combined trade or market data found' })
 			setActiveCombinedTrade(null)
 			combinedTradeMarketRef.current = null
 			return
@@ -548,7 +537,7 @@ export default function TradingPage() {
 		const { market } = combinedTradeMarketRef.current
 
 		try {
-			addLogEntry('Combined Trade - Auto Sell Start', { sellPrice, sellSize })
+			addLog('Combined Trade - Auto Sell Start', { sellPrice, sellSize })
 
 			// Use token and outcome from the filled buy order so we sell exactly what was bought (avoids wrong outcome → "not enough balance")
 			const outcomeId = filledOrder.asset_id
@@ -563,10 +552,10 @@ export default function TradingPage() {
 				outcomeId
 			}
 
-			addLogEntry('Combined Trade - Place Auto Sell Order', orderParams)
+			addLog('Combined Trade - Place Auto Sell Order', orderParams)
 			console.log('-------------------------------------Combined Trade - Place Auto Sell Order:', orderParams)
 			const result = await placeOrder(orderParams)
-			addLogEntry('Combined Trade - Auto Sell Success', result)
+			addLog('Combined Trade - Auto Sell Success', result)
 			
 			// Clear active combined trade and market ref
 			setActiveCombinedTrade(null)
@@ -580,7 +569,7 @@ export default function TradingPage() {
 				// Ignore update error
 			}
 		} catch (error: any) {
-			addLogEntry('Combined Trade - Auto Sell Error', { error: error.message || String(error) })
+			addLog('Combined Trade - Auto Sell Error', { error: error.message || String(error) })
 			console.error('Error placing auto sell order:', error)
 			// Re-throw error so retry mechanism can catch it
 			throw error
@@ -589,28 +578,28 @@ export default function TradingPage() {
 
 	const handleCombinedTrade = async () => {
 		try {
-			addLogEntry('Combined Trade - Start', { marketSlug, orderType, buyPrice, buySize, sellPrice, sellSize })
+			addLog('Combined Trade - Start', { marketSlug, orderType, buyPrice, buySize, sellPrice, sellSize })
 			
 			if (!marketSlug || !buyPrice || !buySize || !sellPrice || !sellSize) {
-				addLogEntry('Combined Trade - Error', { error: 'Please fill in all fields (market slug, buy price/size, sell price/size)' })
+				addLog('Combined Trade - Error', { error: 'Please fill in all fields (market slug, buy price/size, sell price/size)' })
 				return
 			}
 
 			// Fetch market data from slug
-			addLogEntry('Combined Trade - Fetch Market', { slug: marketSlug })
+			addLog('Combined Trade - Fetch Market', { slug: marketSlug })
 			const market = await fetchMarketBySlugFromGamma(marketSlug)
 			
 			if (!market) {
-				addLogEntry('Combined Trade - Error', { error: 'Market not found' })
+				addLog('Combined Trade - Error', { error: 'Market not found' })
 				return
 			}
 
-			addLogEntry('Combined Trade - Market Data', market)
+			addLog('Combined Trade - Market Data', market)
 
 			// Find outcome object
 			const outcomeObj = findOutcome(market, orderType)
 			if (!outcomeObj) {
-				addLogEntry('Combined Trade - Error', { 
+				addLog('Combined Trade - Error', { 
 					error: `Outcome not found in market. Available outcomes: ${market.outcomes.map((o: any) => o.title).join(', ')}`
 				})
 				return
@@ -628,10 +617,10 @@ export default function TradingPage() {
 				outcomeId: outcomeObj.id
 			}
 
-			addLogEntry('Combined Trade - Place Buy Order', orderParams)
+			addLog('Combined Trade - Place Buy Order', orderParams)
 			console.log('-------------------------------------Combined Trade - Place Buy Order:', orderParams)
 			const result = await placeOrder(orderParams)
-			addLogEntry('Combined Trade - Buy Order Placed', result)
+			addLog('Combined Trade - Buy Order Placed', result)
 
 			// Store market data in ref for auto-sell
 			combinedTradeMarketRef.current = {
@@ -655,7 +644,7 @@ export default function TradingPage() {
 				// Ignore update error
 			}
 		} catch (error: any) {
-			addLogEntry('Combined Trade - Error', { error: error.message || String(error) })
+			addLog('Combined Trade - Error', { error: error.message || String(error) })
 			setActiveCombinedTrade(null)
 			combinedTradeMarketRef.current = null
 			console.error('Error placing combined trade:', error)
@@ -664,17 +653,17 @@ export default function TradingPage() {
 
 	const handleCancelOrder = async (orderId: string) => {
 		try {
-			addLogEntry('Cancel Order - Start', { orderId })
+			addLog('Cancel Order - Start', { orderId })
 			
 			// If canceling the buy order from active combined trade, clear it
 			if (activeCombinedTrade && activeCombinedTrade.buyOrderId === orderId) {
-				addLogEntry('Combined Trade - Buy Order Cancelled', { orderId })
+				addLog('Combined Trade - Buy Order Cancelled', { orderId })
 				setActiveCombinedTrade(null)
 				combinedTradeMarketRef.current = null
 			}
 
 			const result = await cancelOrder(orderId)
-			addLogEntry('Cancel Order - Success', result)
+			addLog('Cancel Order - Success', result)
 			
 			// Refresh orders after cancellation
 			try {
@@ -684,15 +673,9 @@ export default function TradingPage() {
 				// Ignore update error
 			}
 		} catch (error: any) {
-			addLogEntry('Cancel Order - Error', { error: error.message || String(error) })
+			addLog('Cancel Order - Error', { error: error.message || String(error) })
 			console.error('Error cancelling order:', error)
 		}
-	}
-
-	const handleLogEntryClick = (entry: any) => {
-		console.log('handleLogEntryClick:', entry)
-		entry.open = !entry.open
-		setLogEntries(prev => [...prev])
 	}
 
 	return (
@@ -758,14 +741,14 @@ export default function TradingPage() {
 									// Update balance
 									const balance = await getWalletBalance()
 									setWalletBalance(balance)
-									addLogEntry('Update Balance', balance)
+									addLog('Update Balance', balance)
 									
 									// Update orders
 									const orders = await getOpenOrders()
 									updateOrderStats(orders)
-									addLogEntry('Update Orders', orders)
+									addLog('Update Orders', orders)
 								} catch (error: any) {
-									addLogEntry('Update Error', { error: error.message || String(error) })
+									addLog('Update Error', { error: error.message || String(error) })
 								}
 							}}
 							title="Update Balance & Orders"
@@ -1022,43 +1005,7 @@ export default function TradingPage() {
 					</div>
 				)}
 
-				<div className="space-y-2">
-					<div className="flex items-center justify-between">
-						<Label>Log View</Label>
-						{logEntries.length > 0 && (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setLogEntries([])}
-								className="h-7 px-2"
-								title="Clear Log"
-							>
-								<X className="h-3 w-3" />
-							</Button>
-						)}
-					</div>
-					<div className="border rounded-md p-4 bg-muted/50 max-h-96 overflow-y-auto">
-						{logEntries.length === 0 ? (
-							<div className="text-muted-foreground text-sm">No log entries yet...</div>
-						) : (
-							<div className="space-y-2 font-mono text-xs">
-								{logEntries.map((entry, index) => (
-									<div key={index} className="border-b pb-2 last:border-0">
-										<div className="flex gap-2 mb-1 cursor-pointer" onClick={() => handleLogEntryClick(entry)}>
-											<span className="text-muted-foreground">{entry.timestamp}</span>
-											<span className="font-semibold">{entry.action}</span>
-										</div>
-										{entry.open && (
-											<pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words">
-												{JSON.stringify(entry.data, null, 2)}
-											</pre>
-										)}
-									</div>
-								))}
-							</div>
-						)}
-					</div>
-				</div>
+				{logView()}
 			</div>
 
 		</div>
