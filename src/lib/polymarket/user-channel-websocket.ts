@@ -45,6 +45,7 @@ export interface OrderMessage {
 	original_size: string
 	outcome: string
 	owner: string
+	size: string
 	price: string
 	side: 'BUY' | 'SELL'
 	size_matched: string
@@ -92,7 +93,7 @@ export class UserChannelWebSocket {
 	/**
 	 * Connect to the User Channel WebSocket
 	 */
-	connect(force = false): void {
+	connect(force = true): void {
 		if (force) {
 			this.shouldReconnect = true
 			this.reconnectAttempts = 0
@@ -240,7 +241,7 @@ export class UserChannelWebSocket {
 							console.log(
 								`🔄 User Channel: Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
 							)
-							this.connect()
+							this.connect(false)
 						}
 					}, RECONNECT_DELAY_MS)
 				} else if (!this.shouldReconnect) {

@@ -34,7 +34,7 @@ class _Strategy1 {
 
 	async run(symbol: string = 'btc'): Promise<void> {
 		console.log('Strategy 1 running', symbol, '...')
-		const fromDate = new Date('2026-02-20').getTime()
+		const fromDate = new Date('2026-02-22').getTime()
 		const marketType = symbol + '-updown-15m'
 
 		const stats = {
@@ -45,7 +45,7 @@ class _Strategy1 {
 			toDate: new Date().getTime(),
 			toDateString: moment.utc(new Date()).format('YYYY-MM-DD HH:mm:ss'),
 			openLimit: 0.03,
-			openTimeLimit: 1 * 60 * 1000,	//2 minute
+			openTimeLimit: 3 * 60 * 1000,	//3 minutes
 			closeLimit: 0.04,
 			closeTimeDelay: 5 * 1000,		//5 seconds
 			usedMarkets: 0,
@@ -64,12 +64,14 @@ class _Strategy1 {
 			pnl: 0,
 		}
 
+		const trades: any[] = []
+
 		const data = await loadMarketData(symbol, marketType, fromDate)
 		stats.usedMarkets = data.usedMarkets.length
 		console.log('   calc', stats.usedMarkets, 'markets ...');
 
 		for (const market of data.usedMarkets) {
-			await this.checkData(market as Market, stats)
+			await this.checkData(market as Market, stats, trades)
 		}
 
 		const ratio = stats.closeLimit / stats.openLimit
@@ -78,40 +80,54 @@ class _Strategy1 {
 		// stats.pnl = stats.up.pnl + stats.down.pnl
 
 		console.table(stats)
+		console.log(trades)
+
 		data.stats = stats
+		data.trades = trades
 		await STORE.setItem('strategie1-' + marketType, data)
 	}
 
 
-	async checkData(market: Market, stats: any): Promise<void> {
+	async checkData(market: Market, stats: any, trades: any[]): Promise<void> {
 		// const startTimestamp = market.startTimestamp
 		const endTimestamp = market.endTimestamp
+		const trade: any = {
+			slug: market.slug,
+			outcome: market.outcome,
+			up: {open: null, close: null },
+			down: {open: null, close: null },
+		}
+		trades.push(trade)
 
 		const up = market.chartData.clob.up
 		const openUp = up.find((e: any) => e[1] <= stats.openLimit && e[0] <= endTimestamp - stats.openTimeLimit)
+		let closeUp: any = null
 		if (openUp){
 			stats.tradedMarkets++
 			stats.up.count++
-			const closeUp = up.find((e: any) => e[0] > openUp[0] + stats.closeTimeDelay && e[1] >= stats.closeLimit)
+			closeUp = up.find((e: any) => e[0] > openUp[0] + stats.closeTimeDelay && e[1] > stats.closeLimit)
 			if (closeUp){
 				stats.up.won++
 			}else{
 				stats.up.lost++
 			}
 		}
+		trade.up = {open: openUp, close: closeUp}
 
 		const down = market.chartData.clob.down
 		const openDown = down.find((e: any) => e[1] <= stats.openLimit && e[0] <= endTimestamp - stats.openTimeLimit)
+		let closeDown: any = null
 		if (openDown){
 			stats.tradedMarkets++
 			stats.down.count++
-			const closeDown = down.find((e: any) => e[0] > openDown[0] + stats.closeTimeDelay && e[1] >= stats.closeLimit)
+			closeDown = down.find((e: any) => e[0] > openDown[0] + stats.closeTimeDelay && e[1] > stats.closeLimit)
 			if (closeDown){
 				stats.down.won++
 			}else{
 				stats.down.lost++
 			}
 		}
+		trade.down = {open: openDown, close: closeDown}
 	}
 
 }

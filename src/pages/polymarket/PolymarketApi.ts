@@ -9,8 +9,8 @@ const GAMMA_API_BASE = 'https://gamma-api.polymarket.com'
 const POLYMARKET_API_BASE = 'https://polymarket.com/api'
 
 const isElectron = window?.navigator.userAgent.includes('Electron')
-const fs = isElectron ? (window as any)?.require?.('fs') : null
-const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
+export const fs = isElectron ? (window as any)?.require?.('fs') : null
+export const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 
 
 // create cache instance

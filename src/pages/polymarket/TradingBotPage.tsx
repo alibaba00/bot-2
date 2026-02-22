@@ -9,8 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import ClobMarketTicker, { type LastTrade } from "./ClobMarketTicker";
 import CoinbasePriceTicker from "./CoinbasePriceTicker";
 import { MarketTimer } from "./MarketTimer";
-import PolymarketApi from "./PolymarketApi";
-import type { Trade } from "./TradingBotItem";
+import PolymarketApi, { fsPromises, fs } from "./PolymarketApi";
+import { TRADE_STORE, type Trade } from "./TradingBotItem";
 import TradingBotList from "./TradingBotList";
 import { useUserChannelWebSocket } from "@/hooks/use-user-channel-websocket";
 
@@ -21,27 +21,33 @@ export default function TradingBotPage() {
 	const [liveTrading, setLiveTrading] = useState<boolean>(false)
 	const { logView, addLog } = useLog()
 
+	const log = (action: string, data: any) => {
+		setup.current._updateTrade?.('log', {action: action, data: data})
+		addLog(action, data)
+	}
+
 	const setup = useRef({
 		symbol: 'btc',
 		liveTrading: false as boolean,
+		isConnected: false as boolean,
 		currentMarket: null as MarketData | null,
 		baseTimestamp: 0,
 		basePrice: 0,
 		up : {
 			enabled: true,
-			orderLimit: 0.2,	//order trigger to set buy limit
-			timelimit: 3,		//buy timeout in minutes before closing market
-			buyLimit: 0.1,		//ticker price trigger limit in % of base price
-			sellLimit: 0.12,	//sell limit market price
-			size: 10,			//buy size shares
+			orderLimit: 0.1,	//order limit to set buy limit
+			timeLimit: 3,		//buy timeout in minutes before closing market
+			buyLimit: 0.03,		//ticker price trigger limit in % of base price
+			sellLimit: 0.04,	//sell limit market price
+			size: 50,			//buy size shares
 		},
 		down : {
 			enabled: true,
-			orderLimit: 0.2,	//order limit to set buy limit
-			timelimit: 3,		//buy timeout in minutes before closing market
-			buyLimit: 0.1,		//ticker price trigger limit in % of base price
-			sellLimit: 0.12,	//sell limit market price
-			size: 10,			//buy size shares
+			orderLimit: 0.1,	//order limit to set buy limit
+			timeLimit: 3,		//buy timeout in minutes before closing market
+			buyLimit: 0.03,		//ticker price trigger limit in % of base price
+			sellLimit: 0.04,	//sell limit market price
+			size: 50,			//buy size shares
 		},
 		tradeMode: 'none' as 'none' | 'up' | 'down' | 'up-and-down' | 'up-or-down',
 		nextTimestamp: Infinity,
@@ -54,42 +60,48 @@ export default function TradingBotPage() {
 		},
 		trade: null as Trade | null,		//current trade
 		_updateTrade: null as ((type: string, value: any) => void) | null,
+		_log: log,
 	})
 
 
 	// ---------------------------------------------------------------------------- userChannelWs
 	const userChannelWs = useUserChannelWebSocket({
 		onTradeUpdate: (trade) => {
-			addLog('Trade Update (WebSocket)', {
+			log('Trade Update (WebSocket)', {
 				id: trade.id,
 				status: trade.status,
 				side: trade.side,
 				price: trade.price,
 				size: trade.size,
+				outcome: trade.outcome,
 			})
-			setup.current._updateTrade?.('tradeUpdate', {type: 'tradeUpdate', value: trade})
+			setup.current._updateTrade?.('tradeUpdate', trade)
 		},
 		onOrderUpdate: (order) => {
-			addLog('Order Update (WebSocket)', {
+			log('Order Update (WebSocket)', {
 				id: order.id,
 				type: order.type,
 				side: order.side,
 				price: order.price,
+				size: order.size,
+				outcome: order.outcome,
 			})
-			setup.current._updateTrade?.('orderUpdate', {type: 'orderUpdate', value: order})
+			setup.current._updateTrade?.('orderUpdate', order)
 		},
 		onError: (error) => {
-			addLog('Error (WebSocket)', {
+			log('Error (WebSocket)', {
 				error: error.message,
 			})
 		},
 		onConnect: () => {
+			setup.current.isConnected = true
 			setup.current._updateTrade?.('connected', true)
-			addLog('Connect (WebSocket)', 'userChannelWs')
+			log('Connect (WebSocket)', 'userChannelWs')
 		},
 		onDisconnect: () => {
+			setup.current.isConnected = false
 			setup.current._updateTrade?.('connected', false)
-			addLog('Disconnect (WebSocket)', 'userChannelWs')
+			log('Disconnect (WebSocket)', 'userChannelWs')
 		},
 	})
 
@@ -199,9 +211,22 @@ export default function TradingBotPage() {
 
 
 	// ---------------------------------------------------------------------------- onTest
-	const onTest = () => {
-		console.log('-----> onTest:')
-		// _getOpenOrders()
+	const onTest = async () => {
+		const root = 'A:/DATA/polymarket/trades/'
+		const trades = await TRADE_STORE.keys()
+		for (const slug of trades) {
+			const tradeFile = root + slug + '.json'
+			if (fs.existsSync(tradeFile)) continue
+
+			const tradeData = await TRADE_STORE.getItem(slug)
+
+			const trade = tradeData as Trade
+			console.log('trade:', slug, fsPromises)
+			if (fsPromises) {
+				await fsPromises.writeFile(tradeFile, JSON.stringify(trade, null, '\t'))
+				console.log('trade saved to:', tradeFile)
+			}
+		}
 	}
 
 

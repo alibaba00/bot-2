@@ -1,6 +1,7 @@
 import type { MarketData } from "@/lib/polymarket/types copy";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink } from "lucide-react";
 
 	type PriceEntry = { price: number; timestamp: number };
 
@@ -228,11 +229,19 @@ export default function ClobMarketTicker({ market, onUpdate }:
 		);
 	}
 
+	// https://polymarket.com/event/btc-updown-15m-1771711200
+
 	return (
 		<div className="flex flex-col gap-3 rounded-md border border-black/10 dark:border-white/10 p-3 flex-1 min-w-80">
 			<div className="flex flex-col gap-1">
 				<div className="text-sm font-medium">{market.question}</div>
-				<div className="text-xs text-muted-foreground">{market.slug}</div>
+				<div className="text-xs text-muted-foreground flex items-center gap-1">
+					{market.slug} <ExternalLink className="w-3 h-3 cursor-pointer" onClick={(e) => {
+						e.stopPropagation()
+						window.open(`https://polymarket.com/event/${market.slug}`, '_blank')
+						// window.open(`google-chrome://https://polymarket.com/event/${market.slug}`)
+					}} />
+				</div>
 				<div className="flex items-center gap-3">
 					<div className="text-xs text-muted-foreground">Status: {status}</div>
 					<button
