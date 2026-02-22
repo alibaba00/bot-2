@@ -11,7 +11,7 @@ export const MarketTimer = ({minutes, offset = 0, onExpired}:
 	})
 	
 	return (
-		<div className='flex flex-col items-center justify-center p-2 w-40'>
+		<div className='flex flex-col items-center justify-center p-2 w-24 h-10 ml-2 border border-gray-300 rounded-md'>
 			<div className='text-2xl font-bold'>{timer.timeString}</div>
 		</div>
 	)

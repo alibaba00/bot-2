@@ -12,6 +12,7 @@ import { MarketTimer } from "./MarketTimer";
 import PolymarketApi from "./PolymarketApi";
 import type { Trade } from "./TradingBotItem";
 import TradingBotList from "./TradingBotList";
+import { useUserChannelWebSocket } from "@/hooks/use-user-channel-websocket";
 
 
 // ============================================================================ TradingBotPage
@@ -28,17 +29,19 @@ export default function TradingBotPage() {
 		basePrice: 0,
 		up : {
 			enabled: true,
-			priceLimit: 0.2,	//ticker price trigger limit in % of base price
-			size: 15,			//buy size in USD
-			buyLimit: 0.7,		//buy limit market price
-			buyOffset: 0.02,	//buy offset to buy limit
+			orderLimit: 0.2,	//order trigger to set buy limit
+			timelimit: 3,		//buy timeout in minutes before closing market
+			buyLimit: 0.1,		//ticker price trigger limit in % of base price
+			sellLimit: 0.12,	//sell limit market price
+			size: 10,			//buy size shares
 		},
 		down : {
 			enabled: true,
-			priceLimit: 0.2,	//ticker price trigger limit in % of base price
-			size: 15,			//buy size in USD
-			buyLimit: 0.7,		//buy limit market price
-			buyOffset: 0.02,	//buy offset to buy limit
+			orderLimit: 0.2,	//order limit to set buy limit
+			timelimit: 3,		//buy timeout in minutes before closing market
+			buyLimit: 0.1,		//ticker price trigger limit in % of base price
+			sellLimit: 0.12,	//sell limit market price
+			size: 10,			//buy size shares
 		},
 		tradeMode: 'none' as 'none' | 'up' | 'down' | 'up-and-down' | 'up-or-down',
 		nextTimestamp: Infinity,
@@ -52,6 +55,45 @@ export default function TradingBotPage() {
 		trade: null as Trade | null,		//current trade
 		_updateTrade: null as ((type: string, value: any) => void) | null,
 	})
+
+
+	// ---------------------------------------------------------------------------- userChannelWs
+	const userChannelWs = useUserChannelWebSocket({
+		onTradeUpdate: (trade) => {
+			addLog('Trade Update (WebSocket)', {
+				id: trade.id,
+				status: trade.status,
+				side: trade.side,
+				price: trade.price,
+				size: trade.size,
+			})
+			setup.current._updateTrade?.('tradeUpdate', {type: 'tradeUpdate', value: trade})
+		},
+		onOrderUpdate: (order) => {
+			addLog('Order Update (WebSocket)', {
+				id: order.id,
+				type: order.type,
+				side: order.side,
+				price: order.price,
+			})
+			setup.current._updateTrade?.('orderUpdate', {type: 'orderUpdate', value: order})
+		},
+		onError: (error) => {
+			addLog('Error (WebSocket)', {
+				error: error.message,
+			})
+		},
+		onConnect: () => {
+			setup.current._updateTrade?.('connected', true)
+			addLog('Connect (WebSocket)', 'userChannelWs')
+		},
+		onDisconnect: () => {
+			setup.current._updateTrade?.('connected', false)
+			addLog('Disconnect (WebSocket)', 'userChannelWs')
+		},
+	})
+
+
 
 
 	// ---------------------------------------------------------------------------- initialize on mount
@@ -122,17 +164,27 @@ export default function TradingBotPage() {
 	}
 	*/
 	const onMarketPriceUpdate = (lastTrade: LastTrade) => {
-		const values = setup.current.tickerValues.clob[lastTrade.outcome_title]
+		const sc = setup.current
+
+		const trade = sc.trade
+		if (!trade) return
+
+		trade.marketTime = lastTrade.timestamp - sc.baseTimestamp
+		trade.restTime = sc.nextTimestamp - lastTrade.timestamp
+
+		const values = sc.tickerValues.clob[lastTrade.outcome_title]
+		if (values.price === lastTrade.price) return
+
 		values.price = lastTrade.price
 		values.timestamp = lastTrade.timestamp
 
-		const trade = setup.current.trade
-		if (!trade) return
-
 		// trade._setMarketPrice?.(lastTrade.timestamp, lastTrade.outcome_title as 'up' | 'down', lastTrade.price)
 		// trade[lastTrade.outcome_title].price = lastTrade.price
-		setup.current._updateTrade?.('marketPrice',
-			{timestamp: lastTrade.timestamp, outcome: lastTrade.outcome_title as 'up' | 'down', price: lastTrade.price})
+		sc._updateTrade?.('marketPrice', {
+			timestamp: lastTrade.timestamp,
+			outcome: lastTrade.outcome_title as 'up' | 'down',
+			price: lastTrade.price
+		})
 	}
 
 
@@ -159,6 +211,29 @@ export default function TradingBotPage() {
 			<div className="flex flex-row justify-between items-center w-full">
 				<h1 onClick={() => console.log('setup:', setup.current)}>Trading Bot</h1>
 
+				<MarketTimer minutes={15} onExpired={onExpired} />
+
+				{/* User Channel WebSocket Status */}
+				<div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
+					<span className="text-sm font-medium">User Channel WebSocket:</span>
+					<span className={`text-sm ${userChannelWs.status === 'connected' ? 'text-green-600' : userChannelWs.status === 'connecting' ? 'text-yellow-600' : 'text-gray-600'}`}>
+						{userChannelWs.status}
+					</span>
+					{userChannelWs.status === 'disconnected' && (
+						<Button variant="outline" size="sm" onClick={userChannelWs.connect}>
+							Connect
+						</Button>
+					)}
+					{userChannelWs.status !== 'disconnected' && (
+						<Button variant="outline" size="sm" onClick={userChannelWs.disconnect}>
+							Disconnect
+						</Button>
+					)}
+					{userChannelWs.error && (
+						<span className="text-xs text-red-600">{userChannelWs.error.message}</span>
+					)}
+				</div>
+
 				<div className="flex flex-row items-center gap-2 gap-3">
 					<Button variant="outline" size="icon" onClick={() => {
 							onTest()
@@ -173,7 +248,7 @@ export default function TradingBotPage() {
 					}}	 />
 				</div>
 			</div>
-			<MarketTimer minutes={15} onExpired={onExpired} />
+
 			{currentMarket && (
 				<>
 				<div className='w-full'>

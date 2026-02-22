@@ -14,6 +14,9 @@ export default function TradingBotList({market: market, setup}: {market: MarketD
 		console.log('---TradingBotList init:')
 
 		loadTrades().then((trades) => {
+			if (!trades.find((trade) => trade.slug === market.slug)){
+				trades = [createTrade(), ...trades]
+			}
 			setTrades(trades)
 			setIsLoaded(true)
 		})
@@ -45,44 +48,50 @@ export default function TradingBotList({market: market, setup}: {market: MarketD
 		}
 	}, [market])
 
+
 	// ---------------------------------------------------------------------------- createTrade
 	const createTrade = (): Trade => {
 		console.log('---TradesList createTrade:', market)
-		const upLimit = (setup.up.priceLimit / 100) + 1
-		const downLimit = (setup.down.priceLimit / 100) + 1
-		const upOpenPrice = setup.basePrice * upLimit
-		const downOpenPrice = setup.basePrice / downLimit
 
 		const trade: Trade = {
 			slug: market.slug,
+			marketTime: 0,
+			restTime: 0,
 			question: market.question,
 			conditionId: market.conditionId,
 			basePrice: setup.basePrice,
 			tickerPrice: 0,
 			up: {
 				outcome: 'up',
+				enabled: setup.up.enabled,
 				tokenId: market.outcomes.find((outcome) => outcome.title === 'Up')?.id || '',
 				price: 0,
-				limit: setup.up.priceLimit,
-				openPrice: upOpenPrice,
+				orderLimit: setup.up.orderLimit,
+				timelimit: setup.up.timelimit,
+				buyLimit: setup.up.buyLimit,
+				sellLimit: setup.up.sellLimit,
+				size: setup.up.size,
 				trades: [],
 				state: 'pending',
-				enabled: setup.up.enabled,
 			},
 			down: {
 				outcome: 'down',
+				enabled: setup.down.enabled,
 				tokenId: market.outcomes.find((outcome) => outcome.title === 'Down')?.id || '',
 				price: 0,
-				limit: setup.down.priceLimit,
-				openPrice: downOpenPrice,
+				orderLimit: setup.down.orderLimit,
+				timelimit: setup.down.timelimit,
+				buyLimit: setup.down.buyLimit,
+				sellLimit: setup.down.sellLimit,
+				size: setup.down.size,
 				trades: [],
 				state: 'pending',
-				enabled: setup.down.enabled,
 			},
 			state: 'pending',
 			outcome: null,
 			createdAt: Date.now(),
-			isLive: setup.liveTrading
+			isLive: setup.liveTrading,
+			isConnected: false,
 		}
 		return trade
 	}

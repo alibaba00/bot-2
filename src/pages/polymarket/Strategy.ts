@@ -34,7 +34,7 @@ class _Strategy1 {
 
 	async run(symbol: string = 'btc'): Promise<void> {
 		console.log('Strategy 1 running', symbol, '...')
-		const fromDate = new Date('2026-02-14').getTime()
+		const fromDate = new Date('2026-02-20').getTime()
 		const marketType = symbol + '-updown-15m'
 
 		const stats = {

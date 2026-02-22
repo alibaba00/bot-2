@@ -778,6 +778,7 @@ export default function TradingPage() {
 						<span className="text-xs text-red-600">{userChannelWs.error.message}</span>
 					)}
 				</div>
+				
 				<div className="space-y-4">
 					{/* Market Slug */}
 					<div className="space-y-2">
