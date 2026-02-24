@@ -2,7 +2,7 @@ import { cancelOrder, placeOrder } from "@/lib/polymarket/orders";
 import type { PlaceOrderParams, PlaceOrderResponse } from "@/lib/polymarket/types";
 import { beep } from "@/lib/utils";
 import localForage from "localforage";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 
 export const TRADE_STORE = localForage.createInstance({
 	name: 'polymarket',
@@ -10,7 +10,6 @@ export const TRADE_STORE = localForage.createInstance({
 })
 
 type TradeState = 'pending' | 'open' | 'closed' | 'cancelled'
-type TradeSideState = 'pending' | 'active' | 'positioned' | 'completed' | 'cancelled' | 'expired'
 
 type TradeAction = {
 	type: 'BUY' | 'SELL',

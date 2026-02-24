@@ -7,12 +7,12 @@ import type { MarketData } from "@/lib/polymarket/types";
 import { beep } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import ClobMarketTicker, { type LastTrade } from "./ClobMarketTicker";
-import CoinbasePriceTicker from "./CoinbasePriceTicker";
 import { MarketTimer } from "./MarketTimer";
-import PolymarketApi, { fsPromises, fs } from "./PolymarketApi";
+import PolymarketApi, { fsPromises } from "./PolymarketApi";
 import { TRADE_STORE, type Trade } from "./TradingBotItem";
 import TradingBotList from "./TradingBotList";
-import { useUserChannelWebSocket } from "@/hooks/use-user-channel-websocket";
+import useUserChannel from "./useUserChannel";
+import type { OrderMessage, TradeMessage } from "@/lib/polymarket/user-channel-websocket";
 
 
 // ============================================================================ TradingBotPage
@@ -20,6 +20,50 @@ export default function TradingBotPage() {
 	const [currentMarket, setCurrentMarket] = useState<MarketData | null>(null)
 	const [liveTrading, setLiveTrading] = useState<boolean>(false)
 	const { logView, addLog } = useLog()
+
+	const { view } = useUserChannel({
+		onTradeUpdate: (trade: TradeMessage) => {
+			console.log('Trade Update (UserChannel)', trade)
+			log('Trade Update (UserChannel)', {
+				id: trade.id,
+				status: trade.status,
+				side: trade.side,
+				price: trade.price,
+				size: trade.size,
+				outcome: trade.outcome,
+				timestamp: trade.timestamp,
+			})
+			setup.current._updateTrade?.('tradeUpdate', trade)
+		},
+		onOrderUpdate: (order: OrderMessage) => {
+			console.log('Order Update (UserChannel)', order)
+			log('Order Update (UserChannel)', {
+				id: order.id,
+				type: order.type,
+				side: order.side,
+				price: order.price,
+				size: order.size,
+				outcome: order.outcome,
+				timestamp: order.timestamp,
+			})
+			setup.current._updateTrade?.('orderUpdate', order)
+		},
+		onError: (error) => {
+			console.error('Error (UserChannel)', error)
+			setup.current.isConnected = false
+			setup.current._updateTrade?.('connected', false)
+		},
+		onConnect: () => {
+			console.log('Connect (UserChannel)')
+			setup.current.isConnected = true
+			setup.current._updateTrade?.('connected', true)
+		},
+		onDisconnect: () => {
+			console.log('Disconnect (UserChannel)')
+			setup.current.isConnected = false
+			setup.current._updateTrade?.('connected', false)
+		},
+	})
 
 	const log = (action: string, data: any) => {
 		setup.current._updateTrade?.('log', {action: action, data: data, timestamp: Date.now()})
@@ -61,51 +105,6 @@ export default function TradingBotPage() {
 		trade: null as Trade | null,		//current trade
 		_updateTrade: null as ((type: string, value: any) => void) | null,
 		_log: log,
-	})
-
-
-	// ---------------------------------------------------------------------------- userChannelWs
-	const userChannelWs = useUserChannelWebSocket({
-		onTradeUpdate: (trade) => {
-			log('Trade Update (WebSocket)', {
-				id: trade.id,
-				status: trade.status,
-				side: trade.side,
-				price: trade.price,
-				size: trade.size,
-				outcome: trade.outcome,
-				timestamp: trade.timestamp,
-			})
-			setup.current._updateTrade?.('tradeUpdate', trade)
-		},
-		onOrderUpdate: (order) => {
-			log('Order Update (WebSocket)', {
-				id: order.id,
-				type: order.type,
-				side: order.side,
-				price: order.price,
-				size: order.size,
-				outcome: order.outcome,
-				timestamp: order.timestamp,
-			})
-			setup.current._updateTrade?.('orderUpdate', order)
-		},
-		onError: (error) => {
-			log('Error (WebSocket)', {
-				error: error.message,
-				message: 'userChannelWs error',
-			})
-		},
-		onConnect: () => {
-			setup.current.isConnected = true
-			setup.current._updateTrade?.('connected', true)
-			log('Connect (WebSocket)', 'userChannelWs')
-		},
-		onDisconnect: () => {
-			setup.current.isConnected = false
-			setup.current._updateTrade?.('connected', false)
-			log('Disconnect (WebSocket)', 'userChannelWs')
-		},
 	})
 
 
@@ -203,16 +202,6 @@ export default function TradingBotPage() {
 	}
 
 
-	// ---------------------------------------------------------------------------- onCoinbasePriceUpdate
-	const onCoinbasePriceUpdate = (timestamp: number, price: number) => {
-		// setup.current.trade?._setTickerPrice?.(timestamp, price)
-		// setup.current._updateTrade?.('tickerPrice', {timestamp: timestamp, price: price})
-
-		// const values = setup.current.tickerValues
-		// values.coinbase = {timestamp: timestamp, price: price}
-	}
-
-
 	// ---------------------------------------------------------------------------- onTest
 	const onTest = async () => {
 		const root = 'A:/DATA/polymarket/trades/'
@@ -241,27 +230,6 @@ export default function TradingBotPage() {
 
 				<MarketTimer minutes={15} onExpired={onExpired} />
 
-				{/* User Channel WebSocket Status */}
-				<div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
-					<span className="text-sm font-medium">User Channel WebSocket:</span>
-					<span className={`text-sm ${userChannelWs.status === 'connected' ? 'text-green-600' : userChannelWs.status === 'connecting' ? 'text-yellow-600' : 'text-gray-600'}`}>
-						{userChannelWs.status}
-					</span>
-					{userChannelWs.status === 'disconnected' && (
-						<Button variant="outline" size="sm" onClick={userChannelWs.connect}>
-							Connect
-						</Button>
-					)}
-					{userChannelWs.status !== 'disconnected' && (
-						<Button variant="outline" size="sm" onClick={userChannelWs.disconnect}>
-							Disconnect
-						</Button>
-					)}
-					{userChannelWs.error && (
-						<span className="text-xs text-red-600">{userChannelWs.error.message}</span>
-					)}
-				</div>
-
 				<div className="flex flex-row items-center gap-2 gap-3">
 					<Button variant="outline" size="icon" onClick={() => {
 							onTest()
@@ -279,12 +247,9 @@ export default function TradingBotPage() {
 
 			{currentMarket && (
 				<>
-				<div className='w-full'>
-					<div>{'Base Price: ' + setup.current.basePrice.toString()}</div>
-				</div>
 				<div className='flex flex-row gap-2 flex-wrap w-full'>
 					<ClobMarketTicker market={currentMarket} onUpdate={onMarketPriceUpdate} />
-					<CoinbasePriceTicker symbol={setup.current.symbol.toUpperCase() + '-USD'} onUpdate={onCoinbasePriceUpdate} />
+					{view()}
 				</div>
 				<TradingBotList market={currentMarket} setup={setup.current} />
 				</>
