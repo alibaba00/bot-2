@@ -36,7 +36,9 @@ type TradeSide = {
 
 	trades: TradeAction[]
 	orderId: string
-	state: 'pending' | 'active' | 'positioned' | 'completed' | 'cancelled'
+	state: 'pending' | 'active' | 'buying' | 'positioned' | 'completed' | 'cancelled'
+	buyOrder?: PlaceOrderResponse
+	sellOrder?: PlaceOrderResponse
 }
 
 export type Trade = {
@@ -104,16 +106,31 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			// console.log('---TradeItem onUpdate marketPrice:', value)
 			setMarketPrice(value.timestamp, value.outcome, value.price)
 
+		}else if (type === 'tradeUpdate'){
+			console.log('---TradeItem onUpdate tradeUpdate:', value)
+
+
 		}else if (type === 'orderUpdate'){
 			console.log('---TradeItem onUpdate orderUpdate:', value.type, value)
+			const side = trade[value.outcome.toLowerCase() as 'up' | 'down']
+			if (!side) return
 
 			if (value.type === 'CANCELLATION'){
-				const side = trade[value.outcome.toLowerCase() as 'up' | 'down']
-				if (side?.state === 'active'){
+				if (side.state === 'active'){
 					cancelTradeSide(side)
 					saveTrade(trade)
 					render()
 				}
+			}else if (value.type === 'PLACEMENT'){
+				///
+
+			}else if (value.type === 'UPDATE'){
+				if (side.state === 'active'){
+					side.state = 'buying'			//buying has started
+					saveTrade(trade)
+					render()
+				}
+
 			}else if (value.status === 'MATCHED'){
 				const sizeMatched = parseFloat(value.size_matched || '0')
 				const originalSize = parseFloat(value.original_size || '0')
@@ -121,8 +138,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 
 				if (isFullyFilled){
-					const side = trade[value.outcome.toLowerCase() as 'up' | 'down']
-					if (side?.state === 'active'){
+					if (side?.state === 'active' || side?.state === 'buying'){
 						side.state = 'positioned'
 						beep(20, 1000)
 						render()
@@ -299,7 +315,7 @@ console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 				<div>{trade.up.timeLimit.toFixed(2)	+ ' | '
 					+ parseNumber(trade.up.orderLimit).toFixed(2) + ' | '
 					+ trade.up.buyLimit.toFixed(2) + ' | '
-					+ trade.up.sellLimit.toFixed(2) + ' | '
+					+ trade.up.sellLimit.toFixed(3) + ' | '
 					+ trade.up.size.toFixed(2)
 					}</div>
 				<div>{trade.up.price.toFixed(2)}</div>
@@ -391,9 +407,9 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 	}
 
 	action.orderData = orderData
-	console.log('!!!!!!!!!!!!!!!! setTrade:', trade, trade.isLive, orderData);
+	console.log('!!!!!!!!!!!!!!!! set order:', trade, trade.isLive, orderData);
 	
-	if (setup._log) setup._log('> setTrade', orderData)	//-> onUpdate log
+	if (setup._log) setup._log('> set order:', orderData)	//-> onUpdate log
 
 	if (trade.isLive) {
 		let order: PlaceOrderResponse | null = null
@@ -419,6 +435,15 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 			console.log('--- order:', order);
 			action.orderId = order.orderId
 			side.orderId = order.orderId || ''
+
+			if (action.type === 'BUY'){
+				side.buyOrder = order
+
+			}else if (action.type === 'SELL'){
+				side.sellOrder = order
+			}
+
+			setup._log('< set order result:', order)
 		}
 	}
 

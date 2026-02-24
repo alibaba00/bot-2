@@ -152,7 +152,7 @@ export class CLOBMarketWebSocket {
 				try {
 					// Handle PONG response
 					if (event.data === 'PONG' || event.data === 'pong') {
-						console.log('✅ CLOB Market: Received PONG')
+						// console.log('✅ CLOB Market: Received PONG')
 						return
 					}
 

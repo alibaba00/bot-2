@@ -695,6 +695,7 @@ export default function TradingPage() {
 			<h2>Strategies:</h2>
 			<div className="flex gap-2 flex-wrap">
 				<Button variant='default' onClick={handleStrategy1}>Strategy 1</Button>
+				<Button variant='default' onClick={() => Strategy1.run_multi('btc')}>Strategy 1 Multi</Button>
 				<Button variant='default' onClick={handleStrategy2}>Strategy 2</Button>
 				<Button variant='default' onClick={handleStrategy3}>Strategy 3</Button>
 			</div>

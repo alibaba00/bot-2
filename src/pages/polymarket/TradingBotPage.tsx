@@ -22,7 +22,7 @@ export default function TradingBotPage() {
 	const { logView, addLog } = useLog()
 
 	const log = (action: string, data: any) => {
-		setup.current._updateTrade?.('log', {action: action, data: data})
+		setup.current._updateTrade?.('log', {action: action, data: data, timestamp: Date.now()})
 		addLog(action, data)
 	}
 
@@ -36,18 +36,18 @@ export default function TradingBotPage() {
 		up : {
 			enabled: true,
 			orderLimit: 0.1,	//order limit to set buy limit
-			timeLimit: 3,		//buy timeout in minutes before closing market
-			buyLimit: 0.03,		//ticker price trigger limit in % of base price
-			sellLimit: 0.04,	//sell limit market price
-			size: 50,			//buy size shares
+			timeLimit: 4,		//buy timeout in minutes before closing market
+			buyLimit: 0.01,		//ticker price trigger limit in % of base price
+			sellLimit: 0.019,	//sell limit market price
+			size: 100,			//buy size shares
 		},
 		down : {
 			enabled: true,
 			orderLimit: 0.1,	//order limit to set buy limit
-			timeLimit: 3,		//buy timeout in minutes before closing market
-			buyLimit: 0.03,		//ticker price trigger limit in % of base price
-			sellLimit: 0.04,	//sell limit market price
-			size: 50,			//buy size shares
+			timeLimit: 4,		//buy timeout in minutes before closing market
+			buyLimit: 0.01,		//ticker price trigger limit in % of base price
+			sellLimit: 0.019,	//sell limit market price
+			size: 100,			//buy size shares
 		},
 		tradeMode: 'none' as 'none' | 'up' | 'down' | 'up-and-down' | 'up-or-down',
 		nextTimestamp: Infinity,
@@ -74,6 +74,7 @@ export default function TradingBotPage() {
 				price: trade.price,
 				size: trade.size,
 				outcome: trade.outcome,
+				timestamp: trade.timestamp,
 			})
 			setup.current._updateTrade?.('tradeUpdate', trade)
 		},
@@ -85,12 +86,14 @@ export default function TradingBotPage() {
 				price: order.price,
 				size: order.size,
 				outcome: order.outcome,
+				timestamp: order.timestamp,
 			})
 			setup.current._updateTrade?.('orderUpdate', order)
 		},
 		onError: (error) => {
 			log('Error (WebSocket)', {
 				error: error.message,
+				message: 'userChannelWs error',
 			})
 		},
 		onConnect: () => {
@@ -216,7 +219,7 @@ export default function TradingBotPage() {
 		const trades = await TRADE_STORE.keys()
 		for (const slug of trades) {
 			const tradeFile = root + slug + '.json'
-			if (fs.existsSync(tradeFile)) continue
+			// if (fs.existsSync(tradeFile)) continue
 
 			const tradeData = await TRADE_STORE.getItem(slug)
 

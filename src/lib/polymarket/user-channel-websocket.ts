@@ -165,7 +165,7 @@ export class UserChannelWebSocket {
 				try {
 					// Handle PONG response
 					if (event.data === 'PONG' || event.data === 'pong') {
-						console.log('✅ User Channel: Received PONG')
+						// console.log('✅ User Channel: Received PONG')
 						return
 					}
 
