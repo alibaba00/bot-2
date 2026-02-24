@@ -28,7 +28,7 @@ type TradeSide = {
 	price: number
 
 	orderLimit: number,		//order trigger to set buy limit
-	timeLimit: number,		//buy timeout in minutes before closing market
+	timeLimit: number,		//buy timeout in seconds before closing market
 	buyLimit: number,		//ticker price trigger limit in % of base price
 	sellLimit: number,		//sell limit market price
 	size: number,			//buy size in USD
@@ -41,6 +41,8 @@ type TradeSide = {
 }
 
 export type Trade = {
+	symbol: string
+	marketType: string
 	slug: string
 	marketTime: number
 	restTime: number
@@ -72,7 +74,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			setup.trade = trade
 			setup._updateTrade = onUpdate
 			setState('open')
-			saveTrade(trade)
+			saveTrade(trade, 1)
 
 		}else if (trade.state !== 'closed'){
 			delete setup._updateTrade
@@ -85,18 +87,33 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	}, [])
 
 
+	// ---------------------------------------------------------------------------- checkTradeCancel
+	const checkTradeCancel = (side: TradeSide, time: number = 0): boolean => {
+		if ((side.state === 'pending' || side.state === 'active') && time > 0 && time <= side.timeLimit){
+			side.state = 'cancelled'
+			cancelTradeSide(side)
+			return true
+		}
+		return false
+	}
+
+	
 	// ---------------------------------------------------------------------------- onUpdate
-	/* marketPrice example: {
-		"timestamp": 1771438735564,
-		"outcome": "up",
-		"price": 0.45
-	} */
 	const onUpdate = (type: string, value: any) => {
 		// console.log('---TradeItem onUpdate:', type, value)
-		if (type === 'log'){
+		if (type === 'time'){
+			// console.log('---TradeItem onUpdate time:', value)
+			const changedUp = checkTradeCancel(trade.up, value)
+			const changedDown = checkTradeCancel(trade.down, value)
+			if (changedUp || changedDown){
+				saveTrade(trade, 2)
+				render()
+				beep(20, 300)
+			}
+		}else if (type === 'log'){
 			console.log('---TradeItem onUpdate log:', value)
 			trade.logs.push(value)
-			saveTrade(trade)
+			saveTrade(trade, 3)
 
 		}else if (type === 'tickerPrice'){
 			setTickerPrice(value.timestamp, value.price)
@@ -110,48 +127,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 
 		}else if (type === 'orderUpdate'){
-			console.log('---TradeItem onUpdate orderUpdate:', value.type, value)
-			const side = trade[value.outcome.toLowerCase() as 'up' | 'down']
-			if (!side) return
-
-			if (value.type === 'CANCELLATION'){
-				if (side.state === 'active'){
-					cancelTradeSide(side)
-					saveTrade(trade)
-					render()
-				}
-			}else if (value.type === 'PLACEMENT'){
-				///
-
-			}else if (value.type === 'UPDATE'){
-				if (side.state === 'active'){
-					side.state = 'buying'			//buying has started
-					saveTrade(trade)
-					render()
-				}
-
-			}else if (value.status === 'MATCHED'){
-				const sizeMatched = parseFloat(value.size_matched || '0')
-				const originalSize = parseFloat(value.original_size || '0')
-				const isFullyFilled = sizeMatched >= originalSize && originalSize > 0
-console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
-
-				if (isFullyFilled){
-					if (side?.state === 'active' || side?.state === 'buying'){
-						side.state = 'positioned'
-						beep(20, 1000)
-						render()
-
-						setTrade(setup, trade, {
-							type		:'SELL',
-							outcome		:side.outcome,
-							price		:side.sellLimit,
-							timestamp	:Date.now(),
-							size		:side.size,
-						}, 5)		//-> active
-					}
-				}
-			}
+			orderUpdate(value)
 
 		}else if (type === 'connected'){
 			trade.isConnected = value
@@ -163,11 +139,58 @@ console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 	}
 
 
+	// ---------------------------------------------------------------------------- orderUpdate
+	const orderUpdate = (value: any) => {
+		console.log('---TradeItem onUpdate orderUpdate:', value.type, value)
+		const side = trade[value.outcome.toLowerCase() as 'up' | 'down']
+		if (!side) return
+
+		if (value.type === 'CANCELLATION'){
+			if (side.state === 'active'){
+				cancelTradeSide(side)
+				saveTrade(trade, 4)
+				render()
+			}
+		}else if (value.type === 'PLACEMENT'){
+			///
+
+		}else if (value.type === 'UPDATE'){
+			if (side.state === 'active'){
+				side.state = 'buying'			//buying has started
+				saveTrade(trade, 5)
+				render()
+			}
+
+		}else if (value.status === 'MATCHED'){
+			const sizeMatched = parseFloat(value.size_matched || '0')
+			const originalSize = parseFloat(value.original_size || '0')
+			const isFullyFilled = sizeMatched >= originalSize && originalSize > 0
+console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
+
+			if (isFullyFilled){
+				if (side?.state === 'active' || side?.state === 'buying'){
+					side.state = 'positioned'
+					beep(20, 1000)
+					render()
+
+					setTrade(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:side.sellLimit,
+						timestamp	:Date.now(),
+						size		:side.size,
+					}, 5)		//-> active
+				}
+			}
+		}
+	}
+
+
 	// ---------------------------------------------------------------------------- setTickerPrice
 	const setTickerPrice = (timestamp: number, price: number) => {
 		trade.tickerPrice = price
-		checkTrade(trade.up, timestamp)
-		checkTrade(trade.down, timestamp)
+		checkTrade(trade.up)
+		checkTrade(trade.down)
 	}
 
 
@@ -177,10 +200,10 @@ console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 
 		if (outcome === 'up'){
 			trade.up.price = price
-			checkTrade(trade.up, timestamp)
+			checkTrade(trade.up)
 		}else if (outcome === 'down'){
 			trade.down.price = price
-			checkTrade(trade.down, timestamp)
+			checkTrade(trade.down)
 		}
 		// console.log('--- setMarketPrice:', trade.up.price, trade.down.price)
 		render()
@@ -188,67 +211,18 @@ console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 
 
 	// ---------------------------------------------------------------------------- checkTrade
-	/* up : {
-		enabled: true,
-		orderTrigger: 0.1,	//order trigger to set buy limit
-		timelimit: 2,		//buy timeout in minutes before closing market
-		buyLimit: 0.03,		//ticker price trigger limit in % of base price
-		sellLimit: 0.05,	//sell limit market price
-		size: 50,			//buy size in USD
-	},
-	*/
-	const checkTrade = (side: TradeSide, timestamp: number) => {
-		if (!side.enabled) return
+	const checkTrade = (side: TradeSide) => {
+		if (!side.enabled) return false
 
-		switch (side.state){
-			case 'pending':
-				if (trade.restTime < side.timeLimit * 60000){
-					side.state = 'cancelled'
-					beep(20, 300)
-
-				}else if (trade.isConnected && side.price <= side.orderLimit){
-					setTrade(setup, trade, {
-						type		:'BUY',
-						outcome		:side.outcome,
-						price		:side.buyLimit,
-						timestamp	:Date.now(),
-						size		:side.size,
-					})		//-> active
-				}
-				break
-			case 'active':		//wait till buy limit is fullfilled
-				if (trade.restTime < side.timeLimit * 60000){
-					side.state = 'cancelled'
-					cancelTradeSide(side)
-					saveTrade(trade)
-					beep(20, 300)
-					render()
-				}
-				break
-			case 'completed':
-				break
-			case 'cancelled':
-				break
-			default:
-				return
-				break
+		if (side.state == 'pending' && trade.isConnected && side.price <= side.orderLimit){
+			setTrade(setup, trade, {
+				type		:'BUY',
+				outcome		:side.outcome,
+				price		:side.buyLimit,
+				timestamp	:Date.now(),
+				size		:side.size,
+			})		//-> active
 		}
-		// if (!tradeSide.enabled) return
-		// if (tradeSide.state !== 'pending') return
-		// if (!trade.tickerPrice) return
-		// if (!tradeSide.price) return
-		// if (!tradeSide.openPrice) return
-		// if (side === 'up' && trade.tickerPrice < tradeSide.openPrice) return
-		// if (side === 'down' && trade.tickerPrice > tradeSide.openPrice) return
-
-		// setTrade(trade, {
-		// 	type		:'BUY',
-		// 	outcome		:side,
-		// 	price		:tradeSide.price + setup[side].buyOffset,
-		// 	timestamp,
-		// 	size		:setup[side].size,
-		// })
-		// setState('active')
 	}
 
 
@@ -260,7 +234,6 @@ console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 				break
 			case 'open':		//markets are open
 				setup._updateTrade = onUpdate
-				saveTrade(trade)
 				break
 			case 'closed':		//market is closed from TradeList market update
 				delete setup._updateTrade
@@ -304,12 +277,6 @@ console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 				}}>
 					UP
 				</div>
-				{/* orderLimit: 0.2,	//order trigger to set buy limit
-			timelimit: 3,		//buy timeout in minutes before closing market
-			buyLimit: 0.1,		//ticker price trigger limit in % of base price
-			sellLimit: 0.12,	//sell limit market price
-			size: 10,			//buy size shares */}
-
 				<TradeState trade={trade} side='up' />
 				<div>{trade.up.timeLimit.toFixed(2)	+ ' | '
 					+ parseNumber(trade.up.orderLimit).toFixed(2) + ' | '
@@ -332,7 +299,7 @@ console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 				<div>{trade.down.timeLimit.toFixed(2)	+ ' | '
 					+ parseNumber(trade.down.orderLimit).toFixed(2) + ' | '
 					+ trade.down.buyLimit.toFixed(2) + ' | '
-					+ trade.down.sellLimit.toFixed(2) + ' | '
+					+ trade.down.sellLimit.toFixed(3) + ' | '
 					+ trade.down.size.toFixed(2)
 					}</div>
 				<div>{trade.down.price.toFixed(2)}</div>
@@ -379,9 +346,9 @@ const parseNumber = (num: number) => {
 
 
 // ---------------------------------------------------------------------------- saveTrade
-const saveTrade = async (trade: Trade) => {
+const saveTrade = async (trade: Trade, id: number = 1) => {
 	if (!trade?.slug) return null
-	console.log('--- saveTrade:', trade.slug)
+	console.log('--- saveTrade:', id, trade.slug)
 	await TRADE_STORE.setItem(trade.slug, trade)
 }
 
@@ -423,7 +390,7 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 					console.error('Max retries reached:', error)
 					side.state = 'cancelled'
 					beep(20, 1000)
-					saveTrade(trade)
+					saveTrade(trade, 7)
 					return trade
 				}
 				retry++
@@ -446,7 +413,7 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 		}
 	}
 
-	saveTrade(trade)
+	saveTrade(trade, 8)
 
 	if (action.type === 'BUY') beep(20, 1000)
 	else if (action.type === 'SELL') beep(20, 500)
@@ -458,12 +425,11 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 // TODO! try till cancelled
 //
 const cancelTradeSide = async (side: TradeSide) => {
-	console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!', side, side?.state)
+	if (side.state !== 'active') return
+
 	side.state = 'cancelled'
-	beep(20, 1000)
 	console.log('--- cancelTrade:', side.orderId)
 	if (side.orderId) await cancelOrder(side.orderId)
-	side.orderId = ''
 }
 
 
@@ -480,7 +446,7 @@ const closeTrade = (trade: Trade, newBasePrice: number = 0) => {
 
 	trade.up.price = 0
 	trade.down.price = 0
-	saveTrade(trade)
+	saveTrade(trade, 9)
 }
 
 

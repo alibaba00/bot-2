@@ -2,13 +2,10 @@ import { useEffect, useState } from "react"
 
 
 // ---------------------------------------------------------------------------- MarketTimer
-export const MarketTimer = ({minutes, offset = 0, onExpired}:
-	{minutes: number, offset?: number, onExpired?: () => void}) => {
+export const MarketTimer = ({minutes, offset = 0, onExpired, onTime}:
+	{minutes: number, offset?: number, onExpired?: () => void, onTime?: (restSeconds: number) => void}) => {
 
-	const timer = useMarketTimer(minutes, offset, () => {
-		console.log('timer expired!')
-		onExpired?.()
-	})
+	const timer = useMarketTimer(minutes, offset, onExpired, onTime)
 	
 	return (
 		<div className='flex flex-col items-center justify-center p-2 w-24 h-10 ml-2 border border-gray-300 rounded-md'>
@@ -22,7 +19,7 @@ export const MarketTimer = ({minutes, offset = 0, onExpired}:
 // minutes: 15
 // onExpired: () => void
 // return: {minutes: number, seconds: number, timeString: string}
-const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: () => void) => {
+const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: () => void, onTime?: (restSeconds: number) => void) => {
 	const [timer, setTimer] = useState<{hours: number, minutes: number, seconds: number, timeString: string}>({
 		hours: 0,
 		minutes: 0,
@@ -40,14 +37,19 @@ const useMarketTimer = (minutes: number = 15, offset: number = 0, onExpired?: ()
 
 		const updateTimer = () => {
 			time --	//decrement time by 1 second
+
 			if (time <= 0) {
+				onTime?.(0)
 				onExpired?.()	//call onExpired function if time is 0 or less
-				// time = maxTime	//reset time to maxTime if time is 0 or less
 				now = Date.now() + offset * 1000
 				past = now % (minutes * 60 * 1000)	
 				time = maxTime - Math.ceil(past / 1000)
 				if (time <= 10) time += maxTime
+
+			}else{
+				onTime?.(time)
 			}
+
 			setTimer({
 				hours: Math.floor(time / 3600),
 				minutes: Math.floor((time % 3600) / 60),

@@ -233,17 +233,24 @@ export default function ClobMarketTicker({ market, onUpdate }:
 
 	return (
 		<div className="flex flex-col gap-3 rounded-md border border-black/10 dark:border-white/10 p-3 flex-1 min-w-80">
-			<div className="flex flex-col gap-1">
-				<div className="text-sm font-medium">{market.question}</div>
-				<div className="text-xs text-muted-foreground flex items-center gap-1">
-					{market.slug} <ExternalLink className="w-3 h-3 cursor-pointer" onClick={(e) => {
-						e.stopPropagation()
-						window.open(`https://polymarket.com/event/${market.slug}`, '_blank')
-						// window.open(`google-chrome://https://polymarket.com/event/${market.slug}`)
-					}} />
+			<div className="flex flex-row justify-between gap-1 w-full items-start">
+				<div className="flex flex-col gap-1">
+					<div className="text-sm font-medium">{market.question}</div>
+					<div className="text-xs text-muted-foreground flex items-center gap-1">
+						{market.slug} <ExternalLink className="w-3 h-3 cursor-pointer" onClick={(e) => {
+							e.stopPropagation()
+							window.open(`https://polymarket.com/event/${market.slug}`, '_blank')
+							// window.open(`google-chrome://https://polymarket.com/event/${market.slug}`)
+						}} />
+					</div>
 				</div>
 				<div className="flex items-center gap-3">
-					<div className="text-xs text-muted-foreground">Status: {status}</div>
+					<div
+						className={`text-xs ${
+							status === "connected" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+						}`}>
+						{status}
+					</div>
 					<button
 						type="button"
 						onClick={handleToggle}
@@ -265,23 +272,23 @@ export default function ClobMarketTicker({ market, onUpdate }:
 				)}
 			</div>
 
-			<div className="flex flex-col gap-2">
+			<div className="flex flex-row gap-2">
 				{formattedOutcomes?.map((outcome) => (
 					<div
 						key={outcome.id}
-						className="flex items-center justify-between gap-3 rounded-md bg-black/5 dark:bg-white/5 px-3 py-2"
-					>
+						className="flex flex-1 items-center justify-between gap-3 rounded-md bg-black/5 dark:bg-white/5 px-3 py-2"
+						>
 						<div className="flex flex-col">
 							<span className="text-sm font-medium">{outcome.title}</span>
 							<span className="text-xs text-muted-foreground">
-								{outcome.side ? `${outcome.side} · ` : ""}
-								{outcome.size ? `Size ${outcome.size} · ` : ""}
 								{outcome.timestamp
 									? new Date(outcome.timestamp).toLocaleTimeString()
 									: "keine Updates"}
+								{outcome.side ? ` · ${outcome.side}` : ""}
+								{outcome.size ? ` · Size ${outcome.size.toFixed(3)}` : ""}
 							</span>
 						</div>
-						<div className="text-sm tabular-nums">
+						<div className="text-lg tabular-nums">
 							{outcome.price.toFixed(4)}
 						</div>
 					</div>

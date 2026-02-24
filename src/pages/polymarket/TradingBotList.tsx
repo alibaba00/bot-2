@@ -54,6 +54,8 @@ export default function TradingBotList({market: market, setup}: {market: MarketD
 		console.log('---TradesList createTrade:', market)
 
 		const trade: Trade = {
+			symbol: setup.symbol,
+			marketType: setup.marketType,
 			slug: market.slug,
 			marketTime: 0,
 			restTime: 0,

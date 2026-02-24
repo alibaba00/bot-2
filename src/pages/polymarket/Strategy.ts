@@ -35,19 +35,19 @@ class _Strategy1 {
 	async run(symbol: string = 'btc'): Promise<void> {
 		console.log('Strategy 1 running', symbol, '...')
 		const fromDate = new Date('2026-02-20').getTime()
-		const marketType = symbol + '-updown-15m'
+		const marketType = symbol + '-updown-5m'
 
 		const stats = {
 			symbol: symbol,
 			marketType: marketType,
+			openLimit: 0.01,
+			openTimeLimit: 0.5 * 60 * 1000,	//4 minutes
+			closeLimit: 0.019,
+			closeTimeDelay: 6 * 1000,		//6 seconds
 			fromDate: fromDate,
 			fromDateString: moment.utc(fromDate).format('YYYY-MM-DD HH:mm:ss'),
 			toDate: new Date().getTime(),
 			toDateString: moment.utc(new Date()).format('YYYY-MM-DD HH:mm:ss'),
-			openLimit: 0.01,
-			openTimeLimit: 4 * 60 * 1000,	//4 minutes
-			closeLimit: 0.019,
-			closeTimeDelay: 6 * 1000,		//6 seconds
 			usedMarkets: 0,
 			tradedMarkets: 0,				//total traded markets
 			up: {

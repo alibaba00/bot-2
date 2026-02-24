@@ -16,7 +16,6 @@ import { getAccountInfo, getTransactionHistory, getWalletBalance } from "@/lib/p
 import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 // import { Side } from "@polymarket/clob-client";
-import { Strategy1, Strategy2 } from "./Strategy";
 // import moment from "moment";
 import useLog from "@/hooks/use-log";
 
@@ -382,20 +381,6 @@ export default function TradingPage() {
 	}
 
 
-	const handleStrategy1 = async () => {
-		console.log('handleStrategy1 ...')
-		Strategy1.run()
-	}
-
-	const handleStrategy2 = async () => {
-		console.log('handleStrategy2 ...')
-		Strategy2.run()
-	}
-
-	const handleStrategy3 = async () => {
-		console.log('handleStrategy3 ...')
-	}
-
 	// Trading console handlers
 	const handleBuyNow = async () => {
 		try {
@@ -691,13 +676,6 @@ export default function TradingPage() {
 				<Button variant='default' onClick={handleFetchMarketBySlugFromGamma}>Fetch Market By Slug From Gamma</Button>
 				<Button variant='default' onClick={handleSetOrder}>Set Order</Button>
 				<Button variant='default' onClick={handleCancelOrderTop}>Cancel Order</Button>
-			</div>
-			<h2>Strategies:</h2>
-			<div className="flex gap-2 flex-wrap">
-				<Button variant='default' onClick={handleStrategy1}>Strategy 1</Button>
-				<Button variant='default' onClick={() => Strategy1.run_multi('btc')}>Strategy 1 Multi</Button>
-				<Button variant='default' onClick={handleStrategy2}>Strategy 2</Button>
-				<Button variant='default' onClick={handleStrategy3}>Strategy 3</Button>
 			</div>
 
 			<h2>Trading Console:</h2>

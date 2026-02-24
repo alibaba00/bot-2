@@ -57,11 +57,14 @@ export default function TradingBotPage() {
 			console.log('Connect (UserChannel)')
 			setup.current.isConnected = true
 			setup.current._updateTrade?.('connected', true)
+			log('Connect (UserChannel)', 'connected')
+
 		},
 		onDisconnect: () => {
 			console.log('Disconnect (UserChannel)')
 			setup.current.isConnected = false
 			setup.current._updateTrade?.('connected', false)
+			log('Disconnect (UserChannel)', 'disconnected')
 		},
 	})
 
@@ -72,6 +75,9 @@ export default function TradingBotPage() {
 
 	const setup = useRef({
 		symbol: 'btc',
+		marketTime: 5,
+		marketType: 'updown-5m',
+
 		liveTrading: false as boolean,
 		isConnected: false as boolean,
 		currentMarket: null as MarketData | null,
@@ -79,16 +85,16 @@ export default function TradingBotPage() {
 		basePrice: 0,
 		up : {
 			enabled: true,
-			orderLimit: 0.1,	//order limit to set buy limit
-			timeLimit: 4,		//buy timeout in minutes before closing market
+			orderLimit: 0.08,	//order limit to set buy limit
+			timeLimit: 30,		//buy timeout in seconds before closing market
 			buyLimit: 0.01,		//ticker price trigger limit in % of base price
 			sellLimit: 0.019,	//sell limit market price
 			size: 100,			//buy size shares
 		},
 		down : {
 			enabled: true,
-			orderLimit: 0.1,	//order limit to set buy limit
-			timeLimit: 4,		//buy timeout in minutes before closing market
+			orderLimit: 0.08,	//order limit to set buy limit
+			timeLimit: 30,		//buy timeout in seconds before closing market
 			buyLimit: 0.01,		//ticker price trigger limit in % of base price
 			sellLimit: 0.019,	//sell limit market price
 			size: 100,			//buy size shares
@@ -122,17 +128,10 @@ export default function TradingBotPage() {
 		const sc = setup.current
 
 		// await onExpired()
-		const timestamp = getUTCTimestamp(Date.now() + 10000, 15, 0)	//find next 15-minute timestamp
+		const timestamp = getUTCTimestamp(Date.now() + 10000, sc.marketTime, 0)	//find next marketTime-minute timestamp
 		sc.baseTimestamp = timestamp * 1000
-		sc.nextTimestamp = (timestamp + 15 * 60) * 1000
-		const currentSlug = sc.symbol + '-updown-15m-' + timestamp.toString()
-
-		const basePrice = await PolymarketApi.store.getItem('lastBasePrice') as {slug: string, price: number, timestamp: number} | null
-		if (basePrice && basePrice.slug === currentSlug) {
-			sc.basePrice = basePrice.price
-		}else{
-			console.error('basePrice not found for slug:', currentSlug)
-		}
+		sc.nextTimestamp = (timestamp + sc.marketTime * 60) * 1000
+		const currentSlug = sc.symbol + '-' + sc.marketType + '-' + timestamp.toString()
 
 		const market = await fetchMarketBySlugFromGamma(currentSlug) as MarketData | null
 		sc.currentMarket = market
@@ -144,24 +143,24 @@ export default function TradingBotPage() {
 	const onExpired = async () => {
 		const sc = setup.current
 
-		// use coinbase price if it is less than 1 minutes old or 0 if it is older
-		const basePrice = sc.tickerValues.coinbase.timestamp > Date.now() - 1 * 60 * 1000 ?
-			sc.tickerValues.coinbase.price : 0
-
-		console.log('----------------------onExpired! new basePrice:', basePrice)
+		console.log('----------------------onExpired!')
 		beep(10, 500)
 
-		const timestamp = getUTCTimestamp(Date.now() + 10000, 15, 0)	//find next 15-minute timestamp
+		const timestamp = getUTCTimestamp(Date.now() + 10000, sc.marketTime, 0)	//find next marketTime-minute timestamp
 		sc.baseTimestamp = timestamp * 1000
-		sc.nextTimestamp = (timestamp + 15 * 60) * 1000
-		const currentSlug = sc.symbol + '-updown-15m-' + timestamp.toString()
-
-		sc.basePrice = basePrice
-		await PolymarketApi.store.setItem('lastBasePrice', {slug:currentSlug, price:basePrice, timestamp:timestamp})
+		sc.nextTimestamp = (timestamp + sc.marketTime * 60) * 1000
+		const currentSlug = sc.symbol + '-' + sc.marketType + '-' + timestamp.toString()
 
 		const market = await fetchMarketBySlugFromGamma(currentSlug) as MarketData | null
 		sc.currentMarket = market
 		setCurrentMarket(market)
+	}
+
+
+	// ---------------------------------------------------------------------------- onTime
+	const onTime = (restSeconds: number) => {
+		const sc = setup.current
+		sc._updateTrade?.('time', restSeconds)
 	}
 
 
@@ -228,7 +227,7 @@ export default function TradingBotPage() {
 			<div className="flex flex-row justify-between items-center w-full">
 				<h1 onClick={() => console.log('setup:', setup.current)}>Trading Bot</h1>
 
-				<MarketTimer minutes={15} onExpired={onExpired} />
+				<MarketTimer minutes={setup.current.marketTime} onExpired={onExpired} onTime={onTime} />
 
 				<div className="flex flex-row items-center gap-2 gap-3">
 					<Button variant="outline" size="icon" onClick={() => {
