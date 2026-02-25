@@ -27,3 +27,4 @@ backup/
 .specstory/
 *-lock.json
 *.lock
+data/

@@ -61,3 +61,4 @@ TODOS:
 ✔️ update data when market is finished (alle 15 min)
 - add openTicker, closeTicker
 - caching chart & strategy data
+- webworker for file updates

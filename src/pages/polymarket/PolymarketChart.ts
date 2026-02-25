@@ -737,7 +737,7 @@ export const updateTickerData = async (type: string = 'binance') => {
 		}
 
 		if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true })
-		fs.copyFileSync(filePath, exportFile)
+		await fsPromises.copyFile(filePath, exportFile)
 	}
 }
 
@@ -781,7 +781,7 @@ export const updateClobData = async () => {
 			console.log('export new file:', exportFile)
 		}
 		if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true })
-		fs.copyFileSync(filePath, exportFile)
+		await fsPromises.copyFile(filePath, exportFile)
 	}
 
 	console.log('stat:', stat)

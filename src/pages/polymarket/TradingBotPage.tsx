@@ -4,15 +4,15 @@ import { Switch } from "@/components/ui/switch";
 import useLog from "@/hooks/use-log";
 import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
 import type { MarketData } from "@/lib/polymarket/types";
+import type { OrderMessage, TradeMessage } from "@/lib/polymarket/user-channel-websocket";
 import { beep } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import ClobMarketTicker, { type LastTrade } from "./ClobMarketTicker";
 import { MarketTimer } from "./MarketTimer";
-import PolymarketApi, { fsPromises } from "./PolymarketApi";
+import { fsPromises } from "./PolymarketApi";
 import { TRADE_STORE, type Trade } from "./TradingBotItem";
 import TradingBotList from "./TradingBotList";
 import useUserChannel from "./useUserChannel";
-import type { OrderMessage, TradeMessage } from "@/lib/polymarket/user-channel-websocket";
 
 
 // ============================================================================ TradingBotPage
@@ -24,16 +24,18 @@ export default function TradingBotPage() {
 	const { view } = useUserChannel({
 		onTradeUpdate: (trade: TradeMessage) => {
 			console.log('Trade Update (UserChannel)', trade)
-			log('Trade Update (UserChannel)', {
-				id: trade.id,
-				status: trade.status,
-				side: trade.side,
-				price: trade.price,
-				size: trade.size,
-				outcome: trade.outcome,
-				timestamp: trade.timestamp,
-			})
-			setup.current._updateTrade?.('tradeUpdate', trade)
+			// log('Trade Update (UserChannel)', {
+			// 	id: trade.id,
+			// 	status: trade.status,
+			// 	side: trade.side,
+			// 	price: trade.price,
+			// 	size: trade.size,
+			// 	asset_id: trade.asset_id,
+			// 	market: trade.market,
+			// 	outcome: trade.outcome,
+			// 	timestamp: trade.timestamp,
+			// })
+			// setup.current._updateTrade?.('tradeUpdate', trade)
 		},
 		onOrderUpdate: (order: OrderMessage) => {
 			console.log('Order Update (UserChannel)', order)
@@ -42,7 +44,10 @@ export default function TradingBotPage() {
 				type: order.type,
 				side: order.side,
 				price: order.price,
-				size: order.size,
+				original_size: order.original_size,
+				size_matched: order.size_matched,
+				asset_id: order.asset_id,
+				market: order.market,
 				outcome: order.outcome,
 				timestamp: order.timestamp,
 			})
@@ -85,19 +90,19 @@ export default function TradingBotPage() {
 		basePrice: 0,
 		up : {
 			enabled: true,
-			orderLimit: 0.08,	//order limit to set buy limit
-			timeLimit: 30,		//buy timeout in seconds before closing market
-			buyLimit: 0.01,		//ticker price trigger limit in % of base price
-			sellLimit: 0.019,	//sell limit market price
-			size: 100,			//buy size shares
+			orderLimit: 0.07,	//order limit to set buy limit
+			timeLimit: 60,		//buy timeout in seconds before closing market
+			buyLimit: 0.03,		//ticker price trigger limit in % of base price
+			sellLimit: 0.49,	//sell limit market price
+			size: 20,			//buy size shares
 		},
 		down : {
 			enabled: true,
-			orderLimit: 0.08,	//order limit to set buy limit
-			timeLimit: 30,		//buy timeout in seconds before closing market
-			buyLimit: 0.01,		//ticker price trigger limit in % of base price
-			sellLimit: 0.019,	//sell limit market price
-			size: 100,			//buy size shares
+			orderLimit: 0.07,	//order limit to set buy limit
+			timeLimit: 60,		//buy timeout in seconds before closing market
+			buyLimit: 0.03,		//ticker price trigger limit in % of base price
+			sellLimit: 0.49,	//sell limit market price
+			size: 20,			//buy size shares
 		},
 		tradeMode: 'none' as 'none' | 'up' | 'down' | 'up-and-down' | 'up-or-down',
 		nextTimestamp: Infinity,

@@ -122,9 +122,8 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			// console.log('---TradeItem onUpdate marketPrice:', value)
 			setMarketPrice(value.timestamp, value.outcome, value.price)
 
-		}else if (type === 'tradeUpdate'){
-			console.log('---TradeItem onUpdate tradeUpdate:', value)
-
+		// }else if (type === 'tradeUpdate'){
+		// 	console.log('---TradeItem onUpdate tradeUpdate:', value)
 
 		}else if (type === 'orderUpdate'){
 			orderUpdate(value)
@@ -140,35 +139,35 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 
 	// ---------------------------------------------------------------------------- orderUpdate
-	const orderUpdate = (value: any) => {
-		console.log('---TradeItem onUpdate orderUpdate:', value.type, value)
-		const side = trade[value.outcome.toLowerCase() as 'up' | 'down']
+	const orderUpdate = (order: any) => {
+		console.log('---orderUpdate:', order.type, order)
+		const side = trade[order.outcome.toLowerCase() as 'up' | 'down']
 		if (!side) return
 
-		if (value.type === 'CANCELLATION'){
+		if (order.type === 'CANCELLATION'){
 			if (side.state === 'active'){
 				cancelTradeSide(side)
 				saveTrade(trade, 4)
 				render()
 			}
-		}else if (value.type === 'PLACEMENT'){
+		}else if (order.type === 'PLACEMENT'){
 			///
 
-		}else if (value.type === 'UPDATE'){
+		}else if (order.type === 'UPDATE'){
 			if (side.state === 'active'){
 				side.state = 'buying'			//buying has started
 				saveTrade(trade, 5)
 				render()
 			}
+			if (side.state === 'buying'){
+				const sizeMatched = parseFloat(order.size_matched || '0')
+				const originalSize = parseFloat(order.original_size || '0')
+				const isFullyFilled = sizeMatched >= (originalSize * 0.99) && originalSize > 0	//99% of original size
 
-		}else if (value.status === 'MATCHED'){
-			const sizeMatched = parseFloat(value.size_matched || '0')
-			const originalSize = parseFloat(value.original_size || '0')
-			const isFullyFilled = sizeMatched >= originalSize && originalSize > 0
-console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
+				const sellSize = parseNumber(Math.floor(sizeMatched * 100) / 100)
+				console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled, sellSize)
 
-			if (isFullyFilled){
-				if (side?.state === 'active' || side?.state === 'buying'){
+				if (isFullyFilled){
 					side.state = 'positioned'
 					beep(20, 1000)
 					render()
@@ -178,7 +177,7 @@ console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled)
 						outcome		:side.outcome,
 						price		:side.sellLimit,
 						timestamp	:Date.now(),
-						size		:side.size,
+						size		:sellSize,
 					}, 5)		//-> active
 				}
 			}
@@ -375,7 +374,7 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 	action.orderData = orderData
 	console.log('!!!!!!!!!!!!!!!! set order:', trade, trade.isLive, orderData);
 	
-	if (setup._log) setup._log('> set order:', orderData)	//-> onUpdate log
+	if (setup._log) setup._log('> set order: ' + action.type, orderData)	//-> onUpdate log
 
 	if (trade.isLive) {
 		let order: PlaceOrderResponse | null = null
