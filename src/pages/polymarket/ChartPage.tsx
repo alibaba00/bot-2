@@ -7,6 +7,7 @@ import ReactEcharts from 'echarts-for-react';
 import { useEffect, useState } from "react";
 import PolymarketApi from "./PolymarketApi";
 import * as PolymarketChart from "./PolymarketChart";
+import moment from "moment";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -787,8 +788,10 @@ const MarketItem = ({ market }: { market: any }) => {
 
 	const timeRange = (startTimestamp: number, endTimestamp: number) => {
 		return startTimestamp && endTimestamp ?
-			(new Date(startTimestamp).toISOString().substring(11, 16) + ' - '
-			+ new Date(endTimestamp).toISOString().substring(11, 16))
+			(moment.utc(startTimestamp).format('HH:mm') + ' - '
+			+ moment.utc(endTimestamp).format('HH:mm'))
+			+ ' (' + (moment(startTimestamp).format('HH:mm') + ' - '
+			+ moment(endTimestamp).format('HH:mm')) + ')'
 			: ''
 	}	
 

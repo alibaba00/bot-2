@@ -38,16 +38,16 @@ class _Strategy1 {
 
 	async run(symbol: string = 'btc'): Promise<void> {
 		console.log('Strategy 1 running', symbol, '...')
-		const fromDate = new Date('2026-02-25').getTime()
+		const fromDate = new Date('2026-02-26').getTime()
 		const marketType = symbol + '-updown-5m'
 		const trades: any[] = []
 
 		const stats: any = {
 			symbol: symbol,
 			marketType: marketType,
-			openLimit: 0.03,
-			openTimeLimit: 1 * 60 * 1000,	//4 minutes
-			closeLimit: 0.49,
+			openLimit: 0.02,
+			openTimeLimit: 50 * 1000,	//1 minutes
+			closeLimit: 0.5,
 			closeTimeDelay: 5 * 1000,		//6 seconds
 			fromDate: fromDate,
 			fromDateString: moment.utc(fromDate).format('YYYY-MM-DD HH:mm:ss'),
@@ -63,7 +63,7 @@ class _Strategy1 {
 				pnl: 0,
 			},
 			down: {
-				enabled: true,
+				enabled: false,
 				count: 0,
 				won: 0,
 				lost: 0,
@@ -95,14 +95,14 @@ class _Strategy1 {
 
 	async run_multi(symbol: string = 'btc'): Promise<void> {
 		console.log('Strategy 1 running', symbol, '...')
-		const fromDate = new Date('2026-02-20').getTime()
+		const fromDate = new Date('2026-02-26').getTime()
 		const marketType = symbol + '-updown-5m'
 
 		const stats: any = {
 			symbol: symbol,
 			marketType: marketType,
 			openLimit: 0.034,
-			openTimeLimit: 1 * 60 * 1000,	//4 minutes
+			openTimeLimit: 60 * 1000,	//1 minutes
 			closeLimit: 0.043,
 			closeTimeDelay: 5 * 1000,		//5 seconds
 			fromDate: fromDate,
@@ -181,21 +181,23 @@ const checkData = async (market: Market, stats: any, trades: any[]): Promise<voi
 		down: {open: null, close: null, pnl: 0 },
 		pnl: 0,
 	}
-	// trades.push(trade)
+trades.push(trade)
 
 	if (stats.up.enabled){
 		const up = market.chartData.clob.up
 		const openUp = up.find((e: any) => e[1] < stats.openLimit && e[0] <= endTimestamp - stats.openTimeLimit)
 		let closeUp: any = null
 		if (openUp){
+			trade.up.open = [openUp[0], stats.openLimit]
 			stats.tradedMarkets++
 			stats.up.count++
 			closeUp = up.find((e: any) => e[0] > openUp[0] + stats.closeTimeDelay && e[1] > stats.closeLimit)
 			if (closeUp){
+				trade.up.close = [closeUp[0], stats.closeLimit]
 				trade.up.pnl = (stats.closeLimit / stats.openLimit) - 1
 				stats.up.won ++
 				stats.up.pnl = parseNumber(stats.up.pnl + trade.up.pnl)
-trades.push(trade)
+// trades.push(trade)
 			}else{
 				trade.up.pnl = -1
 				stats.up.lost++
@@ -209,14 +211,16 @@ trades.push(trade)
 		const openDown = down.find((e: any) => e[1] < stats.openLimit && e[0] <= endTimestamp - stats.openTimeLimit)
 		let closeDown: any = null
 		if (openDown){
+			trade.down.open = [openDown[0], stats.openLimit]
 			stats.tradedMarkets++
 			stats.down.count++
 			closeDown = down.find((e: any) => e[0] > openDown[0] + stats.closeTimeDelay && e[1] > stats.closeLimit)
 			if (closeDown){
-				trade.down.pnl = (stats.closeLimit / openDown[1]) - 1
+				trade.down.close = [closeDown[0], stats.closeLimit]
+				trade.down.pnl = (stats.closeLimit / stats.openLimit) - 1
 				stats.down.won++
 				stats.down.pnl = parseNumber(stats.down.pnl + trade.down.pnl)
-trades.push(trade)
+// trades.push(trade)
 			}else{
 				trade.down.pnl = -1
 				stats.down.lost++

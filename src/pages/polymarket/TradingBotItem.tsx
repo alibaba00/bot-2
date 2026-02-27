@@ -90,7 +90,6 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	// ---------------------------------------------------------------------------- checkTradeCancel
 	const checkTradeCancel = (side: TradeSide, time: number = 0): boolean => {
 		if ((side.state === 'pending' || side.state === 'active') && time > 0 && time <= side.timeLimit){
-			side.state = 'cancelled'
 			cancelTradeSide(side)
 			return true
 		}
@@ -99,8 +98,12 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 	
 	// ---------------------------------------------------------------------------- onUpdate
-	const onUpdate = (type: string, value: any) => {
+	const onUpdate = (type: string, value?: any) => {
 		// console.log('---TradeItem onUpdate:', type, value)
+
+		// if (type === 'expired'){		//market is expired
+		// 	return
+		// }else
 		if (type === 'time'){
 			// console.log('---TradeItem onUpdate time:', value)
 			const changedUp = checkTradeCancel(trade.up, value)
@@ -424,11 +427,10 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 // TODO! try till cancelled
 //
 const cancelTradeSide = async (side: TradeSide) => {
-	if (side.state !== 'active') return
-
-	side.state = 'cancelled'
-	console.log('--- cancelTrade:', side.orderId)
-	if (side.orderId) await cancelOrder(side.orderId)
+	if ((side.state === 'pending' || side.state === 'active')){
+		side.state = 'cancelled'
+		if (side.orderId) await cancelOrder(side.orderId)
+	}
 }
 
 

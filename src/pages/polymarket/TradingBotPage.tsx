@@ -91,17 +91,17 @@ export default function TradingBotPage() {
 		up : {
 			enabled: true,
 			orderLimit: 0.07,	//order limit to set buy limit
-			timeLimit: 60,		//buy timeout in seconds before closing market
+			timeLimit: 50,		//buy timeout in seconds before closing market
 			buyLimit: 0.03,		//ticker price trigger limit in % of base price
-			sellLimit: 0.49,	//sell limit market price
+			sellLimit: 0.64,	//sell limit market price
 			size: 20,			//buy size shares
 		},
 		down : {
-			enabled: true,
+			enabled: false,
 			orderLimit: 0.07,	//order limit to set buy limit
-			timeLimit: 60,		//buy timeout in seconds before closing market
+			timeLimit: 50,		//buy timeout in seconds before closing market
 			buyLimit: 0.03,		//ticker price trigger limit in % of base price
-			sellLimit: 0.49,	//sell limit market price
+			sellLimit: 0.64,	//sell limit market price
 			size: 20,			//buy size shares
 		},
 		tradeMode: 'none' as 'none' | 'up' | 'down' | 'up-and-down' | 'up-or-down',
@@ -114,7 +114,7 @@ export default function TradingBotPage() {
 			}
 		},
 		trade: null as Trade | null,		//current trade
-		_updateTrade: null as ((type: string, value: any) => void) | null,
+		_updateTrade: null as ((type: string, value?: any) => void) | null,		//update trade state	
 		_log: log,
 	})
 
@@ -149,6 +149,8 @@ export default function TradingBotPage() {
 		const sc = setup.current
 
 		console.log('----------------------onExpired!')
+		sc._updateTrade?.('expired')
+
 		beep(10, 500)
 
 		const timestamp = getUTCTimestamp(Date.now() + 10000, sc.marketTime, 0)	//find next marketTime-minute timestamp
