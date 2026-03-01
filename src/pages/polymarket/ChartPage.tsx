@@ -637,9 +637,7 @@ export default function ChartPage() {
 							className='ml-0'
 						/> */}
 
-						<Button onClick={() => PolymarketChart.updateLogfiles()}>
-							Update logfiles
-						</Button>
+						<Button onClick={() => PolymarketChart.updateLogfiles()}>Update logfiles</Button>
 
 						{/* <Button onClick={() => PolymarketChart.updateOldLogs()}>
 							Update old logs

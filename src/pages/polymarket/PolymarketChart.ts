@@ -1,5 +1,6 @@
 import type { Market } from '@/lib/polymarket/types';
 import PolymarketApi from './PolymarketApi'
+import moment from 'moment';
 
 const isElectron = window?.navigator.userAgent.includes('Electron')
 const fs = isElectron ? (window as any)?.require?.('fs') : null
@@ -620,17 +621,17 @@ export const updateLogfiles = async () => {
 	await PolymarketApi.store.setItem('lastUpdate_logfiles', lastUpdate_logfiles)
 	console.log('---Updating logfiles...', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
 
-	await updateClobData()
+	await updateLogData_worker('clob')
 	console.log('')
-	await updateTickerData('chainlink')
+	await updateLogData_worker('chainlink')
 	console.log('')
-	await updateTickerData('binance')
+	await updateLogData_worker('binance')
 	console.log('')
-	await updateTickerData('polling')
+	await updateLogData_worker('polling')
 	console.log('')
-	await updateTickerData('coinbase')
+	await updateLogData_worker('coinbase')
 	console.log('')
-	await updateTickerData('kraken')
+	await updateLogData_worker('kraken')
 	console.log('')
 
 	console.log('update markets logfiles...')
@@ -658,6 +659,10 @@ export const updateOldLogs = async () => {
 
 
 const tickerDataSources: any = {
+	clob: {
+		importPath: 'H:/DEV/TRADE/POLY/bot-3/logs/clob',
+		exportPath: 'A:/DATA/polymarket/',
+	},
 	chainlink: {
 		importPath: 'H:/DEV/PY/polymarket/chainlink_price_ticker/logs/chainlink',
 		exportPath: 'A:/DATA/polymarket/chainlink/',
@@ -710,47 +715,12 @@ const tickerDataSources: any = {
 	},
 }
 
-// ---------------------------------------------------------------------------- updateTickerData
-export const updateTickerData = async (type: string = 'binance') => {
-	console.log('Updating ticker data:', type)
+// ---------------------------------------------------------------------------- updateLogData
+export const updateLogData = async (type: string = 'clob') => {
+	console.log('Updating log data:', type)
 
 	const importPath = tickerDataSources[type].importPath
 	const exportPath = tickerDataSources[type].exportPath
-	const importList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
-
-	for (const entry of importList) {
-		if (entry.isDirectory() || !entry.name.endsWith('.csv')) continue
-		const path = entry.path.replaceAll('\\', '/')
-		const filePath = path + '/' + entry.name
-		const symbol = path.split('/').pop()
-		const exportDir = exportPath + symbol
-		const exportFile = exportDir + '/' + entry.name
-
-		if (fs.existsSync(exportFile)){	//export file exists
-			const exportCreatedAt = fs.statSync(exportFile).ctime
-			const importCreatedAt = fs.statSync(filePath).ctime
-			if (exportCreatedAt >= importCreatedAt) continue
-
-			console.log('update file:', exportFile)
-		}else{
-			console.log('export new file:', exportFile)
-		}
-
-		if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true })
-		await fsPromises.copyFile(filePath, exportFile)
-	}
-}
-
-
-// ---------------------------------------------------------------------------- updateTickerData
-// H:\DEV\PY\polymarket\clob_market_ticker\logs\clob\btc-updown-15m\2026-01-05\btc-updown-15m-1767639600.csv
-// A:\DATA\polymarket\clob\btc-updown-15m\2026-01-05\btc-updown-15m-1767639600.csv
-export const updateClobData = async () => {
-	console.log('Updating clob data...')
-
-	// const importPath = 'H:/DEV/PY/polymarket/clob_market_ticker/logs/'	//old
-	const importPath = 'H:/DEV/TRADE/POLY/bot-3/logs/clob'	//new
-	const exportPath = 'A:/DATA/polymarket/'
 	const importList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
 
 	const stat = {
@@ -763,10 +733,11 @@ export const updateClobData = async () => {
 		if (entry.isDirectory() || !entry.name.endsWith('.csv')) continue
 		const path = entry.path.replaceAll('\\', '/')
 		const filePath = path + '/' + entry.name
-		const exportDir = exportPath + path.split('logs/')[1]
+		const symbol = type === 'clob' ? path.split('logs/')[1] : path.split('/').pop()
+		const exportDir = exportPath + symbol
 		const exportFile = exportDir + '/' + entry.name
 
-		if (fs.existsSync(exportFile)){		//export file exists
+		if (fs.existsSync(exportFile)){	//export file exists
 			stat.exists++
 			const exportCreatedAt = fs.statSync(exportFile).ctime
 			const importCreatedAt = fs.statSync(filePath).ctime
@@ -775,16 +746,56 @@ export const updateClobData = async () => {
 			stat.updatedFiles++
 			console.log('')
 			console.log('update file:', exportFile)
-
-		}else{			//export file not exists
+		}else{
 			stat.newFiles++
 			console.log('export new file:', exportFile)
 		}
+
 		if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true })
 		await fsPromises.copyFile(filePath, exportFile)
 	}
 
 	console.log('stat:', stat)
+}
+
+
+// ---------------------------------------------------------------------------- updateLogData_worker
+export const updateLogData_worker = async (type: string = 'clob') => {
+	// Fallback, falls keine Worker unterstützt werden
+	if (typeof window === 'undefined' || typeof Worker === 'undefined') {
+		console.warn('Web Worker nicht verfügbar, fallback auf updateLogData()')
+		await updateLogData(type)
+		return
+	}
+
+	return await new Promise<void>((resolve, reject) => {
+		const worker = new Worker(
+			new URL('./updateLogData.worker.ts', import.meta.url),
+			{ type: 'module' },
+		)
+
+		worker.onmessage = (event: MessageEvent) => {
+			const data = event.data
+			if (!data) return
+
+			if (data.type === 'log') {
+				console.log(...(data.args || []))
+			} else if (data.type === 'error') {
+				console.error('updateLogData_worker error:', data.error)
+			} else if (data.type === 'done') {
+				worker.terminate()
+				resolve()
+			}
+		}
+
+		worker.onerror = (err) => {
+			console.error('updateLogData_worker onerror:', err)
+			worker.terminate()
+			reject(err)
+		}
+
+		worker.postMessage({ type: 'run', logDataType: type })
+	})
 }
 
 
@@ -821,7 +832,7 @@ export const updateAllMarketData_clob = async () => {
 
 	const dataFiles = await getAllMarkets_clob()
 	console.log('Updating all market data from clob (', dataFiles.length,
-		'files, lastUpdate:', new Date(lastUpdate_logfiles).toISOString(), ') ...')
+		'files, lastUpdate:', moment(new Date(lastUpdate_logfiles)).format('YYYY-MM-DD HH:mm:ss'), ') ...')
 
 	const stat = {
 		totalMarkets: dataFiles.length,
@@ -1019,6 +1030,8 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 	const tickers: any = {} as any
 
 	for (const source of Object.keys(tickerDataSources)) {
+		if (source === 'clob') continue
+		
 		let tickerData: any = await getChartTickerData(market.symbol, dateString, source)
 		if (!tickerData?.length) continue
 
