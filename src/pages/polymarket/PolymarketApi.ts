@@ -146,7 +146,7 @@ class PolymarketApi {
 			out.push(key)
 		}
 		
-		console.log('getAllKeys complete!', symbol, out.length)
+		console.log('complete!', out.length)
 		return out
 	}
 

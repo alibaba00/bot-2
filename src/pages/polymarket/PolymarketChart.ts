@@ -22,44 +22,35 @@ export const fixingClobData = async () => {
 	}
 	isRunning = true
 
-	const importPath = 'A:/DATA/polymarket/clob/'
-	const dirList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
-	console.log('fixingClobData dirList:', dirList.length, '...')
+	const marketKeys = await PolymarketApi.cache.keys()
+	const updateKeys = marketKeys.filter((key: string) => key.includes('updown-5m'))
+	console.log('updateKeys:', updateKeys.length, 'from', marketKeys.length, 'markets ...')
 
-	let count = 0
-	let updated = 0
-
-	for (const entry of dirList) {
+	for (const key of updateKeys) {		
 		if (!isRunning) break
-		if (entry.isDirectory()) continue
 
-		if (entry.name.endsWith('.csv')) {
-			count++
-			if (count % 100 === 0) console.log('fixingClobData:', count, '...')
-// if (count > 3) break
+		const market = await PolymarketApi.cache.getItem(key)
+		if (market?.chartData?.clob) {
+			const clob = market.chartData.clob
+			const up = clob.up
+			const down = clob.down
+			const limit = parseNumber((market.duration / 5) * 60 * 1000)	//3 minutes
+			const complete = up.length > 20 && down.length > 20
+				&& up[0][0] - market.startTimestamp < limit
+				&& market.endTimestamp - up[up.length-1][0] < limit
+				&& down[0][0] - market.startTimestamp < limit
+				&& market.endTimestamp - down[down.length-1][0] < limit
 
-			const filePath = entry.path.replaceAll('\\', '/') + '/' + entry.name
-			// const symbol = entry.path.split('\\').pop()
-			const fileContent = await fsPromises.readFile(filePath, 'utf8')
-			if (fileContent?.length) {
-console.log('update:', filePath)
-
-				const lines = fileContent.split('\n')
-				updated++
-				lines.map((line) => {
-					if (line.includes('UP')){
-						return line.replace('UP', 'DOWN')
-					}else if (line.includes('DOWN')){
-						return line.replace('DOWN', 'UP')
-					}else return line
-				}).join('\n')
-
-				// await fsPromises.writeFile(filePath, exportData)
-			}	
+			if (complete !== clob._complete){  //changed complete status
+				console.log('update complete:', key, complete, 'clob._complete:', clob._complete)
+				clob._complete = complete
+				await PolymarketApi.cacheMarket(market)
+				await PolymarketApi.saveMarket(market, true)
+			}
 		}
 	}
 
-	console.log('complete!', count, 'files updated:', updated)
+	console.log('fixing clob data complete!')
 	isRunning = false
 }
 
@@ -820,7 +811,7 @@ export const getMarket = async (slug: string, filePath: string | null = null, us
 
 
 // ---------------------------------------------------------------------------- updateAllMarketData_clob
-export const updateAllMarketData_clob = async () => {
+export const updateAllMarketData_clob = async (all: boolean = false) => {
 	if (isRunning){
 		console.log('updateAllMarketData_clob canceled!')
 		isRunning = false
@@ -848,18 +839,29 @@ export const updateAllMarketData_clob = async () => {
 		return acc
 	}, {})
 
-	const openMarkets = await PolymarketApi.store.getItem('openMarkets') || []
+	const openMarkets = all ? [] : await PolymarketApi.store.getItem('openMarkets') || []
 	const openMarketsLookup = openMarkets.reduce((acc: any, slug: string) => {
 		acc[slug] = true
 		return acc
 	}, {})
-	console.log('openMarkets:', openMarkets.length)
+
+	if (!all) console.log('openMarkets:', openMarkets.length)
 	let count = 0
 	let index = 0
 
 	for (const file of dataFiles) {
 		index++
 		if (!isRunning) break
+
+		if (all) {
+			const {updated} = await updateMarketData_clob(file.slug, file.filePath, true)
+			if (updated){
+				stat.updated++
+				console.log('-----> update market:', index, ++count, file.slug, file.filePath)
+				console.log('')
+			}
+			continue
+		}
 
 		if (marketLookup[file.slug]) {				//market is cached
 			if (!openMarketsLookup[file.slug]){		//market is closed
@@ -872,11 +874,11 @@ export const updateAllMarketData_clob = async () => {
 
 		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
 		if (updated){
+			stat.updated++
 			console.log('-----> update market:', index, ++count, '/', openMarkets.length, file.slug, file.filePath)
 			console.log('')
 		}
 
-		if (updated) stat.updated++
 		if (market && !market.closed){
 			stat.openMarkets++
 			openMarketsLookup[file.slug] = true
@@ -1017,7 +1019,7 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 		})
 	}
 	const clob = {up, down, _complete: false}
-	const limit = 3 * 60 * 1000	//3 minutes
+	const limit = parseNumber((market.duration / 5) * 60 * 1000)	//3 minutes
 	clob._complete = up.length > 20 && down.length > 20
 		&& up[0][0] - market.startTimestamp < limit
 		&& market.endTimestamp - up[up.length-1][0] < limit

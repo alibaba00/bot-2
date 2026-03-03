@@ -34,6 +34,10 @@ const assetContent = [
 		label: 'ALL',
 		value: 'all',
 	},
+	{
+		label: 'Filtered',
+		value: 'filtered',
+	},
 ] as any
 
 const heatmapChartOptions = {
@@ -646,7 +650,15 @@ export default function ChartPage() {
 						<Button onClick={() => PolymarketChart.updateAllMarketData_clob()}>
 							Update clob data
 						</Button>
-						
+
+						{/* <Button onClick={() => PolymarketChart.updateAllMarketData_clob(true)}>
+							Update all clob data
+						</Button> */}
+
+						<Button onClick={() => PolymarketChart.fixingClobData()}>
+							Fixing clob data
+						</Button>
+
 						<ToggleGroup type='single' defaultValue='line' value={chartType}
 							onValueChange={(value: string) => {if (value) setChartType(value)}}>
 							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
@@ -736,20 +748,36 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 	{ symbol: string, marketType: string, selectedDate: Date, selectedMarket: any, onSelectMarket: (market: any) => void }) => {
 	const [markets, setMarkets] = useState<any[]>([])
 	
-	useEffect(() => {
-		setMarkets([])	//clear markets
+	const getMarkets = async () => {
+		// console.log('symbol:', symbol, 'marketType:', marketType, 'selectedDate:', selectedDate)
 
-		PolymarketChart.getAllMarkets_clob(symbol, selectedDate)
+		let filter: any = null
+		if (symbol === 'filtered'){
+			filter = await PolymarketApi.store.getItem('marketFilter') as any
+			if (filter){
+				symbol = null as any
+				selectedDate = null as any
+			}
+		}
+
+		PolymarketChart.getAllMarkets_clob(symbol === 'all' ? null : symbol, selectedDate)
 		.then((files) => {
 			if (!files) return
 
-			if (marketType !== 'all'){
+			if (filter){
+				files = files.filter((market) => filter[market.slug])
+			}else if (marketType !== 'all'){
 				files = files.filter((market) => market.slug.includes('-' + marketType))
 			}
 			files = files.sort((b, a) => a.timestamp - b.timestamp)
 
 			setMarkets(files)
 		})
+	}
+
+	useEffect(() => {
+		setMarkets([])	//clear markets
+		getMarkets()
 
 	}, [symbol, selectedDate, marketType])
 
