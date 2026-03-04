@@ -17,6 +17,7 @@ import useUserChannel from "./useUserChannel";
 
 // ============================================================================ TradingBotPage
 export default function TradingBotPage() {
+	const [enabled, setEnabled] = useState<boolean>(false)
 	const [currentMarket, setCurrentMarket] = useState<MarketData | null>(null)
 	const [liveTrading, setLiveTrading] = useState<boolean>(false)
 	const { logView, addLog } = useLog()
@@ -80,8 +81,8 @@ export default function TradingBotPage() {
 
 	const setup = useRef({
 		symbol: 'btc',
-		marketTime: 5,
-		marketType: 'updown-5m',
+		marketTime: 15,
+		marketType: 'updown-15m',
 
 		liveTrading: false as boolean,
 		isConnected: false as boolean,
@@ -90,19 +91,9 @@ export default function TradingBotPage() {
 		basePrice: 0,
 		up : {
 			enabled: true,
-			orderLimit: 0.07,	//order limit to set buy limit
-			timeLimit: 50,		//buy timeout in seconds before closing market
-			buyLimit: 0.03,		//ticker price trigger limit in % of base price
-			sellLimit: 0.64,	//sell limit market price
-			size: 20,			//buy size shares
 		},
 		down : {
-			enabled: false,
-			orderLimit: 0.07,	//order limit to set buy limit
-			timeLimit: 50,		//buy timeout in seconds before closing market
-			buyLimit: 0.03,		//ticker price trigger limit in % of base price
-			sellLimit: 0.64,	//sell limit market price
-			size: 20,			//buy size shares
+			enabled: true,
 		},
 		tradeMode: 'none' as 'none' | 'up' | 'down' | 'up-and-down' | 'up-or-down',
 		nextTimestamp: Infinity,
@@ -117,7 +108,6 @@ export default function TradingBotPage() {
 		_updateTrade: null as ((type: string, value?: any) => void) | null,		//update trade state	
 		_log: log,
 	})
-
 
 
 
@@ -242,12 +232,18 @@ export default function TradingBotPage() {
 						}}>
 						Test
 					</Button>
-					<Label className="text-sm font-medium select-none ml-0">Live Trading</Label>
+					<Label className="text-sm font-medium select-none ml-4">Live Trading</Label>
 					<Switch checked={liveTrading} onCheckedChange={(checked) => {
 						setup.current.liveTrading = checked
 						if (setup.current.trade) {setup.current.trade.isLive = checked}
 						setLiveTrading(checked)
 					}}	 />
+
+					<Label className="text-sm font-medium select-none ml-4">enabled</Label>
+					<Switch checked={enabled} onCheckedChange={(checked) => {
+						setEnabled(checked)
+					}} />
+
 				</div>
 			</div>
 
@@ -257,7 +253,9 @@ export default function TradingBotPage() {
 					<ClobMarketTicker market={currentMarket} onUpdate={onMarketPriceUpdate} />
 					{view()}
 				</div>
-				<TradingBotList market={currentMarket} setup={setup.current} />
+				{enabled && (
+					<TradingBotList market={currentMarket} setup={setup.current} />
+				)}
 				</>
 			)}
 			{logView()}

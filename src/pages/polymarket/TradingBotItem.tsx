@@ -26,6 +26,7 @@ type TradeSide = {
 	outcome: 'up' | 'down'
 	tokenId: string
 	price: number
+	level: number
 
 	orderLimit: number,		//order trigger to set buy limit
 	timeLimit: number,		//buy timeout in seconds before closing market
@@ -34,10 +35,9 @@ type TradeSide = {
 	size: number,			//buy size in USD
 
 	trades: TradeAction[]
-	orderId: string
-	state: 'pending' | 'active' | 'buying' | 'positioned' | 'completed' | 'cancelled'
-	buyOrder?: PlaceOrderResponse
-	sellOrder?: PlaceOrderResponse
+	state: 'pending' | 'active' | 'buying' | 'selling' | 'positioned' | 'completed' | 'cancelled'
+	buyOrder?: PlaceOrderResponse | null
+	sellOrder?: PlaceOrderResponse | null
 }
 
 export type Trade = {
@@ -68,6 +68,7 @@ export type Trade = {
 export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any}) {
 	const [, render] = useReducer(x => !x, false);
 	const [state, _setState] = useState<string>(trade.state)
+	const [time, setTime] = useState<number>(0)
 
 	useEffect(() => {
 		if (trade.slug === setup.currentMarket?.slug){
@@ -83,43 +84,46 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		}
 
 		return () => {
+			delete setup._updateTrade
 		}
 	}, [])
 
 
 	// ---------------------------------------------------------------------------- checkTradeCancel
-	const checkTradeCancel = (side: TradeSide, time: number = 0): boolean => {
-		if ((side.state === 'pending' || side.state === 'active') && time > 0 && time <= side.timeLimit){
-			cancelTradeSide(side)
-			return true
-		}
-		return false
-	}
+	// const checkTradeCancel = (side: TradeSide, time: number = 0): boolean => {
+	// 	if ((side.state === 'pending' || side.state === 'active') && time > 0 && time <= side.timeLimit){
+	// 		cancelTradeSide(side)
+	// 		return true
+	// 	}
+	// 	return false
+	// }
 
 	
 	// ---------------------------------------------------------------------------- onUpdate
 	const onUpdate = (type: string, value?: any) => {
 		// console.log('---TradeItem onUpdate:', type, value)
 
-		// if (type === 'expired'){		//market is expired
-		// 	return
-		// }else
-		if (type === 'time'){
+		if (type === 'expired'){		//market is expired
+			console.log('---TradeItem onUpdate expired:', value)
+			return
+
+		}else if (type === 'time'){
 			// console.log('---TradeItem onUpdate time:', value)
-			const changedUp = checkTradeCancel(trade.up, value)
-			const changedDown = checkTradeCancel(trade.down, value)
-			if (changedUp || changedDown){
-				saveTrade(trade, 2)
-				render()
-				beep(20, 300)
-			}
+			setTime(value)
+			// const changedUp = checkTradeCancel(trade.up, value)
+			// const changedDown = checkTradeCancel(trade.down, value)
+			// if (changedUp || changedDown){
+			// 	saveTrade(trade, 2)
+			// 	render()
+			// 	beep(20, 300)
+			// }
 		}else if (type === 'log'){
 			console.log('---TradeItem onUpdate log:', value)
-			trade.logs.push(value)
-			saveTrade(trade, 3)
+			// trade.logs.push(value)
+			// saveTrade(trade, 3)
 
 		}else if (type === 'tickerPrice'){
-			setTickerPrice(value.timestamp, value.price)
+			// setTickerPrice(value.timestamp, value.price)
 
 		}else if (type === 'marketPrice'){
 			// console.log('---TradeItem onUpdate marketPrice:', value)
@@ -136,7 +140,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			render()
 
 		}else if (type === 'state'){
-			setState(value)
+			// setState(value)
 		}
 	}
 
@@ -158,7 +162,30 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 		}else if (order.type === 'UPDATE'){
 			if (side.state === 'active'){
-				side.state = 'buying'			//buying has started
+				/// check here if order side = SELL !!!
+				if (order.side === 'SELL'){
+					side.state = 'selling'			//selling has started
+					/// cancel all buy orders
+					if (side.buyOrder?.orderId) cancelOrder(side.buyOrder.orderId)
+
+				}else if (order.side === 'BUY'){
+					side.state = 'buying'			//buying has started
+					if (side.level === 0){
+						if (side.outcome === 'up'){		//disable the other side
+							trade.down.enabled = false
+							trade.down.state = 'cancelled'
+							if (trade.down.buyOrder?.orderId) cancelOrder(trade.down.buyOrder.orderId)
+						}else if (side.outcome === 'down'){
+							trade.up.enabled = false
+							trade.up.state = 'cancelled'
+							if (trade.up.buyOrder?.orderId) cancelOrder(trade.up.buyOrder.orderId)
+						}
+					}else{
+						// cancel last sell order
+						if (side.sellOrder?.orderId) cancelOrder(side.sellOrder.orderId)
+					}
+					side.level ++
+				}
 				saveTrade(trade, 5)
 				render()
 			}
@@ -170,34 +197,28 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				const sellSize = parseNumber(Math.floor(sizeMatched * 100) / 100)
 				console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled, sellSize)
 
-				if (isFullyFilled){
-					side.state = 'positioned'
-					beep(20, 1000)
-					render()
+				side.size += sizeMatched
 
-					setTrade(setup, trade, {
-						type		:'SELL',
-						outcome		:side.outcome,
-						price		:side.sellLimit,
-						timestamp	:Date.now(),
-						size		:sellSize,
-					}, 5)		//-> active
-				}
+				if (isFullyFilled) checkTrade(side)
+			}
+			if (side.state === 'selling'){
+///				
 			}
 		}
 	}
 
 
 	// ---------------------------------------------------------------------------- setTickerPrice
-	const setTickerPrice = (timestamp: number, price: number) => {
-		trade.tickerPrice = price
-		checkTrade(trade.up)
-		checkTrade(trade.down)
-	}
+	// const setTickerPrice = (timestamp: number, price: number) => {
+	// 	// trade.tickerPrice = price
+	// 	// checkTrade(trade.up)
+	// 	// checkTrade(trade.down)
+	// }
 
 
 	// ---------------------------------------------------------------------------- setMarketPrice
 	const setMarketPrice = (timestamp: number, outcome: 'up' | 'down', price: number) => {
+		// console.log(trade, time)
 		if (trade.state === 'closed' || trade.state === 'cancelled') return
 
 		if (outcome === 'up'){
@@ -216,15 +237,94 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	const checkTrade = (side: TradeSide) => {
 		if (!side.enabled) return false
 
-		if (side.state == 'pending' && trade.isConnected && side.price <= side.orderLimit){
-			setTrade(setup, trade, {
-				type		:'BUY',
-				outcome		:side.outcome,
-				price		:side.buyLimit,
-				timestamp	:Date.now(),
-				size		:side.size,
-			})		//-> active
+		switch (side.level){
+			case 0:
+				if (side.state === 'pending' && trade.isConnected && side.price > 0.41){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.41,
+						timestamp	:Date.now(),
+						size		:5,
+					})		//-> active
+				}
+				break
+			case 1:
+				if (side.state === 'buying'){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.31,
+						timestamp	:Date.now(),
+						size		:5,
+					})		//-> active
+					setOrder(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:0.49,
+						timestamp	:Date.now(),
+						size		:side.size,
+					})		//-> active
+				}
+				break
+			case 2:
+				if (side.state === 'buying'){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.21,
+						timestamp	:Date.now(),
+						size		:10,
+					})		//-> active
+					setOrder(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:0.39,
+						timestamp	:Date.now(),
+						size		:side.size,
+					})		//-> active
+				}
+				break
+			case 3:
+				if (side.state === 'buying'){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.11,
+						timestamp	:Date.now(),
+						size		:20,
+					})		//-> active
+					setOrder(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:0.29,
+						timestamp	:Date.now(),
+						size		:side.size,
+					})		//-> active
+				}
+				break
+			case 4:
+				break;
+			case 5:
+				break;
+			default:
+				return
 		}
+
+		// console.log(side.state)
+		// if (side.state == 'pending' && trade.isConnected && side.price <= side.orderLimit){
+		// 	setTrade(setup, trade, {
+		// 		type		:'BUY',
+		// 		outcome		:side.outcome,
+		// 		price		:side.buyLimit,
+		// 		timestamp	:Date.now(),
+		// 		size		:side.size,
+		// 	})		//-> active
+		// }
 	}
 
 
@@ -280,14 +380,9 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 					UP
 				</div>
 				<TradeState trade={trade} side='up' />
-				<div>{trade.up.timeLimit.toFixed(2)	+ ' | '
-					+ parseNumber(trade.up.orderLimit).toFixed(2) + ' | '
-					+ trade.up.buyLimit.toFixed(2) + ' | '
-					+ trade.up.sellLimit.toFixed(3) + ' | '
-					+ trade.up.size.toFixed(2)
-					}</div>
+				<div>{trade.up.level}</div>
 				<div>{trade.up.price.toFixed(2)}</div>
-				<div></div>
+				<div>{time.toFixed(2)}</div>
 				<div style={{
 					color: trade.down.state === 'active'
 						? 'orange' // Tailwind blue-500 hex
@@ -298,12 +393,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 					DOWN
 				</div>
 				<TradeState trade={trade} side='down' />
-				<div>{trade.down.timeLimit.toFixed(2)	+ ' | '
-					+ parseNumber(trade.down.orderLimit).toFixed(2) + ' | '
-					+ trade.down.buyLimit.toFixed(2) + ' | '
-					+ trade.down.sellLimit.toFixed(3) + ' | '
-					+ trade.down.size.toFixed(2)
-					}</div>
+					<div>{trade.down.level}</div>
 				<div>{trade.down.price.toFixed(2)}</div>
 				<div></div>
 			</div>
@@ -357,13 +447,14 @@ const saveTrade = async (trade: Trade, id: number = 1) => {
 
 // ---------------------------------------------------------------------------- openTrade
 // buy | sell
-const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetries: number = 0, retryDelay: number = 2000) => {
+const setOrder = async (setup: any, trade: Trade, action: TradeAction,
+	maxRetries: number = 5, retryDelay: number = 2000) => {
 	const side = action.outcome === 'up' ? trade.up : trade.down
 	if (!side.enabled) return trade
 
 	side.trades.push(action)
 
-	side.state = action.type === 'BUY' ? 'active' : action.type === 'SELL' ? 'completed' : 'cancelled'
+	// side.state = action.type === 'BUY' ? 'active' : action.type === 'SELL' ? 'completed' : 'cancelled'
 
 	const orderData: PlaceOrderParams = {
 		marketId: trade.conditionId,
@@ -402,7 +493,7 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 		if (order) {
 			console.log('--- order:', order);
 			action.orderId = order.orderId
-			side.orderId = order.orderId || ''
+			// side.orderId = order.orderId || ''
 
 			if (action.type === 'BUY'){
 				side.buyOrder = order
@@ -429,7 +520,8 @@ const setTrade = async (setup: any, trade: Trade, action: TradeAction, maxRetrie
 const cancelTradeSide = async (side: TradeSide) => {
 	if ((side.state === 'pending' || side.state === 'active')){
 		side.state = 'cancelled'
-		if (side.orderId) await cancelOrder(side.orderId)
+		if (side.buyOrder?.orderId) await cancelOrder(side.buyOrder.orderId)
+		if (side.sellOrder?.orderId) await cancelOrder(side.sellOrder.orderId)
 	}
 }
 

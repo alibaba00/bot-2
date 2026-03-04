@@ -279,7 +279,8 @@ class _Strategy2 {
 		const keys = await PolymarketApi.getAllKeys(marketType, fromDate)
 		console.log('   total keys:', keys.length)
 
-		this.strategyData = await STORE.getItem('strategie2-' + marketType) as any
+		this.strategyData = await STORE.getItem('strategie2-' + marketType) as any || {}
+
 		if (this.strategyData.lostMarkets){
 			for (const key in this.strategyData.lostMarkets){
 				this.strategyData.lostMarkets[key] = false
@@ -442,7 +443,7 @@ stats.tradedMarkets++
 					pnl: 0,
 				})
 				close = side.find((e: any) => e[0] > next?.[0] + this.setup.timeLimit
-					&& e[1] > trade.sellLimit) || [0, 0, 0]
+					&& e[1] > (trade.sellLimit - this.setup.priceOffset)) || [0, 0, 0]
 				if (close[0]) close[2] = trade.sellLimit
 				
 			}else{	//no next buy limit found
