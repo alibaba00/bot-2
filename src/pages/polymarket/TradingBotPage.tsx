@@ -24,7 +24,7 @@ export default function TradingBotPage() {
 
 	const { view } = useUserChannel({
 		onTradeUpdate: (trade: TradeMessage) => {
-			console.log('Trade Update (UserChannel)', trade)
+			console.log('---Trade Update (UserChannel)', trade)
 			// log('Trade Update (UserChannel)', {
 			// 	id: trade.id,
 			// 	status: trade.status,
@@ -39,7 +39,7 @@ export default function TradingBotPage() {
 			// setup.current._updateTrade?.('tradeUpdate', trade)
 		},
 		onOrderUpdate: (order: OrderMessage) => {
-			console.log('Order Update (UserChannel)', order)
+			console.log('---Order Update (UserChannel)', order)
 			log('Order Update (UserChannel)', {
 				id: order.id,
 				type: order.type,
@@ -55,12 +55,12 @@ export default function TradingBotPage() {
 			setup.current._updateTrade?.('orderUpdate', order)
 		},
 		onError: (error) => {
-			console.error('Error (UserChannel)', error)
+			console.error('---Error (UserChannel)', error)
 			setup.current.isConnected = false
 			setup.current._updateTrade?.('connected', false)
 		},
 		onConnect: () => {
-			console.log('Connect (UserChannel)')
+			console.log('---Connect (UserChannel)')
 			setup.current.isConnected = true
 			setup.current._updateTrade?.('connected', true)
 			log('Connect (UserChannel)', 'connected')
@@ -81,8 +81,18 @@ export default function TradingBotPage() {
 
 	const setup = useRef({
 		symbol: 'btc',
+
 		marketTime: 15,
 		marketType: 'updown-15m',
+		startTimeLimit: 180,	//seconds
+		endTimeLimit: 60,	//seconds
+
+		// marketTime: 5,
+		// marketType: 'updown-5m',
+		// startTimeLimit: 60,	//seconds
+		// endTimeLimit: 30,	//seconds
+
+		sizeFactor: 5.0,		//size factor to multiply the trade size
 
 		liveTrading: false as boolean,
 		isConnected: false as boolean,
@@ -120,17 +130,7 @@ export default function TradingBotPage() {
 	// ---------------------------------------------------------------------------- onInit
 	const onInit = async () => {
 		console.log('----------------------onInit:')
-		const sc = setup.current
-
-		// await onExpired()
-		const timestamp = getUTCTimestamp(Date.now() + 10000, sc.marketTime, 0)	//find next marketTime-minute timestamp
-		sc.baseTimestamp = timestamp * 1000
-		sc.nextTimestamp = (timestamp + sc.marketTime * 60) * 1000
-		const currentSlug = sc.symbol + '-' + sc.marketType + '-' + timestamp.toString()
-
-		const market = await fetchMarketBySlugFromGamma(currentSlug) as MarketData | null
-		sc.currentMarket = market
-		setCurrentMarket(market)
+		createMarket()
 	}
 
 
@@ -142,15 +142,26 @@ export default function TradingBotPage() {
 		sc._updateTrade?.('expired')
 
 		beep(10, 500)
+		createMarket()
+	}
+
+
+	// ---------------------------------------------------------------------------- createMarket
+	const createMarket = async () => {
+		const sc = setup.current
 
 		const timestamp = getUTCTimestamp(Date.now() + 10000, sc.marketTime, 0)	//find next marketTime-minute timestamp
 		sc.baseTimestamp = timestamp * 1000
 		sc.nextTimestamp = (timestamp + sc.marketTime * 60) * 1000
 		const currentSlug = sc.symbol + '-' + sc.marketType + '-' + timestamp.toString()
 
+		// TODO:
+		// const market = await PolymarketApi.createMarket(sc.symbol, sc.marketType, currentSlug) as Market | null
 		const market = await fetchMarketBySlugFromGamma(currentSlug) as MarketData | null
 		sc.currentMarket = market
 		setCurrentMarket(market)
+
+		return market
 	}
 
 

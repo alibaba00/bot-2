@@ -266,7 +266,7 @@ class PolymarketApi {
 			filePath: filePath,
 			symbol: symbol.toLowerCase(),
 			marketType: marketType,		//e.g. btc-updown-15m
-			duration: duration,			//e.g. 15
+			duration: duration,			//e.g. timeframe in minutes: 15
 			slug: marketSlug,			//e.g. btc-updown-15m-1765584900
 			timestamp,					//e.g. 1765584900
 			dayString: this.getUTCDateFormat(new Date(timestamp * 1000)),	//e.g. 2025-12-10

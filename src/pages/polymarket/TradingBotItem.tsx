@@ -9,7 +9,7 @@ export const TRADE_STORE = localForage.createInstance({
 	storeName: 'polymarket-trades'
 })
 
-type TradeState = 'pending' | 'open' | 'closed' | 'cancelled'
+type TradeState = 'pending' | 'open' | 'closed' | 'cancelled' | 'completed'
 
 type TradeAction = {
 	type: 'BUY' | 'SELL',
@@ -44,6 +44,9 @@ export type Trade = {
 	symbol: string
 	marketType: string
 	slug: string
+	startTimestamp: number
+	endTimestamp: number
+	timeFrame: number
 	marketTime: number
 	restTime: number
 	question: string
@@ -71,15 +74,22 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	const [time, setTime] = useState<number>(0)
 
 	useEffect(() => {
-		if (trade.slug === setup.currentMarket?.slug){
-			setup.trade = trade
-			setup._updateTrade = onUpdate
-			setState('open')
-			saveTrade(trade, 1)
+		// console.log('---TradingBotItem init:', trade, setup)
 
+		if (trade.slug === setup.currentMarket?.slug){
+			//---connect current market to trading-bot setup
+			if (trade.state === 'pending'){			//new market is pending, set to open
+				const time = Date.now() - trade.startTimestamp
+				if (time >= setup.startTimeLimit * 1000){
+					trade.up.enabled = false
+					trade.down.enabled = false
+					setState('cancelled')
+				}else{
+					setState('open')
+				}
+				saveTrade(trade, 1)
+			}
 		}else if (trade.state !== 'closed'){
-			delete setup._updateTrade
-			closeTrade(trade, setup.basePrice)
 			setState('closed')
 		}
 
@@ -104,7 +114,8 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		// console.log('---TradeItem onUpdate:', type, value)
 
 		if (type === 'expired'){		//market is expired
-			console.log('---TradeItem onUpdate expired:', value)
+			console.log('---TradeItem expired:', value)
+			setState('closed')
 			return
 
 		}else if (type === 'time'){
@@ -166,6 +177,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				if (order.side === 'SELL'){
 					side.state = 'selling'			//selling has started
 					/// cancel all buy orders
+					console.log('!!!!!!!!!!!!!!!!!!!!!!!! SELL order:', side.buyOrder?.orderId)
 					if (side.buyOrder?.orderId) cancelOrder(side.buyOrder.orderId)
 
 				}else if (order.side === 'BUY'){
@@ -197,12 +209,46 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				const sellSize = parseNumber(Math.floor(sizeMatched * 100) / 100)
 				console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled, sellSize)
 
+				if (!isFullyFilled) return
+
 				side.size += sizeMatched
 
-				if (isFullyFilled) checkTrade(side)
+				console.log('!!!!!!!!!NEW SIZE TO SELL:', side.size)
+
+				// Make a request here to get the whole position size (i.e., open orders/positions for this outcome)
+				// Assuming you have a function `getOpenOrders` that gets all open orders.
+				// (async () => {
+				// 	try {
+				// 		const openOrders = await getOpenOrders()
+				// 		// Filter for the current market and outcome, summing the open/buy positions
+				// 		const positionSize = openOrders
+				// 			.filter(o =>
+				// 				(o.market_slug === trade.market && o.side === 'BUY' && o.outcome_id === side.outcomeId)
+				// 			)
+				// 			.reduce((sum, o) => sum + (parseFloat(o.remaining_size || o.size || '0')), 0)
+				// 		console.log('Total position size for', side.outcome, ':', positionSize)
+				// 		// You may want to update state, e.g. side.size = positionSize, or otherwise process this info
+				// 	} catch (error) {
+				// 		console.error('Error fetching full position size:', error)
+				// 	}
+				// })()
+				
+				checkTrade(side)
 			}
 			if (side.state === 'selling'){
-///				
+				const sizeMatched = parseFloat(order.size_matched || '0')
+				const originalSize = parseFloat(order.original_size || '0')
+				const isFullyFilled = sizeMatched >= (originalSize * 0.99) && originalSize > 0	//99% of original size
+
+				const sellSize = parseNumber(Math.floor(sizeMatched * 100) / 100)
+				console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--isFullyFilled:', isFullyFilled, sellSize)
+
+				if (isFullyFilled){
+					beep(20, 1500)
+					console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--SELL fully filled:', side.sellOrder?.orderId)
+					side.state = 'completed'
+					setState('completed')
+				}
 			}
 		}
 	}
@@ -246,7 +292,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 						outcome		:side.outcome,
 						price		:0.41,
 						timestamp	:Date.now(),
-						size		:5,
+						size		:5 * setup.sizeFactor,
 					})		//-> active
 				}
 				break
@@ -258,7 +304,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 						outcome		:side.outcome,
 						price		:0.31,
 						timestamp	:Date.now(),
-						size		:5,
+						size		:5 * setup.sizeFactor,
 					})		//-> active
 					setOrder(setup, trade, {
 						type		:'SELL',
@@ -277,7 +323,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 						outcome		:side.outcome,
 						price		:0.21,
 						timestamp	:Date.now(),
-						size		:10,
+						size		:10 * setup.sizeFactor,
 					})		//-> active
 					setOrder(setup, trade, {
 						type		:'SELL',
@@ -296,7 +342,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 						outcome		:side.outcome,
 						price		:0.11,
 						timestamp	:Date.now(),
-						size		:20,
+						size		:20 * setup.sizeFactor,
 					})		//-> active
 					setOrder(setup, trade, {
 						type		:'SELL',
@@ -308,6 +354,23 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				}
 				break
 			case 4:
+				if (side.state === 'buying'){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.021,
+						timestamp	:Date.now(),
+						size		:50 * setup.sizeFactor,
+					})		//-> active
+					setOrder(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:0.19,
+						timestamp	:Date.now(),
+						size		:side.size,
+					})		//-> active
+				}
 				break;
 			case 5:
 				break;
@@ -335,16 +398,25 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			case 'pending':		//markets are not open yet
 				break
 			case 'open':		//markets are open
+				setup.trade = trade
 				setup._updateTrade = onUpdate
 				break
 			case 'closed':		//market is closed from TradeList market update
 				delete setup._updateTrade
-				closeTrade(trade, setup.basePrice)
+				if (setup.trade === trade) setup.trade = null
+				closeTrade(trade)
 				// _setTickerPrice(0)
 				break
 			case 'cancelled':		//market is cancelled from TradeList market update
 				delete setup._updateTrade
+				if (setup.trade === trade) setup.trade = null
 				// cancelTrade(trade)
+				break
+			case 'completed':		//market is completed
+				delete setup._updateTrade
+				if (setup.trade === trade) setup.trade = null
+				closeTrade(trade)
+				// _setTickerPrice(0)
 				break
 		}
 		trade.state = state
@@ -448,7 +520,7 @@ const saveTrade = async (trade: Trade, id: number = 1) => {
 // ---------------------------------------------------------------------------- openTrade
 // buy | sell
 const setOrder = async (setup: any, trade: Trade, action: TradeAction,
-	maxRetries: number = 5, retryDelay: number = 2000) => {
+	maxRetries: number = 10, retryDelay: number = 2000) => {
 	const side = action.outcome === 'up' ? trade.up : trade.down
 	if (!side.enabled) return trade
 

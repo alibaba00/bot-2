@@ -30,23 +30,15 @@ export const fixingClobData = async () => {
 		if (!isRunning) break
 
 		const market = await PolymarketApi.cache.getItem(key)
-		if (market?.chartData?.clob) {
-			const clob = market.chartData.clob
-			const up = clob.up
-			const down = clob.down
-			const limit = parseNumber((market.duration / 5) * 60 * 1000)	//3 minutes
-			const complete = up.length > 20 && down.length > 20
-				&& up[0][0] - market.startTimestamp < limit
-				&& market.endTimestamp - up[up.length-1][0] < limit
-				&& down[0][0] - market.startTimestamp < limit
-				&& market.endTimestamp - down[down.length-1][0] < limit
+		const clob = market?.chartData?.clob
+		if (!clob) continue
 
-			if (complete !== clob._complete){  //changed complete status
-				console.log('update complete:', key, complete, 'clob._complete:', clob._complete)
-				clob._complete = complete
-				await PolymarketApi.cacheMarket(market)
-				await PolymarketApi.saveMarket(market, true)
-			}
+		const complete = updateClobDataComplete(market)
+		if (complete !== clob._complete){  //changed complete status
+			console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
+			clob._complete = complete
+			await PolymarketApi.cacheMarket(market)
+			await PolymarketApi.saveMarket(market, true)
 		}
 	}
 
@@ -972,6 +964,8 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 
 		if (!useCache || !market.chartData?._complete) {
 			market.chartData = await getChartData(market, csvPath)
+
+			market.chartData.clob._complete = updateClobDataComplete(market)
 			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
 			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
 			updated = true
@@ -1018,13 +1012,6 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 			}
 		})
 	}
-	const clob = {up, down, _complete: false}
-	const limit = parseNumber((market.duration / 5) * 60 * 1000)	//3 minutes
-	clob._complete = up.length > 20 && down.length > 20
-		&& up[0][0] - market.startTimestamp < limit
-		&& market.endTimestamp - up[up.length-1][0] < limit
-		&& down[0][0] - market.startTimestamp < limit
-		&& market.endTimestamp - down[down.length-1][0] < limit
 
 	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
 	const firstTimestamp = market.startTimestamp + 5 * 60 * 1000	//5 minutes
@@ -1057,9 +1044,35 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 	}
 
 	return {
-		clob: clob,
+		clob: {up, down},
 		ticker: tickers
 	} as any
+}
+
+
+// ---------------------------------------------------------------------------- updateClobDataComplete
+const updateClobDataComplete = (market: Market) => {
+	const clob = market?.chartData?.clob
+	if (!clob) return
+
+	const up = clob.up
+	const down = clob.down
+	const limit = parseNumber((market.duration / 5) * 60 * 1000)	//20% limit
+
+	let complete = true
+	if (up.length < 20 || down.length < 20) complete = false
+	if (complete && up[0][0] - market.startTimestamp > limit) complete = false
+	if (complete && market.endTimestamp - up[up.length-1][0] > limit
+		&& (up[up.length-1][1] > 0.02 && up[up.length-1][1] < 0.98)) complete = false
+	if (complete && down[0][0] - market.startTimestamp > limit) complete = false
+	if (complete && market.endTimestamp - down[down.length-1][0] > limit
+		&& (down[down.length-1][1] > 0.02 && down[down.length-1][1] < 0.98)) complete = false
+	if (complete && up.find((e: any, i:number) => i > 0 && (e[1] > 0.02 && e[1] < 0.98)
+		&& e[0] - up[i-1][0] > limit)) complete = false
+	if (complete && down.find((e: any, i:number) => i > 0 && (e[1] > 0.02 && e[1] < 0.98)
+		&& e[0] - down[i-1][0] > limit)) complete = false
+
+	return complete
 }
 
 

@@ -82,7 +82,7 @@ export default function useUserChannel(
 					<div className="flex gap-6 text-sm ml-auto">
 						<div>
 							<span className="block text-xs text-muted-foreground uppercase tracking-wide">
-								Laufende Orders
+								Positions
 							</span>
 							<span className="font-semibold">
 								{orderStats.open + orderStats.pending}
@@ -90,7 +90,7 @@ export default function useUserChannel(
 						</div>
 						<div>
 							<span className="block text-xs text-muted-foreground uppercase tracking-wide">
-								Offene Orders
+								Open Orders
 							</span>
 							<span className="font-semibold">{orderStats.open}</span>
 						</div>

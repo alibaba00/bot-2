@@ -263,6 +263,18 @@ class _Strategy2 {
 			{buyLimit: 0.02, size: 500, sellLimit: 0.1},
 			{buyLimit: 0.01, size: 1500, sellLimit: 0.044},
 		],
+		// 'up': [
+		// 	{buyLimit: 0.3, size: 30, sellLimit: 0.5},
+		// 	{buyLimit: 0.1, size: 50, sellLimit: 0.3},
+		// 	{buyLimit: 0.02, size: 500, sellLimit: 0.1},
+		// 	{buyLimit: 0.01, size: 1500, sellLimit: 0.04},
+		// ],
+		// 'down': [
+		// 	{buyLimit: 0.3, size: 30, sellLimit: 0.5},
+		// 	{buyLimit: 0.1, size: 50, sellLimit: 0.3},
+		// 	{buyLimit: 0.02, size: 500, sellLimit: 0.1},
+		// 	{buyLimit: 0.01, size: 1500, sellLimit: 0.04},
+		// ],
 	}
 
 	constructor() {
@@ -362,12 +374,13 @@ class _Strategy2 {
 			},
 		}
 
-const nextUp = market.chartData.clob.up.find((e: any) => e[1] < (this.setup.up[0].buyLimit + this.setup.priceOffset))
-const nextDn = market.chartData.clob.down.find((e: any) => e[1] < (this.setup.down[0].buyLimit + this.setup.priceOffset))
-const side = nextUp && (!nextDn || (nextUp[0] < nextDn[0])) ? 'up' : nextDn ? 'down' : null
-if (!side) return
-
-stats.tradedMarkets++
+		// check which side is first
+		const nextUp = market.chartData.clob.up.find((e: any) =>
+			e[1] < (this.setup.up[0].buyLimit))
+		const nextDn = market.chartData.clob.down.find((e: any) =>
+			e[1] < (this.setup.down[0].buyLimit))
+		const side = nextUp && (!nextDn || (nextUp[0] < nextDn[0])) ? 'up' : nextDn ? 'down' : null
+		if (!side) return
 
 		if (side === 'up'){
 			const up = market.chartData.clob.up
@@ -375,9 +388,10 @@ stats.tradedMarkets++
 			const trades = this.setup.up
 			markets.push(_market)
 
-			if (up[0][1] < trades[0].buyLimit){
+			if (up[0][1] < trades[0].buyLimit){		//check if first price is within buy limit
 				stat.invalid++
 			}else{
+				stats.tradedMarkets++
 				stat.count++
 				this.checkTrades(trades, up, _market.up)
 				if (_market.up.isLost){
@@ -393,9 +407,10 @@ stats.tradedMarkets++
 			const trades = this.setup.down
 			markets.push(_market)
 
-			if (down[0][1] < trades[0].buyLimit){
+			if (down[0][1] < trades[0].buyLimit){	//check if first price is within buy limit
 				stat.invalid++
 			}else{
+				stats.tradedMarkets++
 				stat.count++
 				this.checkTrades(trades, down, _market.down)
 				if (_market.down.isLost){
@@ -415,11 +430,13 @@ stats.tradedMarkets++
 		let total: number = 0
 		let i = 0
 		let trade = trades[i]
+		let level = 0
 
 		while(trade){
 			next = side.find((e: any) => e[0] > next[0] && e[1] < (trade.buyLimit + this.setup.priceOffset))
 			if (close[0] && (!next || (close[0] < next[0]))){	//found close limit
 				market.trades.push({
+					level: level,
 					type: 'sell',
 					size: total,
 					price: close[2],
@@ -434,6 +451,7 @@ stats.tradedMarkets++
 			if (next){	//found buy limit
 				total += trade.size
 				market.trades.push({
+					level: level,
 					type: 'buy',
 					size: trade.size,
 					price: trade.buyLimit,
@@ -442,13 +460,15 @@ stats.tradedMarkets++
 					total,
 					pnl: 0,
 				})
-				close = side.find((e: any) => e[0] > next?.[0] + this.setup.timeLimit
-					&& e[1] > (trade.sellLimit - this.setup.priceOffset)) || [0, 0, 0]
+				close = side.find((e: any) => e[0] > (next?.[0] + this.setup.timeLimit)
+					&& e[1] > trade.sellLimit) || [0, 0, 0]
 				if (close[0]) close[2] = trade.sellLimit
+				level++
 				
 			}else{	//no next buy limit found
 				if (total > 0){
 					market.trades.push({
+						level: level,
 						type: 'sell',
 						size: total,
 						price: 0,
