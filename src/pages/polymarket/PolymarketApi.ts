@@ -333,7 +333,7 @@ class PolymarketApi {
 
 
 	getCryptoPriceVariant(market: Market): string {
-		if (market.marketType === 'updown-5m') return 'five'
+		if (market.marketType === 'updown-5m') return 'fiveminute'
 		if (market.marketType === 'updown-15m') return 'fifteen'
 		if (market.marketType === 'updown-1h') return 'hourly'
 		if (market.marketType === 'updown-4h') return 'four-hourly'

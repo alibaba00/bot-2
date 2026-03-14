@@ -24,7 +24,7 @@ export const fixingClobData = async () => {
 
 	const marketKeys = await PolymarketApi.cache.keys()
 	const updateKeys = marketKeys.filter((key: string) => key.includes('updown-5m'))
-	console.log('updateKeys:', updateKeys.length, 'from', marketKeys.length, 'markets ...')
+	console.log('updateKeys:', updateKeys.length, 'from', marketKeys.length, 'updown-5m markets ...')
 
 	for (const key of updateKeys) {		
 		if (!isRunning) break
@@ -33,12 +33,26 @@ export const fixingClobData = async () => {
 		const clob = market?.chartData?.clob
 		if (!clob) continue
 
-		const complete = updateClobDataComplete(market)
-		if (complete !== clob._complete){  //changed complete status
-			console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
-			clob._complete = complete
-			await PolymarketApi.cacheMarket(market)
-			await PolymarketApi.saveMarket(market, true)
+		//--- fixing clob data complete
+		// const complete = updateClobDataComplete(market)
+		// if (complete !== clob._complete){  //changed complete status
+		// 	console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
+		// 	clob._complete = complete
+		// 	await PolymarketApi.cacheMarket(market)
+		// 	await PolymarketApi.saveMarket(market, true)
+		// }
+
+		//--- fixing openPrice
+		const priceToBeat = market.marketData?.sourceData?.events?.[0]?.eventMetadata?.priceToBeat
+		if (priceToBeat && priceToBeat !== market.openPrice) {
+			// console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
+			delete market.openPrice
+			const updated = await updatePriceData(market)
+			if (updated) {
+				console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
+				await PolymarketApi.cacheMarket(market)
+				await PolymarketApi.saveMarket(market, true)
+			}
 		}
 	}
 
@@ -927,40 +941,7 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 	}
 
 	if (market.marketData?.closed){
-		if (!market.openPrice || !market.closePrice) {
-			const priceData = await PolymarketApi.getCryptoPrice(market)
-			console.log('update priceData:', market.slug, priceData)
-			if (priceData?.openPrice) {
-				market.openPrice = priceData.openPrice
-				market.openPriceTimestamp = priceData.timestamp || null
-				updated = true
-			}
-			if (priceData?.closePrice) {	// market is now closed!
-				market.closePrice = priceData.closePrice
-				market.closePriceTimestamp = priceData.timestamp || null
-				updated = true
-			}
-			await new Promise(resolve => setTimeout(resolve, 1000))
-		}
-	
-		if (market.openPrice && market.closePrice) {
-			if (!market.closed || market.state !== 'closed'){
-				console.log('update market closed:', market.slug)
-				market.closed = true
-				market.state = 'closed'
-				updated = true
-			}
-			const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
-			if (outcome !== market.outcome) {
-				console.log('update outcome:', outcome)
-				market.outcome = outcome
-				updated = true
-			}
-		}else if (market.closed){		//fixing wrong market state
-			market.closed = false
-			market.state = 'running'
-			updated = true
-		}
+		updated = updated || await updatePriceData(market)
 
 		if (!useCache || !market.chartData?._complete) {
 			market.chartData = await getChartData(market, csvPath)
@@ -978,6 +959,49 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 	}
 
 	return {market, updated}
+}
+
+
+// ---------------------------------------------------------------------------- updatePriceData
+const updatePriceData = async (market: Market) => {
+	let updated: boolean = false
+
+	if (!market.openPrice || !market.closePrice) {
+		const priceData = await PolymarketApi.getCryptoPrice(market)
+		console.log('update priceData:', market.slug, priceData)
+		if (priceData?.openPrice) {
+			market.openPrice = priceData.openPrice
+			market.openPriceTimestamp = priceData.timestamp || null
+			updated = true
+		}
+		if (priceData?.closePrice) {	// market is now closed!
+			market.closePrice = priceData.closePrice
+			market.closePriceTimestamp = priceData.timestamp || null
+			updated = true
+		}
+		await new Promise(resolve => setTimeout(resolve, 1000))
+	}
+
+	if (market.openPrice && market.closePrice) {
+		if (!market.closed || market.state !== 'closed'){
+			console.log('update market closed:', market.slug)
+			market.closed = true
+			market.state = 'closed'
+			updated = true
+		}
+		const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
+		if (outcome !== market.outcome) {
+			console.log('update outcome:', outcome)
+			market.outcome = outcome
+			updated = true
+		}
+	}else if (market.closed){		//fixing wrong market state
+		market.closed = false
+		market.state = 'running'
+		updated = true
+	}
+
+	return updated
 }
 
 
