@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Strategy1, Strategy2 } from "./Strategy";
+import { Strategy1, Strategy2, Strategy3 } from "./Strategy";
 
 
 // const Strategy1 = {
@@ -31,6 +31,7 @@ const handleStrategy2 = async () => {
 
 const handleStrategy3 = async () => {
 	console.log('handleStrategy3 ...')
+	Strategy3.run()
 }
 
 

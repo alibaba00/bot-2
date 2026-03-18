@@ -14,7 +14,7 @@ console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_log
 
 
 // ---------------------------------------------------------------------------- fixingClobData
-export const fixingClobData = async () => {
+export const fixingClobData = async (type: string = 'updown-5m') => {
 	if (isRunning){
 		console.log('fixingClobData canceled!')
 		isRunning = false
@@ -22,9 +22,10 @@ export const fixingClobData = async () => {
 	}
 	isRunning = true
 
+	console.log('\n--- fixingClobData running', type, '...')
 	const marketKeys = await PolymarketApi.cache.keys()
-	const updateKeys = marketKeys.filter((key: string) => key.includes('updown-5m'))
-	console.log('updateKeys:', updateKeys.length, 'from', marketKeys.length, 'updown-5m markets ...')
+	const updateKeys = marketKeys.filter((key: string) => key.includes(type))
+	console.log('updateKeys:', updateKeys.length, 'from', marketKeys.length, type, 'markets ...')
 
 	for (const key of updateKeys) {		
 		if (!isRunning) break
@@ -33,26 +34,32 @@ export const fixingClobData = async () => {
 		const clob = market?.chartData?.clob
 		if (!clob) continue
 
+		let updated = false
+
 		//--- fixing clob data complete
-		// const complete = updateClobDataComplete(market)
-		// if (complete !== clob._complete){  //changed complete status
-		// 	console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
-		// 	clob._complete = complete
-		// 	await PolymarketApi.cacheMarket(market)
-		// 	await PolymarketApi.saveMarket(market, true)
-		// }
+		const complete = updateClobDataComplete(market)
+		if (complete !== clob._complete){  //changed complete status
+			console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
+			clob._complete = complete
+			updated = true
+		}
 
 		//--- fixing openPrice
 		const priceToBeat = market.marketData?.sourceData?.events?.[0]?.eventMetadata?.priceToBeat
-		if (priceToBeat && priceToBeat !== market.openPrice) {
-			// console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
+		// if (priceToBeat && priceToBeat !== market.openPrice) {
+		if (priceToBeat && (priceToBeat / market.openPrice > 1.0001 || market.openPrice / priceToBeat > 1.0001)) {
+				// console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
 			delete market.openPrice
-			const updated = await updatePriceData(market)
-			if (updated) {
+			const upd = await updatePriceData(market)
+			if (upd) {
 				console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
-				await PolymarketApi.cacheMarket(market)
-				await PolymarketApi.saveMarket(market, true)
+				updated = true
 			}
+		}
+
+		if (updated) {
+			await PolymarketApi.cacheMarket(market)
+			await PolymarketApi.saveMarket(market, true)
 		}
 	}
 
@@ -968,6 +975,10 @@ const updatePriceData = async (market: Market) => {
 
 	if (!market.openPrice || !market.closePrice) {
 		const priceData = await PolymarketApi.getCryptoPrice(market)
+		if (!priceData){
+			await new Promise(resolve => setTimeout(resolve, 200))
+			return false
+		}
 		console.log('update priceData:', market.slug, priceData)
 		if (priceData?.openPrice) {
 			market.openPrice = priceData.openPrice
@@ -979,7 +990,7 @@ const updatePriceData = async (market: Market) => {
 			market.closePriceTimestamp = priceData.timestamp || null
 			updated = true
 		}
-		await new Promise(resolve => setTimeout(resolve, 1000))
+		await new Promise(resolve => setTimeout(resolve, 200))
 	}
 
 	if (market.openPrice && market.closePrice) {
@@ -1076,27 +1087,30 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 
 // ---------------------------------------------------------------------------- updateClobDataComplete
 const updateClobDataComplete = (market: Market) => {
+	if (!market.marketData?.closed) return false
+
 	const clob = market?.chartData?.clob
-	if (!clob) return
+	if (!clob) return false
 
 	const up = clob.up
 	const down = clob.down
 	const limit = parseNumber((market.duration / 5) * 60 * 1000)	//20% limit
 
-	let complete = true
-	if (up.length < 20 || down.length < 20) complete = false
-	if (complete && up[0][0] - market.startTimestamp > limit) complete = false
-	if (complete && market.endTimestamp - up[up.length-1][0] > limit
-		&& (up[up.length-1][1] > 0.02 && up[up.length-1][1] < 0.98)) complete = false
-	if (complete && down[0][0] - market.startTimestamp > limit) complete = false
-	if (complete && market.endTimestamp - down[down.length-1][0] > limit
-		&& (down[down.length-1][1] > 0.02 && down[down.length-1][1] < 0.98)) complete = false
-	if (complete && up.find((e: any, i:number) => i > 0 && (e[1] > 0.02 && e[1] < 0.98)
-		&& e[0] - up[i-1][0] > limit)) complete = false
-	if (complete && down.find((e: any, i:number) => i > 0 && (e[1] > 0.02 && e[1] < 0.98)
-		&& e[0] - down[i-1][0] > limit)) complete = false
+	if (up.length < 20 || down.length < 20) return false
+	if (market.outcome === 'up' && (up[up.length-1][1] <= 0.95 || down[down.length-1][1] >= 0.05)) return false
+	if (market.outcome === 'down' && (up[up.length-1][1] >= 0.05 || down[down.length-1][1] <= 0.95)) return false
+	if (up[0][0] - market.startTimestamp > limit) return false
+	if (market.endTimestamp - up[up.length-1][0] > limit
+		&& (up[up.length-1][1] > 0.02 && up[up.length-1][1] < 0.98)) return false
+	if (down[0][0] - market.startTimestamp > limit) return false
+	if (market.endTimestamp - down[down.length-1][0] > limit
+		&& (down[down.length-1][1] > 0.02 && down[down.length-1][1] < 0.98)) return false
+	if (up.find((e: any, i:number) => i > 0 && (e[1] > 0.02 && e[1] < 0.98)
+		&& e[0] - up[i-1][0] > limit)) return false
+	if (down.find((e: any, i:number) => i > 0 && (e[1] > 0.02 && e[1] < 0.98)
+		&& e[0] - down[i-1][0] > limit)) return false
 
-	return complete
+	return true
 }
 
 

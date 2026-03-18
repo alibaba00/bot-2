@@ -289,6 +289,8 @@ class PolymarketApi {
 		if (market.marketData?.closed) {
 			market.closed = true
 			const priceData = await this.getCryptoPrice(market)
+			if (!priceData) return null
+
 			console.log('priceData:', priceData)
 			if (priceData?.openPrice) {
 				market.openPrice = priceData.openPrice
