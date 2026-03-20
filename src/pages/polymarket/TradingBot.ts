@@ -24,7 +24,6 @@ export const createTrade = (market: MarketData, setup: any): Trade => {
 			enabled: setup.up.enabled,
 			tokenId: market.outcomes.find((outcome) => outcome.title === 'Up')?.id || '',
 			price: 0,
-			level: 0,
 			orderLimit: setup.up.orderLimit,
 			timeLimit: setup.up.timeLimit,
 			buyLimit: setup.up.buyLimit,
@@ -40,7 +39,6 @@ export const createTrade = (market: MarketData, setup: any): Trade => {
 			enabled: setup.down.enabled,
 			tokenId: market.outcomes.find((outcome) => outcome.title === 'Down')?.id || '',
 			price: 0,
-			level: 0,
 			orderLimit: setup.down.orderLimit,
 			timeLimit: setup.down.timeLimit,
 			buyLimit: setup.down.buyLimit,
@@ -58,5 +56,9 @@ export const createTrade = (market: MarketData, setup: any): Trade => {
 		isConnected: setup.isConnected,
 		logs: [],
 	}
+
+	setup.assets[trade.up.tokenId] = trade.up
+	setup.assets[trade.down.tokenId] = trade.down
+	
 	return trade
 }

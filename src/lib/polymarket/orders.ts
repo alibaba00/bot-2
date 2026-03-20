@@ -38,7 +38,26 @@ async function loadEnums() {
 /**
  * Place a new order
  */
+// To create a market order without specifying a price, you can omit the 'price' field or set it to null/undefined in your PlaceOrderParams,
+// depending on what the CLOB client expects for a market order.
+// Here is a version of the function header and comment specifying this behavior.
+
+/**
+ * Places an order; to create a market order, set price = 1 for buy or price = 0 for sell.
+ * Some CLOB APIs require a price value even for market orders.
+ * Example:
+ *  - Market buy:     placeOrder({ ..., side: 'buy', price: 1, ... })
+ *  - Market sell:    placeOrder({ ..., side: 'sell', price: 0, ... })
+ */
+// To create a market buy order *without specifying a price*, simply omit the 'price' field from params (do not set to 0 or 1).
+// For example: placeOrder({ marketId, quantity, side: 'buy', outcome, outcomeId })
 export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderResponse> {
+	// If you want to create a market order (no limit price), pass params.price = undefined or simply omit 'price' in the params.
+	// Example:
+	// placeOrder({ marketId, quantity, side, outcome, outcomeId }) // without price
+	// Or:
+	// placeOrder({ marketId, price: undefined, quantity, side, outcome, outcomeId })
+
 	try {
 		const client = await getOrInitializeClient()
 

@@ -18,7 +18,7 @@ export default function TradingBotList({market: market, setup}: {market: MarketD
 			if (!trades.find((trade) => trade.slug === market.slug)){
 				trades = [createTrade(market, setup), ...trades]
 			}
-			setTrades(trades)
+			setTrades(trades.slice(0, 4))		//limit to 5 trades
 			setIsLoaded(true)
 		})
 

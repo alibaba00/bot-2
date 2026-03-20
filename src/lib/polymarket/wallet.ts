@@ -316,6 +316,83 @@ export async function getWalletBalance(): Promise<WalletBalance> {
 	}
 }
 
+export type ActiveMarketPositionSizes = {
+	up: number
+	down: number
+}
+
+type PositionApiItem = {
+	asset?: string
+	asset_id?: string
+	token_id?: string
+	conditionId?: string
+	condition_id?: string
+	size?: string | number
+}
+
+/**
+ * Get current position sizes (shares) for both outcomes of the active market.
+ * Returns the total position size for up/down token ids.
+ */
+export async function getActiveMarketPositionSizes(params: {
+	conditionId: string
+	upTokenId: string
+	downTokenId: string
+	userAddress?: string
+}): Promise<ActiveMarketPositionSizes> {
+	try {
+		const config = await import('./config')
+		const configData = config.loadPolymarketConfig()
+
+		const user = params.userAddress || configData?.userId || configData?.publicKey
+
+		if (!user) {
+			throw new Error('No user address available (need userId or publicKey)')
+		}
+
+		// sizeThreshold=0 to include tiny residual positions
+		const positionsUrl =
+			`https://data-api.polymarket.com/positions` +
+			`?sizeThreshold=0&limit=500&sortBy=TOKENS&sortDirection=DESC&user=${encodeURIComponent(user)}`
+
+		const response = await fetch(positionsUrl)
+
+		if (!response.ok) {
+			const errorText = await response.text()
+			throw new Error(
+				`Positions API returned ${response.status}: ${response.statusText} - ${errorText}`
+			)
+		}
+
+		const positions: PositionApiItem[] = await response.json()
+
+		let up = 0
+		let down = 0
+
+		for (const pos of positions) {
+			const tokenId = String(pos.asset_id || pos.asset || pos.token_id || '')
+			const conditionId = String(pos.conditionId || pos.condition_id || '')
+			const size = Number(pos.size || 0)
+
+			if (!Number.isFinite(size) || size <= 0) continue
+
+			// If conditionId is present in response, ensure it matches active market
+			if (conditionId && conditionId !== params.conditionId) continue
+
+			if (tokenId === params.upTokenId) up += size
+			if (tokenId === params.downTokenId) down += size
+		}
+
+		return {
+			up: Math.max(0, up),
+			down: Math.max(0, down)
+		}
+	} catch (error) {
+		console.error('Error fetching active market position sizes:', error)
+		throw error
+	}
+}
+
 /**
  * Get account information
  */
@@ -334,7 +411,7 @@ export async function getAccountInfo(): Promise<AccountInfo> {
 			if (client.signer && (client.signer as any).address) {
 				address = (client.signer as any).address
 			}
-		} catch (e) {
+		} catch {
 			// Ignore if we can't get address from signer
 		}
 
@@ -392,7 +469,8 @@ export async function getCachedTransactions(limit = 100): Promise<Transaction[]>
 		const records = await db.transactions.orderBy('timestamp').reverse().limit(limit).toArray()
 
 		return records.map((r) => {
-			const { syncedAt, ...transaction } = r
+			const transaction = { ...r }
+			delete (transaction as Partial<TransactionRecord>).syncedAt
 			return transaction
 		})
 	} catch (error) {
@@ -415,3 +493,6 @@ async function cacheTransactions(transactions: Transaction[]): Promise<void> {
 		console.error('Error caching transactions:', error)
 	}
 }
+
+
+

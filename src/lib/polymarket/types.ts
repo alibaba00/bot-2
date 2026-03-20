@@ -118,7 +118,7 @@ export interface PlaceOrderParams {
 	outcome: string
 	outcomeId?: string
 	side: 'BUY' | 'SELL'
-	price: number
+	price?: number
 	quantity: number
 	expiresAt?: number // Unix timestamp
 }

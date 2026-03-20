@@ -13,6 +13,7 @@ import { fsPromises } from "./PolymarketApi";
 import { TRADE_STORE, type Trade } from "./TradingBotItem";
 import TradingBotList from "./TradingBotList";
 import useUserChannel from "./useUserChannel";
+import { getActiveMarketPositionSizes } from "@/lib/polymarket/wallet";
 
 
 // ============================================================================ TradingBotPage
@@ -24,22 +25,22 @@ export default function TradingBotPage() {
 
 	const { view } = useUserChannel({
 		onTradeUpdate: (trade: TradeMessage) => {
-			console.log('---Trade Update (UserChannel)', trade)
-			// log('Trade Update (UserChannel)', {
-			// 	id: trade.id,
-			// 	status: trade.status,
-			// 	side: trade.side,
-			// 	price: trade.price,
-			// 	size: trade.size,
-			// 	asset_id: trade.asset_id,
-			// 	market: trade.market,
-			// 	outcome: trade.outcome,
-			// 	timestamp: trade.timestamp,
-			// })
-			// setup.current._updateTrade?.('tradeUpdate', trade)
+			console.log('---Trade Update (UserChannel)', trade.type, trade.status, trade)
+			log('Trade Update (UserChannel)', {
+				id: trade.id,
+				status: trade.status,
+				side: trade.side,
+				price: trade.price,
+				size: trade.size,
+				asset_id: trade.asset_id,
+				market: trade.market,
+				outcome: trade.outcome,
+				timestamp: trade.timestamp,
+			})
+			setup.current._updateTrade?.('tradeUpdate', trade)
 		},
 		onOrderUpdate: (order: OrderMessage) => {
-			console.log('---Order Update (UserChannel)', order)
+			console.log('---Order Update (UserChannel)', order.type, order)
 			log('Order Update (UserChannel)', {
 				id: order.id,
 				type: order.type,
@@ -82,15 +83,15 @@ export default function TradingBotPage() {
 	const setup = useRef({
 		symbol: 'btc',
 
-		marketTime: 15,
-		marketType: 'updown-15m',
-		startTimeLimit: 180,	//seconds
-		endTimeLimit: 60,	//seconds
+		// marketTime: 15,
+		// marketType: 'updown-15m',
+		// startTimeLimit: 180,	//seconds
+		// endTimeLimit: 60,	//seconds
 
-		// marketTime: 5,
-		// marketType: 'updown-5m',
-		// startTimeLimit: 60,	//seconds
-		// endTimeLimit: 30,	//seconds
+		marketTime: 5,
+		marketType: 'updown-5m',
+		startTimeLimit: 60,	//seconds
+		endTimeLimit: 30,	//seconds
 
 		sizeFactor: 5.0,		//size factor to multiply the trade size
 
@@ -115,6 +116,7 @@ export default function TradingBotPage() {
 			}
 		},
 		trade: null as Trade | null,		//current trade
+		assets: {},		//assets lookup table
 		_updateTrade: null as ((type: string, value?: any) => void) | null,		//update trade state	
 		_log: log,
 	})
@@ -211,6 +213,26 @@ export default function TradingBotPage() {
 
 	// ---------------------------------------------------------------------------- onTest
 	const onTest = async () => {
+		// console.log('getOrder ...')
+		// const order = await getOrder('0xa393633d7a31786caeaed8ac09943be612ef28ae510839fcac2e75a6389893e7');
+		// console.log('order:', order)
+
+		// console.log('getOpenOrders ...')
+		// const orders = await getOpenOrders()
+		// console.log('orders:', orders)
+
+		if (!currentMarket) return
+		console.log('getActiveMarketPositionSizes ...')
+		const sizes = await getActiveMarketPositionSizes({
+			conditionId: currentMarket.conditionId || '',
+			upTokenId: currentMarket.outcomes.find((outcome: any) => outcome.title === 'Up')?.id || '',
+			downTokenId: currentMarket.outcomes.find((outcome: any) => outcome.title === 'Down')?.id || '',
+		});
+		console.log('sizes:', sizes)
+
+	
+	return
+
 		const root = 'A:/DATA/polymarket/trades/'
 		const trades = await TRADE_STORE.keys()
 		for (const slug of trades) {

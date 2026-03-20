@@ -1,9 +1,8 @@
-import { cancelOrder, getOrder, placeOrder } from "@/lib/polymarket/orders";
+import { cancelOrder, placeOrder } from "@/lib/polymarket/orders";
 import type { PlaceOrderParams, PlaceOrderResponse } from "@/lib/polymarket/types";
 import { beep } from "@/lib/utils";
 import localForage from "localforage";
 import { useEffect, useReducer, useState } from "react";
-import ClobMarketTicker from "./ClobMarketTicker";
 
 export const TRADE_STORE = localForage.createInstance({
 	name: 'polymarket',
@@ -15,7 +14,7 @@ type TradeState = 'pending' | 'open' | 'closed' | 'cancelled' | 'completed'
 type TradeAction = {
 	type: 'BUY' | 'SELL',
 	outcome: 'up' | 'down',
-	price: number | null,
+	price: number,
 	timestamp: number,
 	size: number,
 	orderData?: PlaceOrderParams,
@@ -27,6 +26,7 @@ type TradeSide = {
 	outcome: 'up' | 'down'
 	tokenId: string
 	price: number
+	level: number
 
 	orderLimit: number,		//order trigger to set buy limit
 	timeLimit: number,		//buy timeout in seconds before closing market
@@ -146,9 +146,6 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		}else if (type === 'orderUpdate'){
 			orderUpdate(value)
 
-		}else if (type === 'tradeUpdate'){
-			tradeUpdate(value)
-
 		}else if (type === 'connected'){
 			trade.isConnected = value
 			render()
@@ -158,17 +155,10 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		}
 	}
 
-	// ---------------------------------------------------------------------------- tradeUpdate
-	const tradeUpdate = (trade: any) => {
-		// console.log('---tradeUpdate:', trade.type, trade.status, trade)
-		///
-	}
 
 	// ---------------------------------------------------------------------------- orderUpdate
 	const orderUpdate = (order: any) => {
-		// console.log('---orderUpdate:', order.type, order.status, order)
-		return
-
+		console.log('---orderUpdate:', order.type, order)
 		const side = trade[order.outcome.toLowerCase() as 'up' | 'down']
 		if (!side) return
 
@@ -192,15 +182,21 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 				}else if (order.side === 'BUY'){
 					side.state = 'buying'			//buying has started
-					// if (side.outcome === 'up'){		//disable the other side
-					// 	trade.down.enabled = false
-					// 	trade.down.state = 'cancelled'
-					// 	if (trade.down.buyOrder?.orderId) cancelOrder(trade.down.buyOrder.orderId)
-					// }else if (side.outcome === 'down'){
-					// 	trade.up.enabled = false
-					// 	trade.up.state = 'cancelled'
-					// 	if (trade.up.buyOrder?.orderId) cancelOrder(trade.up.buyOrder.orderId)
-					// }
+					if (side.level === 0){
+						if (side.outcome === 'up'){		//disable the other side
+							trade.down.enabled = false
+							trade.down.state = 'cancelled'
+							if (trade.down.buyOrder?.orderId) cancelOrder(trade.down.buyOrder.orderId)
+						}else if (side.outcome === 'down'){
+							trade.up.enabled = false
+							trade.up.state = 'cancelled'
+							if (trade.up.buyOrder?.orderId) cancelOrder(trade.up.buyOrder.orderId)
+						}
+					}else{
+						// cancel last sell order
+						if (side.sellOrder?.orderId) cancelOrder(side.sellOrder.orderId)
+					}
+					side.level ++
 				}
 				saveTrade(trade, 5)
 				render()
@@ -217,7 +213,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 				side.size += sizeMatched
 
-				console.log('!!!!!!!!! NEW SIZE TO SELL:', side.size)
+				console.log('!!!!!!!!!NEW SIZE TO SELL:', side.size)
 
 				// Make a request here to get the whole position size (i.e., open orders/positions for this outcome)
 				// Assuming you have a function `getOpenOrders` that gets all open orders.
@@ -237,7 +233,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				// 	}
 				// })()
 				
-				// checkTrade(side)
+				checkTrade(side)
 			}
 			if (side.state === 'selling'){
 				const sizeMatched = parseFloat(order.size_matched || '0')
@@ -273,53 +269,127 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 		if (outcome === 'up'){
 			trade.up.price = price
-			if (trade.up.enabled) buyTrade(trade.up)
+			checkTrade(trade.up)
 		}else if (outcome === 'down'){
 			trade.down.price = price
-			if (trade.down.enabled) buyTrade(trade.down)
+			checkTrade(trade.down)
 		}
 		// console.log('--- setMarketPrice:', trade.up.price, trade.down.price)
 		render()
 	}
 
 
-	// ---------------------------------------------------------------------------- buyTrade
-	const buyTrade = (side: TradeSide) => {
+	// ---------------------------------------------------------------------------- checkTrade
+	const checkTrade = (side: TradeSide) => {
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && trade.isConnected && side.price >= 0.69){
-			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, side.price)
-			side.state = 'active'
-			setOrder(setup, trade, {
-				type		:'BUY',
-				outcome		:side.outcome,
-				// price		:0.6,
-				// price		:null,
-				price		:0.7,
-				timestamp	:Date.now(),
-				size		:6,		//2 * 0.6 = 1.2
-			})		//-> active
+		switch (side.level){
+			case 0:
+				if (side.state === 'pending' && trade.isConnected && side.price > 0.41){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.41,
+						timestamp	:Date.now(),
+						size		:5 * setup.sizeFactor,
+					})		//-> active
+				}
+				break
+			case 1:
+				if (side.state === 'buying'){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.31,
+						timestamp	:Date.now(),
+						size		:5 * setup.sizeFactor,
+					})		//-> active
+					setOrder(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:0.49,
+						timestamp	:Date.now(),
+						size		:side.size,
+					})		//-> active
+				}
+				break
+			case 2:
+				if (side.state === 'buying'){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.21,
+						timestamp	:Date.now(),
+						size		:10 * setup.sizeFactor,
+					})		//-> active
+					setOrder(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:0.39,
+						timestamp	:Date.now(),
+						size		:side.size,
+					})		//-> active
+				}
+				break
+			case 3:
+				if (side.state === 'buying'){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.11,
+						timestamp	:Date.now(),
+						size		:20 * setup.sizeFactor,
+					})		//-> active
+					setOrder(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:0.29,
+						timestamp	:Date.now(),
+						size		:side.size,
+					})		//-> active
+				}
+				break
+			case 4:
+				if (side.state === 'buying'){
+					side.state = 'active'
+					setOrder(setup, trade, {
+						type		:'BUY',
+						outcome		:side.outcome,
+						price		:0.021,
+						timestamp	:Date.now(),
+						size		:50 * setup.sizeFactor,
+					})		//-> active
+					setOrder(setup, trade, {
+						type		:'SELL',
+						outcome		:side.outcome,
+						price		:0.19,
+						timestamp	:Date.now(),
+						size		:side.size,
+					})		//-> active
+				}
+				break;
+			case 5:
+				break;
+			default:
+				return
 		}
+
+		// console.log(side.state)
+		// if (side.state == 'pending' && trade.isConnected && side.price <= side.orderLimit){
+		// 	setTrade(setup, trade, {
+		// 		type		:'BUY',
+		// 		outcome		:side.outcome,
+		// 		price		:side.buyLimit,
+		// 		timestamp	:Date.now(),
+		// 		size		:side.size,
+		// 	})		//-> active
+		// }
 	}
 
-
-	// ---------------------------------------------------------------------------- sellTrade
-	const sellTrade = (side: TradeSide) => {
-		if (!side.enabled) return false
-
-		if (side.state === 'pending' && trade.isConnected && side.price >= 0.6){
-			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--SELL Trade:', side.outcome, 0.95, side.size)
-			side.state = 'selling'
-			setOrder(setup, trade, {
-				type		:'SELL',
-				outcome		:side.outcome,
-				price		:0.95,
-				timestamp	:Date.now(),
-				size		:side.size,
-			})		//-> active
-		}
-	}
-	
 
 	// ---------------------------------------------------------------------------- setState
 	// from TradeList market update or createTrade
@@ -356,8 +426,6 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	
 	return (
 		<div className='relative'>
-			{/* <ClobMarketTicker market={market} /> */}
-
 			<div className={`grid grid-cols-5 gap-2 w-full p-2 bg-gray-100 dark:bg-gray-900 rounded-md text-xs border-l-4`}
 				style={{borderLeftColor: state === 'completed' ? 'green'
 					: state === 'closed' ? 'red'
@@ -375,51 +443,29 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				<div>{trade.isConnected ? 'connected' : 'disconnected'}</div>
 				<div>{(trade.marketTime / 60000).toFixed(2) + ' | ' + (trade.restTime / 60000).toFixed(2)}</div>
 				<div style={{
-					cursor: 'pointer',
 					color: trade.up.state === 'active'
 						? 'orange' // Tailwind blue-500 hex
 						: trade.up.state === 'completed' || trade.up.state === 'cancelled'
 							? '#3c3' // Tailwind green-400 hex
 							: '#999' // Tailwind gray-500 hex
-				}}
-				onClick={(e) => {
-					e.stopPropagation()
-					if (trade.up.buyOrder?.orderId) {	
-						getOrder(trade.up.buyOrder?.orderId)
-						.then(orderData => {
-							console.log('!!!!!!!!!!!!! orderData:', orderData)
-						})
-					}
-				}}
-				>
+				}}>
 					UP
 				</div>
 				<TradeState trade={trade} side='up' />
-				<div>{trade.up.state}</div>
+				<div>{trade.up.level}</div>
 				<div>{trade.up.price.toFixed(2)}</div>
 				<div>{time.toFixed(2)}</div>
 				<div style={{
-					cursor: 'pointer',
 					color: trade.down.state === 'active'
 						? 'orange' // Tailwind blue-500 hex
 						: trade.down.state === 'completed'
 							? '#3c3' // Tailwind green-400 hex
 							: '#999' // Tailwind gray-500 hex
-				}}
-				onClick={(e) => {
-					e.stopPropagation()
-					if (trade.down.sellOrder?.orderId) {	
-						getOrder(trade.down.sellOrder?.orderId)
-						.then(orderData => {
-							console.log('!!!!!!!!!!!!! orderData:', orderData)
-						})
-					}
-				}}
-				>
+				}}>
 					DOWN
 				</div>
 				<TradeState trade={trade} side='down' />
-					<div>{trade.down.state}</div>
+					<div>{trade.down.level}</div>
 				<div>{trade.down.price.toFixed(2)}</div>
 				<div></div>
 			</div>
@@ -474,7 +520,7 @@ const saveTrade = async (trade: Trade, id: number = 1) => {
 // ---------------------------------------------------------------------------- openTrade
 // buy | sell
 const setOrder = async (setup: any, trade: Trade, action: TradeAction,
-	maxRetries: number = 0, retryDelay: number = 2000) => {
+	maxRetries: number = 10, retryDelay: number = 2000) => {
 	const side = action.outcome === 'up' ? trade.up : trade.down
 	if (!side.enabled) return trade
 
@@ -482,16 +528,9 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 
 	// side.state = action.type === 'BUY' ? 'active' : action.type === 'SELL' ? 'completed' : 'cancelled'
 
-	const effectivePrice =
-		action.price != null
-			? action.price
-			: action.type === 'BUY'
-				? 1
-				: 0
-
 	const orderData: PlaceOrderParams = {
 		marketId: trade.conditionId,
-		price: effectivePrice,
+		price: action.price,
 		quantity: action.size,
 		side: action.type,
 		outcome: action.outcome === 'up' ? 'Up' : 'Down',
@@ -536,12 +575,16 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 			}
 
 			setup._log('< set order result:', order)
-
-			const orderData = await getOrder(order.orderId);
-			console.log('!!!!!!!!!!!!! orderData:', orderData)
 		}
 	}
+
+	saveTrade(trade, 8)
+
+	if (action.type === 'BUY') beep(20, 1000)
+	else if (action.type === 'SELL') beep(20, 500)
+	return trade
 }
+
 
 // ---------------------------------------------------------------------------- cancelTrade
 // TODO! try till cancelled
@@ -573,30 +616,6 @@ const closeTrade = (trade: Trade, newBasePrice: number = 0) => {
 
 
 /*
-place BUY oder:
-
--> Trade Update (UserChannel)
-status: MATCHED
-or
-status: LIVE (type: PLACEMENT)
-
--> order result:
-{
-    "orderId": "0x49a30330e41ea69e7ef06bc9b14227073b779f15c314a7586ba8d2649f0ecb3f",
-    "status": "PENDING",
-    "message": "Order placed successfully"
-}
-
--> Trade Update (UserChannel)
-price: 0.58
-status: MINED
-
--> Trade Update (UserChannel)
-status: CONFIRMED
-
-
-
-
 ---set trade order data:
 {
     "marketId": "0x183f74553e351c37c766cc67eba59b4c15134b42dfb89eb1faa390c8f754097f",

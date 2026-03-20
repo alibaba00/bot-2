@@ -643,8 +643,10 @@ class _Strategy3 {
 		fromDate: new Date('2026-03-15').getTime(),
 		openTimeLimit: 60 * 1000,		//1 minute timeout before buying
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
-		'up': {buyLimit: 0.60, size: 1, sellLimit: 0.95, closeLimit: 0.25},
-		'down': {buyLimit: 0.60, size: 1, sellLimit: 0.95, closeLimit: 0.25},
+		// 'up': {buyLimit: 0.60, size: 1, sellLimit: 0.95, closeLimit: 0.25},
+		// 'down': {buyLimit: 0.60, size: 1, sellLimit: 0.95, closeLimit: 0.25},
+		'up': {buyLimit: 0.70, size: 1, sellLimit: 0.95, closeLimit: 0.45},
+		'down': {buyLimit: 0.70, size: 1, sellLimit: 0.95, closeLimit: 0.45},
 	}
 
 	constructor() {
@@ -692,17 +694,35 @@ class _Strategy3 {
 		for (const market of data.usedMarkets) {
 			if (!market.chartData?.clob?._complete) continue
 
+			let buyUp: any = null
+			let buyDown: any = null
 			if (this.setup.up){
 				const up = market.chartData.clob.up
+				const limit = this.setup.up.buyLimit
 				if (up[0][1] > this.setup.up.buyLimit) continue
-				stats.tradedMarkets ++
-				this.checkData(up, 'up', stats.up, market)
+
+				buyUp = up.find((e: any) => e[1] > limit
+					&& e[0] <= market.endTimestamp - this.setup.openTimeLimit)
+
+				if (buyUp){
+					stats.tradedMarkets ++
+					stats.up.count ++
+					this.checkData(up, 'up', stats.up, market, buyUp[0])
+				}
 			}
 			if (this.setup.down){
 				const down = market.chartData.clob.down
-				if (down[0][1] > this.setup.down.buyLimit) continue
-				stats.tradedMarkets ++
-				this.checkData(down, 'down', stats.down, market)
+				const limit = this.setup.down.buyLimit
+				if (down[0][1] > limit) continue
+
+				buyDown = down.find((e: any) => e[1] > limit
+					&& e[0] <= market.endTimestamp - this.setup.openTimeLimit)
+
+				if (buyDown){
+					stats.tradedMarkets ++
+					stats.down.count ++
+					this.checkData(down, 'down', stats.down, market, buyDown[0])
+				}
 			}
 		}
 
@@ -717,13 +737,8 @@ class _Strategy3 {
 
 
 	//---------------------------------------------------------------------------- checkData
-	checkData(sideData: any[], side: string, stats: any, market: Market): void {	
+	checkData(sideData: any[], side: string, stats: any, market: Market, openTime: number): void {	
 		const limits = this.setup[side]
-		const hit = sideData.find((e: any) => e[1] > limits.buyLimit
-			&& e[0] <= market.endTimestamp - this.setup.openTimeLimit)
-		if (!hit) return
-
-		stats.count++
 
 // let pnl = 0
 // if (side === market.outcome){
@@ -736,16 +751,12 @@ class _Strategy3 {
 // stats.pnl = parseNumber(stats.pnl + pnl)
 // return;
 
-		const tradeTime = hit[0] + this.setup.closeTimeDelay
-		// const sell = sideData.find((e: any) => e[1] > limits.sellLimit && e[0] > tradeTime)
-		// const close = sideData.find((e: any) => e[1] < limits.closeLimit && e[0] > tradeTime)
+		const tradeTime = openTime + this.setup.closeTimeDelay
 		const close = sideData.find((e: any) => e[0] > tradeTime
 			&& (e[1] > limits.sellLimit || e[1] < limits.closeLimit))
-			// && (e[1] < 0.2))
-			// && (e[1] > limits.sellLimit))
 
 		if (!close){
-			console.log('no close found!', side === market.outcome)
+			console.log('no close found!', side, market)
 			return
 		}
 
@@ -753,18 +764,18 @@ class _Strategy3 {
 			index: this.trades.length,
 			market: market.slug,
 			outcome: market.outcome,
-			open: [hit[0], limits.buyLimit],
+			open: [openTime, limits.buyLimit],
 			close: null as [number, number] | null,
 			pnl: 0,
 		}
 
 		trade.close = close
 		if (close[1] > limits.sellLimit){
-			stats.won++
+			stats.won ++
 			trade.close = [close[0], limits.sellLimit]
 			trade.pnl = limits.sellLimit - limits.buyLimit
 		}else{
-			stats.lost++
+			stats.lost ++
 			// trade.close = [close[0], limits.closeLimit]
 			// trade.pnl = limits.closeLimit - limits.buyLimit
 			trade.close = close
