@@ -33,6 +33,7 @@ export interface MarketData {
 	id: string
 	question: string
 	slug: string
+	timeFrame: number
 	description?: string
 	image?: string
 	active: boolean
@@ -41,6 +42,8 @@ export interface MarketData {
 	liquidity: number
 	endDate?: string
 	startDate?: string
+	endTimestamp?: number
+	startTimestamp?: number
 	conditionId: string
 	marketMakerAddress?: string
 	outcomes: MarketOutcome[]

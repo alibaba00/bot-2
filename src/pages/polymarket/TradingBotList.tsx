@@ -18,7 +18,7 @@ export default function TradingBotList({market: market, setup}: {market: MarketD
 			if (!trades.find((trade) => trade.slug === market.slug)){
 				trades = [createTrade(market, setup), ...trades]
 			}
-			setTrades(trades.slice(0, 4))		//limit to 5 trades
+			setTrades(trades.slice(0, 2))		//limit to 3 trades
 			setIsLoaded(true)
 		})
 
@@ -53,10 +53,9 @@ export default function TradingBotList({market: market, setup}: {market: MarketD
 
 	return (
 		<div className='flex flex-col gap-2 w-full flex-1 overflow-y-auto'>
-			{trades.map((trade) => (
-				// <TradeItem key={trade.slug} trade={trade} setup={setup} />
-				<TradingBotItem key={trade.slug} trade={trade} setup={setup} />
-			))}
+			{trades.map((trade, index) => 
+				(index < 3) && <TradingBotItem key={trade.slug} trade={trade} setup={setup} />
+			)}
 		</div>
 	)
 }

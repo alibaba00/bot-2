@@ -14,6 +14,16 @@ import { TRADE_STORE, type Trade } from "./TradingBotItem";
 import TradingBotList from "./TradingBotList";
 import useUserChannel from "./useUserChannel";
 import { getActiveMarketPositionSizes } from "@/lib/polymarket/wallet";
+import { create } from 'zustand'
+
+
+export const useTradingBotStore = create<{
+	time: number
+	setTime: (time: number) => void
+}>((set) => ({
+	time: 0,
+	setTime: (time: number) => set({ time }),
+}))
 
 
 // ============================================================================ TradingBotPage
@@ -80,6 +90,34 @@ export default function TradingBotPage() {
 		addLog(action, data)
 	}
 
+
+	// ---------------------------------------------------------------------------- createMarket
+	const createMarket = async (t: number = 10000) => {
+		const sc = setup.current
+
+		const timestamp = getUTCTimestamp(Date.now() + t, sc.timeFrame, 0)	//find next marketTime-minute timestamp
+		sc.baseTimestamp = timestamp * 1000
+		sc.nextTimestamp = (timestamp + sc.timeFrame * 60) * 1000
+		const currentSlug = sc.symbol + '-' + sc.marketType + '-' + timestamp.toString()
+
+		// TODO:
+		// const market = await PolymarketApi.createMarket(sc.symbol, sc.marketType, currentSlug) as Market | null
+		const market = await fetchMarketBySlugFromGamma(currentSlug) as MarketData | null
+		if (!market) return
+
+		market.startTimestamp = sc.baseTimestamp
+		market.endTimestamp = sc.nextTimestamp
+		market.timeFrame = sc.timeFrame
+		sc.currentMarket = market
+
+		console.log('createMarket:', currentSlug, market)
+		setCurrentMarket(market)
+
+		return market
+	}
+
+
+	// ---------------------------------------------------------------------------- setup
 	const setup = useRef({
 		symbol: 'btc',
 
@@ -88,7 +126,7 @@ export default function TradingBotPage() {
 		// startTimeLimit: 180,	//seconds
 		// endTimeLimit: 60,	//seconds
 
-		marketTime: 5,
+		timeFrame: 5,
 		marketType: 'updown-5m',
 		startTimeLimit: 60,	//seconds
 		endTimeLimit: 30,	//seconds
@@ -119,6 +157,7 @@ export default function TradingBotPage() {
 		assets: {},		//assets lookup table
 		_updateTrade: null as ((type: string, value?: any) => void) | null,		//update trade state	
 		_log: log,
+		_createMarket: createMarket,
 	})
 
 
@@ -136,6 +175,18 @@ export default function TradingBotPage() {
 	}
 
 
+	// ---------------------------------------------------------------------------- onTime
+	const onTime = (restSeconds: number) => {
+		const sc = setup.current
+		// sc._updateTrade?.('time', restSeconds)
+		useTradingBotStore.setState({ time: restSeconds })
+
+		if (sc.currentMarket?.endTimestamp && Date.now() + 10000 > sc.currentMarket.endTimestamp) {
+			createMarket(20000)	//create next valid market from now + 20 seconds
+		}
+	}
+
+
 	// ---------------------------------------------------------------------------- onExpired
 	const onExpired = async () => {
 		const sc = setup.current
@@ -144,33 +195,7 @@ export default function TradingBotPage() {
 		sc._updateTrade?.('expired')
 
 		beep(10, 500)
-		createMarket()
-	}
-
-
-	// ---------------------------------------------------------------------------- createMarket
-	const createMarket = async () => {
-		const sc = setup.current
-
-		const timestamp = getUTCTimestamp(Date.now() + 10000, sc.marketTime, 0)	//find next marketTime-minute timestamp
-		sc.baseTimestamp = timestamp * 1000
-		sc.nextTimestamp = (timestamp + sc.marketTime * 60) * 1000
-		const currentSlug = sc.symbol + '-' + sc.marketType + '-' + timestamp.toString()
-
-		// TODO:
-		// const market = await PolymarketApi.createMarket(sc.symbol, sc.marketType, currentSlug) as Market | null
-		const market = await fetchMarketBySlugFromGamma(currentSlug) as MarketData | null
-		sc.currentMarket = market
-		setCurrentMarket(market)
-
-		return market
-	}
-
-
-	// ---------------------------------------------------------------------------- onTime
-	const onTime = (restSeconds: number) => {
-		const sc = setup.current
-		sc._updateTrade?.('time', restSeconds)
+		// createMarket()
 	}
 
 
@@ -186,29 +211,29 @@ export default function TradingBotPage() {
 		"transaction_hash": "0x4b5b541f3a37ce3499a262a947e8b6c52fafb8818241242b0362a47e165f47ed"
 	}
 	*/
-	const onMarketPriceUpdate = (lastTrade: LastTrade) => {
-		const sc = setup.current
+	// const onMarketPriceUpdate = (lastTrade: LastTrade) => {
+	// 	const sc = setup.current
 
-		const trade = sc.trade
-		if (!trade) return
+	// 	const trade = sc.trade
+	// 	if (!trade) return
 
-		trade.marketTime = lastTrade.timestamp - sc.baseTimestamp
-		trade.restTime = sc.nextTimestamp - lastTrade.timestamp
+	// 	trade.marketTime = lastTrade.timestamp - sc.baseTimestamp
+	// 	trade.restTime = sc.nextTimestamp - lastTrade.timestamp
 
-		const values = sc.tickerValues.clob[lastTrade.outcome_title]
-		if (values.price === lastTrade.price) return
+	// 	const values = sc.tickerValues.clob[lastTrade.outcome_title]
+	// 	if (values.price === lastTrade.price) return
 
-		values.price = lastTrade.price
-		values.timestamp = lastTrade.timestamp
+	// 	values.price = lastTrade.price
+	// 	values.timestamp = lastTrade.timestamp
 
-		// trade._setMarketPrice?.(lastTrade.timestamp, lastTrade.outcome_title as 'up' | 'down', lastTrade.price)
-		// trade[lastTrade.outcome_title].price = lastTrade.price
-		sc._updateTrade?.('marketPrice', {
-			timestamp: lastTrade.timestamp,
-			outcome: lastTrade.outcome_title as 'up' | 'down',
-			price: lastTrade.price
-		})
-	}
+	// 	// trade._setMarketPrice?.(lastTrade.timestamp, lastTrade.outcome_title as 'up' | 'down', lastTrade.price)
+	// 	// trade[lastTrade.outcome_title].price = lastTrade.price
+	// 	sc._updateTrade?.('marketPrice', {
+	// 		timestamp: lastTrade.timestamp,
+	// 		outcome: lastTrade.outcome_title as 'up' | 'down',
+	// 		price: lastTrade.price
+	// 	})
+	// }
 
 
 	// ---------------------------------------------------------------------------- onTest
@@ -257,7 +282,7 @@ export default function TradingBotPage() {
 			<div className="flex flex-row justify-between items-center w-full">
 				<h1 onClick={() => console.log('setup:', setup.current)}>Trading Bot</h1>
 
-				<MarketTimer minutes={setup.current.marketTime} onExpired={onExpired} onTime={onTime} />
+				{/* <MarketTimer minutes={setup.current.marketTime} onExpired={onExpired} onTime={onTime} /> */}
 
 				<div className="flex flex-row items-center gap-2 gap-3">
 					<Button variant="outline" size="icon" onClick={() => {
@@ -283,7 +308,7 @@ export default function TradingBotPage() {
 			{currentMarket && (
 				<>
 				<div className='flex flex-row gap-2 flex-wrap w-full'>
-					<ClobMarketTicker market={currentMarket} onUpdate={onMarketPriceUpdate} />
+					{/* <ClobMarketTicker market={currentMarket} onUpdate={onMarketPriceUpdate} /> */}
 					{view()}
 				</div>
 				{enabled && (

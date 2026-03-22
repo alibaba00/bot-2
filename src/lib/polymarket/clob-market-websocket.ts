@@ -59,7 +59,7 @@ export interface CLOBMarketCallbacks {
 }
 
 const CLOB_MARKET_WS_URL = 'wss://ws-subscriptions-clob.polymarket.com/ws/market'
-const PING_INTERVAL = 10000 // 10 seconds
+const PING_INTERVAL = 10000 	// 10 seconds
 const RECONNECT_DELAY_MS = 5000 // wie Coinbase: nach Error/Close ~5s neu verbinden
 
 export class CLOBMarketWebSocket {

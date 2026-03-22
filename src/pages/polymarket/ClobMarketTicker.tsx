@@ -1,9 +1,9 @@
-import type { MarketData } from "@/lib/polymarket/types copy";
+import type { MarketData } from "@/lib/polymarket/types";
 import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
 
-	type PriceEntry = { price: number; timestamp: number };
+type PriceEntry = { price: number; timestamp: number };
 
 const TICKER_FLUSH_MS = 150;
 
@@ -17,8 +17,8 @@ export type LastTrade = {
 	transaction_hash?: string;
 }
 
-export default function ClobMarketTicker({ market, onUpdate }:
-	{ market: MarketData, onUpdate?: (lastTrade: LastTrade) => void }) {
+export default function ClobMarketTicker({ market, onUpdate, autoConnect, onTime }:
+	{ market: MarketData, onUpdate?: (lastTrade: LastTrade) => void, autoConnect?: boolean, onTime?: (restSeconds: number) => void }) {
 	const [marketPrices, setMarketPrices] = useState<Record<string, PriceEntry>>({});
 	const [lastTradePrices, setLastTradePrices] = useState<
 		Record<
@@ -28,7 +28,17 @@ export default function ClobMarketTicker({ market, onUpdate }:
 	>({});
 	const [assetIds, setAssetIds] = useState<string[]>([]);
 	const [error, setError] = useState<string | null>(null);
-	const autoReconnectRef = useRef(false);
+const autoReconnectRef = useRef<boolean | undefined>(autoConnect);
+
+
+useEffect(() => {
+	autoReconnectRef.current = autoConnect;
+	if (autoConnect && status === "disconnected") {
+		connect();
+	}else if (!autoConnect && status === "connected") {
+		disconnect();
+	}
+}, [autoConnect]);
 
 	const assetIdsRef = useRef<string[]>([]);
 	useEffect(() => {
@@ -166,7 +176,8 @@ export default function ClobMarketTicker({ market, onUpdate }:
 		if (!market || normalizedOutcomes.length === 0) return;
 
 		// console.log('---ClobMarketTicker: market changed!', market.slug, normalizedOutcomes)
-		autoReconnectRef.current = status === "connected" || status === "connecting";
+		// Do not overwrite autoReconnectRef here: on first mount status is "disconnected", which
+		// would clear the default true and block the assetIds effect from calling connect().
 		disconnect();
 
 		const ids =
@@ -187,6 +198,7 @@ export default function ClobMarketTicker({ market, onUpdate }:
 		setMarketPrices(initialPrices);
 	}, [market]);
 
+
 	useEffect(() => {
 		if (assetIds.length === 0) return;
 		updateAssetIds(assetIds);
@@ -195,7 +207,16 @@ export default function ClobMarketTicker({ market, onUpdate }:
 		}
 	}, [assetIds, connect, status, updateAssetIds]);
 
+
 	useEffect(() => {
+		// start reconnect if market has not started yet
+		if (!autoReconnectRef.current
+			&& market?.endTimestamp
+			&& Date.now() < market.endTimestamp - market.timeFrame * 60000) {
+			autoReconnectRef.current = true;
+			connect();
+		}
+
 		return () => {
 			if (flushScheduledRef.current !== null) {
 				clearTimeout(flushScheduledRef.current);
@@ -203,6 +224,7 @@ export default function ClobMarketTicker({ market, onUpdate }:
 			}
 		};
 	}, []);
+
 
 	const formattedOutcomes = useMemo(() => {
 		if (!market || normalizedOutcomes.length === 0) return [];
@@ -229,10 +251,28 @@ export default function ClobMarketTicker({ market, onUpdate }:
 		);
 	}
 
-	// https://polymarket.com/event/btc-updown-15m-1771711200
 
+	// ---------------------------------------------------------------------------- onTime
+	const onMarketTime = (restSeconds: number) => {
+		// console.log('--- ClobMarketTicker: onTime:', restSeconds)
+		onTime?.(restSeconds)
+
+		// if (restSeconds >= market.timeFrame * 60 && !autoReconnectRef.current) {
+		// 	autoReconnectRef.current = true;
+		// 	connect();
+		// }
+
+		if (restSeconds <= -10 && autoReconnectRef.current) {
+			autoReconnectRef.current = false;
+			disconnect();
+		}
+	}
+
+
+	// https://polymarket.com/event/btc-updown-15m-1771711200
 	return (
-		<div className="flex flex-col gap-3 rounded-md border border-black/10 dark:border-white/10 p-3 flex-1 min-w-80">
+		// <div className="flex flex-col gap-3 rounded-md border border-black/10 dark:border-white/10 p-3 flex-1 min-w-80">
+		<div className="flex flex-col gap-3 flex-1 min-w-80">
 			<div className="flex flex-row justify-between gap-1 w-full items-start">
 				<div className="flex flex-col gap-1">
 					<div className="text-sm font-medium">{market.question}</div>
@@ -245,6 +285,7 @@ export default function ClobMarketTicker({ market, onUpdate }:
 					</div>
 				</div>
 				<div className="flex items-center gap-3">
+					<MarketTimer market={market} onTime={onMarketTime} />
 					<div
 						className={`text-xs ${
 							status === "connected" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
@@ -296,4 +337,50 @@ export default function ClobMarketTicker({ market, onUpdate }:
 			</div>
 		</div>
 	);
+}
+
+
+// ---------------------------------------------------------------------------- MarketTimer (for TradingBotItem)
+const MarketTimer = ({market, onTime}: {market: MarketData | undefined, onTime?: (restSeconds: number) => void}) => {
+	const timeout = useRef<NodeJS.Timeout | undefined>(undefined)
+	const [time, setTime] = useState<string>('00:00')
+
+
+	useEffect(() => {
+		console.log('--- MarketTimer:', market)
+
+		clearTimeout(timeout.current)
+		setTimeString()
+
+		return () => clearTimeout(timeout.current)
+	}, [market])
+
+
+	const setTimeString = () => {
+		if (!market?.endTimestamp) return setTime('00:00')
+
+		const now = Date.now()
+		const diff = Math.round((market.endTimestamp - now) / 1000)	//diff in seconds
+		const hours = Math.floor(diff / 3600)
+		const minutes = Math.floor((diff % 3600) / 60)
+		const seconds = diff % 60
+		const timeString = diff < 0 ?
+			'-' + Math.abs(minutes+1).toString().padStart(2, '0') + ':' + Math.abs(seconds).toString().padStart(2, '0')
+			: minutes < 60 ?
+			`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+			: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+
+		setTime(timeString)
+		onTime?.(diff)
+
+		let msec = 1000 - (now % 1000);
+		if (msec < 100) msec += 1000;
+		timeout.current = setTimeout(() => setTimeString(), msec)
+	}
+
+	if (!market) return null
+
+	return (
+		<div className="text-sm font-bold text-yellow-500 border border-yellow-500/30 rounded-sm px-2 py-0.5 bg-yellow-500/10">{time}</div>
+	)
 }
