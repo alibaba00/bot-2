@@ -417,7 +417,8 @@ class _Strategy2 {
 
 		console.log('   calc', stats.usedMarkets, 'markets ...');
 
-		for (const market of data.usedMarkets) {
+		for (const key of data.usedMarkets) {
+			const market = await PolymarketApi.cache.getItem(key)
 			await this.checkData(market as Market, stats, markets)
 		}
 
@@ -569,11 +570,12 @@ export const Strategy2 = new _Strategy2()
 
 
 //---------------------------------------------------------------------------- loadMarketData
-export const loadMarketData = async (symbol: string, marketType: string, fromDate: number): Promise<any> => {
-	const marketKeys = await PolymarketApi.getAllKeys(marketType, fromDate)
+export const loadMarketData = async (symbol: string, marketType: string, fromDate: number, toDate: number = 0): Promise<any> => {
+	const strategy = symbol + '-' + marketType
+	const marketKeys = await PolymarketApi.getAllKeys(strategy, fromDate, toDate)
 	console.log('   total keys:', marketKeys.length)
 
-	let data = await STORE.getItem('strategie-' + marketType) as any
+	let data = await STORE.getItem('strategie-' + strategy) as any
 	if (!data){
 		data = {
 			symbol: symbol,
@@ -585,7 +587,7 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 			valid: 0,
 			invalid: 0,
 		}
-		await STORE.setItem('strategie-' + marketType, data)
+		await STORE.setItem('strategie-' + strategy, data)
 	}
 
 	data.new = 0
@@ -595,6 +597,11 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 
 	for (const key of marketKeys) {
 		if (data.allMarkets[key] === 'invalid') continue
+
+		if (data.allMarkets[key] === 'valid'){
+			data.usedMarkets.push(key)
+			continue
+		}
 
 		const market = await PolymarketApi.cache.getItem(key)
 		if (!market?.closed || !market.chartData?._complete) continue //market not closed or chart data not complete
@@ -614,13 +621,13 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 		if (data.allMarkets[key] === 'invalid') continue
 
 		if (data.allMarkets[key] === 'valid'){
-			data.usedMarkets.push(market)
+			data.usedMarkets.push(key)
 		}
 	}
 
 	if (data.new > 0){
 		console.log('   new markets found:', data.new)
-		await STORE.setItem('strategie-' + marketType, data)
+		await STORE.setItem('strategie-' + strategy, data)
 	}
 	return data
 }
@@ -638,151 +645,213 @@ class _Strategy3 {
 	trades: any[] = []
 
 	setup: any = {
-		symbol : 'btc',
-		marketType: 'btc-updown-5m',
-		fromDate: new Date('2026-03-15').getTime(),
+		symbol : 'xrp',
+		marketType: 'updown-5m',
+		fromDate: new Date('2026-03-25 12:00:00').getTime(),
+		toDate: new Date('2026-03-25 23:59:59').getTime(),
+		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout before buying
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
-		// 'up': {buyLimit: 0.60, size: 1, sellLimit: 0.95, closeLimit: 0.25},
-		// 'down': {buyLimit: 0.60, size: 1, sellLimit: 0.95, closeLimit: 0.25},
-		'up': {buyLimit: 0.70, size: 1, sellLimit: 0.95, closeLimit: 0.45},
-		'down': {buyLimit: 0.70, size: 1, sellLimit: 0.95, closeLimit: 0.45},
+		'up': {buyLimit: 0.6, size: 1, sellLimit: 0.97, closeLimit: 0.03},
+		'down': {buyLimit: 0.6, size: 1, sellLimit: 0.97, closeLimit: 0.03},
 	}
 
 	constructor() {
 		console.log('Strategy 3 constructor...')
 	}
 
+
+	//---------------------------------------------------------------------------- run
 	async run(): Promise<void> {
 		const s = this.setup
 		console.log('Strategy 3 running', s.symbol, s.marketType, '...')
-		// const keys = await PolymarketApi.cache.keys()
-		// const keys = await PolymarketApi.getAllKeys(symbol + '-updown-15m')
-
-		const data = await loadMarketData(s.symbol, s.marketType, s.fromDate)
-
-		this.trades = []
+		const data = await loadMarketData(s.symbol, s.marketType, s.fromDate, s.toDate)
+		console.log('   calc', data.usedMarkets.length, 'markets ...');
 
 		const stats = {
-			symbol: s.symbol,
-			marketType: s.marketType,
-			fromDate: s.fromDate,
-			fromDateString: moment.utc(s.fromDate).format('YYYY-MM-DD HH:mm:ss'),
-			toDate: new Date().getTime(),
-			toDateString: moment.utc(new Date()).format('YYYY-MM-DD HH:mm:ss'),
-			totalMarkets: data.total,
 			usedMarkets: data.usedMarkets.length,
 			tradedMarkets: 0,				//total traded markets
-			up: {
-				count: 0,
-				won: 0,
-				lost: 0,
-				pnl: 0,
-			},
-			down: {
-				count: 0,
-				won: 0,
-				lost: 0,
-				pnl: 0,
-			},
+			up: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.up.buyLimit},
+			// down: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.down.buyLimit},
 			winrate: 0,
 			pnl: 0,
 		}
 
-		console.log('   calc', stats.usedMarkets, 'markets ...');
-
-		for (const market of data.usedMarkets) {
-			if (!market.chartData?.clob?._complete) continue
-
-			let buyUp: any = null
-			let buyDown: any = null
-			if (this.setup.up){
-				const up = market.chartData.clob.up
-				const limit = this.setup.up.buyLimit
-				if (up[0][1] > this.setup.up.buyLimit) continue
-
-				buyUp = up.find((e: any) => e[1] > limit
-					&& e[0] <= market.endTimestamp - this.setup.openTimeLimit)
-
-				if (buyUp){
-					stats.tradedMarkets ++
-					stats.up.count ++
-					this.checkData(up, 'up', stats.up, market, buyUp[0])
-				}
-			}
-			if (this.setup.down){
-				const down = market.chartData.clob.down
-				const limit = this.setup.down.buyLimit
-				if (down[0][1] > limit) continue
-
-				buyDown = down.find((e: any) => e[1] > limit
-					&& e[0] <= market.endTimestamp - this.setup.openTimeLimit)
-
-				if (buyDown){
-					stats.tradedMarkets ++
-					stats.down.count ++
-					this.checkData(down, 'down', stats.down, market, buyDown[0])
-				}
-			}
+		for (const key of data.usedMarkets) {
+			const market = await PolymarketApi.cache.getItem(key)
+// console.log(market.slug)
+			this.parseMarket(market, stats)
 		}
 
-		stats.pnl = stats.up.pnl + stats.down.pnl
 		stats.winrate = parseNumber(1 + (stats.pnl / stats.tradedMarkets))
 
-		console.log('setup:', this.setup)
+		console.table(this.setup)
 		console.table(stats)
-		console.log('trades:', this.trades)
 		console.log('complete!')
 	}
 
 
+	//---------------------------------------------------------------------------- run_multi
+	async run_multi(): Promise<void> {
+		const s = this.setup
+		console.log('Strategy 3 running', s.symbol, s.marketType, '...')
+		const data = await loadMarketData(s.symbol, s.marketType, s.fromDate, s.toDate)
+		console.log('   calc', data.usedMarkets.length, 'markets ...');
+
+		const sumUp: any[] = []
+		const sumDown: any[] = []
+
+		for (let i = 0.1; i <= 0.9; i += 0.01) {
+			i = parseFloat(i.toFixed(12))
+			// console.log('calc buyLimit:', i, '...')
+			const statsUp = {
+				usedMarkets: data.usedMarkets.length,
+				tradedMarkets: 0,				//total traded markets
+				up: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: i},
+				winrate: 0,
+			}
+			const statsDown = {
+				usedMarkets: data.usedMarkets.length,
+				tradedMarkets: 0,				//total traded markets
+				down: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: i},
+				winrate: 0,
+			}
+
+			for (const key of data.usedMarkets) {
+				const market = await PolymarketApi.cache.getItem(key)
+				if (!market.chartData?.clob?._complete) continue
+
+				this.parseMarket(market, statsUp)
+				this.parseMarket(market, statsDown)
+			}
+
+			statsUp.winrate = parseNumber(1 + (statsUp.up.pnl / statsUp.tradedMarkets))
+			statsDown.winrate = parseNumber(1 + (statsDown.down.pnl / statsDown.tradedMarkets))
+
+			sumUp.push({
+				buyLimit: i,
+				pnl: parseFloat(statsUp.up.pnl.toFixed(12)),
+				winrate: statsUp.winrate,
+				count: statsUp.tradedMarkets,
+				won: statsUp.up.won,
+				lost: statsUp.up.lost,
+			})
+			sumDown.push({
+				buyLimit: i,
+				pnl: parseFloat(statsDown.down.pnl.toFixed(12)),
+				winrate: statsDown.winrate,
+				count: statsDown.tradedMarkets,
+				won: statsDown.down.won,
+				lost: statsDown.down.lost,
+			})
+		}
+
+		console.table(this.setup)
+
+		sumUp.sort((a, b) => b.pnl - a.pnl)
+		sumDown.sort((a, b) => b.pnl - a.pnl)
+		// console.log('sumUp:', sumUp.length)
+		console.table(sumUp.slice(0, 20))
+		// console.log('sumDown:', sumDown.length)
+		console.table(sumDown.slice(0, 20))
+
+		console.log('complete!')
+	}
+
+
+	//---------------------------------------------------------------------------- parseMarket
+	parseMarket(market: Market, stats: any): void {
+		let buyUp: any = null
+		let buyDown: any = null
+		const up = market.chartData.clob.up
+		const down = market.chartData.clob.down
+		const endTimestamp = market.endTimestamp
+		const openTimeLimit = this.setup.openTimeLimit
+
+		if (stats.up){
+			const buyLimit = stats.up.buyLimit
+			if (buyLimit >= 0.5){		//buy limit is greater than 0.5
+				if (up[0][1] > buyLimit) return
+				buyUp = up.find((e: any) => e[1] > buyLimit
+					&& e[0] <= endTimestamp - openTimeLimit)
+			}else{
+				if (up[0][1] < buyLimit) return
+				buyUp = up.find((e: any) => e[1] < buyLimit
+					&& e[0] <= endTimestamp - openTimeLimit)
+			}
+		}
+		if (stats.down){
+			const buyLimit = stats.down.buyLimit
+			if (buyLimit >= 0.5){		//buy limit is greater than 0.5
+				if (down[0][1] > buyLimit) return
+				buyDown = down.find((e: any) => e[1] > buyLimit
+					&& e[0] <= endTimestamp - openTimeLimit)
+			}else{
+				if (down[0][1] < buyLimit) return
+				buyDown = down.find((e: any) => e[1] < buyLimit
+					&& e[0] <= endTimestamp - openTimeLimit)
+			}
+		}
+
+		if (!buyUp && !buyDown) return
+		if (buyUp || buyDown){
+			stats.tradedMarkets ++
+		}
+
+		if (buyUp && (this.setup.mode === 'and' || !buyDown || buyDown[0] > buyUp[0])){
+			this.closeTrade('up', stats, market, buyUp[0])
+		}
+		if (buyDown && (this.setup.mode === 'and' || !buyUp || buyUp[0] > buyDown[0])){
+			this.closeTrade('down', stats, market, buyDown[0])
+		}
+	}
+
+
 	//---------------------------------------------------------------------------- checkData
-	checkData(sideData: any[], side: string, stats: any, market: Market, openTime: number): void {	
+	closeTrade(side: string, stats: any, market: Market, openTime: number): void {
+		const stat = stats[side]
+		stat.count ++
 		const limits = this.setup[side]
+		const data = market.chartData.clob[side]
 
-// let pnl = 0
-// if (side === market.outcome){
-// 	pnl = 1 - limits.buyLimit
-// 	stats.won++
-// }else{
-// 	pnl = -limits.buyLimit
-// 	stats.lost++
-// }
-// stats.pnl = parseNumber(stats.pnl + pnl)
-// return;
+		const sell = data.find((e: any) => e[0] > openTime + this.setup.closeTimeDelay && e[1] > limits.sellLimit)
+		const close = data.find((e: any) => e[0] > openTime + this.setup.closeTimeDelay && e[1] < limits.closeLimit)
 
-		const tradeTime = openTime + this.setup.closeTimeDelay
-		const close = sideData.find((e: any) => e[0] > tradeTime
-			&& (e[1] > limits.sellLimit || e[1] < limits.closeLimit))
-
-		if (!close){
-			console.log('no close found!', side, market)
-			return
+		let pnl = 0
+		if (sell && close){
+			if (sell[0] < close[0]){
+				stat.won ++
+				pnl = limits.sellLimit - stat.buyLimit
+			}else{
+				stat.lost ++
+				pnl = limits.closeLimit - stat.buyLimit
+			}
+		}else if (sell){
+			stat.won ++
+			pnl = limits.sellLimit - stat.buyLimit
+		}else if (close){
+			stat.lost ++
+			pnl = limits.closeLimit - stat.buyLimit
 		}
 
-		const trade = {
-			index: this.trades.length,
-			market: market.slug,
-			outcome: market.outcome,
-			open: [openTime, limits.buyLimit],
-			close: null as [number, number] | null,
-			pnl: 0,
-		}
+		// if (market.outcome === side){
+		// 	stat.won ++
+		// 	pnl = limits.sellLimit - stat.buyLimit
+		// }else{
+		// 	stat.lost ++
+		// 	pnl = limits.closeLimit - stat.buyLimit
+		// }
 
-		trade.close = close
-		if (close[1] > limits.sellLimit){
-			stats.won ++
-			trade.close = [close[0], limits.sellLimit]
-			trade.pnl = limits.sellLimit - limits.buyLimit
-		}else{
-			stats.lost ++
-			// trade.close = [close[0], limits.closeLimit]
-			// trade.pnl = limits.closeLimit - limits.buyLimit
-			trade.close = close
-			trade.pnl = close[1] - limits.buyLimit
-		}
-		stats.pnl = parseNumber(stats.pnl + trade.pnl)
-		this.trades.push(trade)
+		stat.pnl = parseNumber(stat.pnl + pnl)
+
+		// this.trades.push({
+		// 	index: this.trades.length,
+		// 	market: market.slug,
+		// 	outcome: market.outcome,
+		// 	open: [openTime, limits.buyLimit],
+		// 	close: null as [number, number] | null,
+		// 	pnl: pnl,
+		// })
 	}
 }
 export const Strategy3 = new _Strategy3()

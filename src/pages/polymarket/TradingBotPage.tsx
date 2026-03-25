@@ -119,7 +119,7 @@ export default function TradingBotPage() {
 
 	// ---------------------------------------------------------------------------- setup
 	const setup = useRef({
-		symbol: 'btc',
+		symbol: 'xrp',
 
 		// marketTime: 15,
 		// marketType: 'updown-15m',
@@ -128,8 +128,8 @@ export default function TradingBotPage() {
 
 		timeFrame: 5,
 		marketType: 'updown-5m',
-		startTimeLimit: 60,	//seconds
-		endTimeLimit: 30,	//seconds
+		openTimeLimit: 60,	//open limit time in seconds before market ended
+		// endTimeLimit: 30,	//seconds
 
 		sizeFactor: 5.0,		//size factor to multiply the trade size
 
@@ -139,7 +139,7 @@ export default function TradingBotPage() {
 		baseTimestamp: 0,
 		basePrice: 0,
 		up : {
-			enabled: true,
+			enabled: false,
 		},
 		down : {
 			enabled: true,
@@ -246,17 +246,15 @@ export default function TradingBotPage() {
 		// const orders = await getOpenOrders()
 		// console.log('orders:', orders)
 
-		if (!currentMarket) return
-		console.log('getActiveMarketPositionSizes ...')
-		const sizes = await getActiveMarketPositionSizes({
-			conditionId: currentMarket.conditionId || '',
-			upTokenId: currentMarket.outcomes.find((outcome: any) => outcome.title === 'Up')?.id || '',
-			downTokenId: currentMarket.outcomes.find((outcome: any) => outcome.title === 'Down')?.id || '',
-		});
-		console.log('sizes:', sizes)
-
-	
-	return
+		// if (!currentMarket) return
+		// console.log('getActiveMarketPositionSizes ...')
+		// const sizes = await getActiveMarketPositionSizes({
+		// 	conditionId: currentMarket.conditionId || '',
+		// 	upTokenId: currentMarket.outcomes.find((outcome: any) => outcome.title === 'Up')?.id || '',
+		// 	downTokenId: currentMarket.outcomes.find((outcome: any) => outcome.title === 'Down')?.id || '',
+		// });
+		// console.log('sizes:', sizes)
+		// return
 
 		const root = 'A:/DATA/polymarket/trades/'
 		const trades = await TRADE_STORE.keys()

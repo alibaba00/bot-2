@@ -52,6 +52,7 @@ export default function StrategyPage() {
 				<Button variant='default' onClick={() => Strategy1.run_multi('btc')}>Strategy 1 Multi</Button>
 				<Button variant='default' onClick={handleStrategy2}>Strategy 2</Button>
 				<Button variant='default' onClick={handleStrategy3}>Strategy 3</Button>
+				<Button variant='default' onClick={() => Strategy3.run_multi()}>Strategy 3 Multi</Button>
 			</div>
 		</div>
 	)

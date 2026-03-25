@@ -353,7 +353,7 @@ export async function getActiveMarketPositionSizes(params: {
 		// sizeThreshold=0 to include tiny residual positions
 		const positionsUrl =
 			`https://data-api.polymarket.com/positions` +
-			`?sizeThreshold=0&limit=500&sortBy=TOKENS&sortDirection=DESC&user=${encodeURIComponent(user)}`
+			`?sizeThreshold=0&limit=10&sortBy=TOKENS&sortDirection=DESC&user=${encodeURIComponent(user)}`
 
 		const response = await fetch(positionsUrl)
 

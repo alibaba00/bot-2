@@ -130,8 +130,9 @@ class PolymarketApi {
 	// symbol: e.g. btc
 	// fromDate: e.g. 1765406700 from btc-updown-15m-1765406700
 	// return: string[]
-	async getAllKeys(symbol: string, fromDate: number = 0): Promise<string[]> {
+	async getAllKeys(symbol: string, fromDate: number = 0, toDate: number = 0): Promise<string[]> {
 		if (fromDate && fromDate > 1e12) fromDate = Math.floor(fromDate / 1000)	//convert milliseconds to seconds
+		if (toDate && toDate > 1e12) toDate = Math.floor(toDate / 1000)	//convert milliseconds to seconds
 		const keys = await this.cache.keys()
 		console.log('getAllKeys:', symbol, 'from', keys.length, '...')
 
@@ -142,6 +143,11 @@ class PolymarketApi {
 				const keyDateString = parseInt(key.split('-')[3])	//e.g. 1765406700
 				if (String(keyDateString).length !== 10) continue	//e.g. 1765406700 -> 10 digits
 				if (keyDateString < fromDate) continue
+			}
+			if (toDate) {
+				const keyDateString = parseInt(key.split('-')[3])	//e.g. 1765406700
+				if (String(keyDateString).length !== 10) continue	//e.g. 1765406700 -> 10 digits
+				if (keyDateString > toDate) continue
 			}
 			out.push(key)
 		}
