@@ -120,30 +120,22 @@ export default function TradingBotPage() {
 	// ---------------------------------------------------------------------------- setup
 	const setup = useRef({
 		symbol: 'xrp',
-
-		// marketTime: 15,
-		// marketType: 'updown-15m',
-		// startTimeLimit: 180,	//seconds
-		// endTimeLimit: 60,	//seconds
-
 		timeFrame: 5,
 		marketType: 'updown-5m',
 		openTimeLimit: 60,	//open limit time in seconds before market ended
 		// endTimeLimit: 30,	//seconds
-
+		up : {
+			enabled: true,
+		},
+		down : {
+			enabled: true,
+		},
 		sizeFactor: 5.0,		//size factor to multiply the trade size
-
 		liveTrading: false as boolean,
 		isConnected: false as boolean,
 		currentMarket: null as MarketData | null,
 		baseTimestamp: 0,
 		basePrice: 0,
-		up : {
-			enabled: false,
-		},
-		down : {
-			enabled: true,
-		},
 		tradeMode: 'none' as 'none' | 'up' | 'down' | 'up-and-down' | 'up-or-down',
 		nextTimestamp: Infinity,
 		tickerValues: {

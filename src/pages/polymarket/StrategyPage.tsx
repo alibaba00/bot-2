@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Strategy1, Strategy2, Strategy3 } from "./Strategy";
-
+import ReactEcharts from 'echarts-for-react';
 
 // const Strategy1 = {
 // 	name: 'Strategy 1',
@@ -17,6 +17,10 @@ import { Strategy1, Strategy2, Strategy3 } from "./Strategy";
 // 		{}
 // 	]
 // }
+
+const chartOptions = {
+	series: [] as any[],
+}
 
 
 const handleStrategy1 = async () => {
@@ -54,6 +58,14 @@ export default function StrategyPage() {
 				<Button variant='default' onClick={handleStrategy3}>Strategy 3</Button>
 				<Button variant='default' onClick={() => Strategy3.run_multi()}>Strategy 3 Multi</Button>
 			</div>
+
+			<ReactEcharts
+				option={chartOptions}
+				style={{ height: '50%', width: '100%' }}
+				notMerge={true}
+				lazyUpdate={true}
+			/>
+
 		</div>
 	)
 }
