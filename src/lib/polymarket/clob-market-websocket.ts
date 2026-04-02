@@ -172,9 +172,9 @@ export class CLOBMarketWebSocket {
 							}
 
 							// Handle price_change events
-							// if (data.event_type === 'price_change' && data.price_changes) {
-							// 	this.handlePriceChanges(data)
-							// }
+							if (data.event_type === 'price_change' && data.price_changes) {
+								this.handlePriceChanges(data)
+							}
 
 							// Handle last_trade_price events
 							if (
@@ -298,8 +298,7 @@ export class CLOBMarketWebSocket {
 	 * Handle price changes from WebSocket message
 	 * @internal
 	 */
-	// @ts-expect-error - Function is intentionally unused (commented out in code)
-	private _handlePriceChanges(message: CLOBMarketMessage): void {
+	private handlePriceChanges(message: CLOBMarketMessage): void {
 		if (!message.price_changes || !Array.isArray(message.price_changes)) {
 			return
 		}

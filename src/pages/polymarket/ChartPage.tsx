@@ -362,16 +362,17 @@ export default function ChartPage() {
 		}
 
 		const openPrice = selectedMarket.data.openPrice
-		const startTimestamp = selectedMarket.data.startTimestamp
-		const endTimestamp = selectedMarket.data.endTimestamp
+		const startTimestamp = selectedMarket.data.startTimestamp - PolymarketChart.preOffset
+		const endTimestamp = selectedMarket.data.endTimestamp + PolymarketChart.postOffset
 		const clobData = chartData.clob
 
+		// add data to the end of the array if the last timestamp is less than the endTimestamp
 		if (clobData.up?.length && clobData.down?.length) {
-			if (clobData.up[clobData.up.length - 1][0] < endTimestamp) {
-				clobData.up.push([endTimestamp, clobData.up[clobData.up.length - 1][1]])
+			if (clobData.up[clobData.up.length-1][0] < endTimestamp) {
+				clobData.up.push([endTimestamp, clobData.up[clobData.up.length-1][1]])
 			}
-			if (clobData.down[clobData.down.length - 1][0] < endTimestamp) {
-				clobData.down.push([endTimestamp, clobData.down[clobData.down.length - 1][1]])
+			if (clobData.down[clobData.down.length-1][0] < endTimestamp) {
+				clobData.down.push([endTimestamp, clobData.down[clobData.down.length-1][1]])
 			}
 		}
 
@@ -422,22 +423,22 @@ export default function ChartPage() {
 			series: [
 				{
 					...lineChartOptions.series[0],
-					data: clobData.up
+					data: clobData.up						//up data (green)
 				},
 				{
 					...lineChartOptions.series[1],
-					data: clobData.down?.map(([timestamp, value]) => [timestamp, 1 - value])
+					data: clobData.down?.map(([timestamp, value]) => [timestamp, 1 - value])	//invert down data (red)
 				},
 				{
 					...lineChartOptions.series[2],
-					data: chainlinkData
+					data: chainlinkData					//chainlink data (blue)
 				},
 				{
-					...lineChartOptions.series[3],
+					...lineChartOptions.series[3],		//polling data (magenta)
 					data: pollingData
 				},
 				{
-					...lineChartOptions.series[4],
+					...lineChartOptions.series[4],		//coinbase data (yellow)
 					data: coinbaseData
 				},
 				{

@@ -12,6 +12,10 @@ let isRunning = false
 let lastUpdate_logfiles: number = await PolymarketApi.store.getItem('lastUpdate_logfiles') || 0
 console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
 
+export const preOffset = 40000		//get tickerdata 40 seconds before startTimestamp
+export const postOffset = 20000	//get tickerdata 20 seconds after endTimestamp
+const chartDataVersion = 1
+
 
 // ---------------------------------------------------------------------------- fixingClobData
 export const fixingClobData = async (type: string = 'updown-5m') => {
@@ -27,7 +31,10 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 	const updateKeys = marketKeys.filter((key: string) => key.includes(type))
 	console.log('updateKeys:', updateKeys.length, 'from', marketKeys.length, type, 'markets ...')
 
+	let count = 0
+	let index = 0
 	for (const key of updateKeys) {		
+		index++
 		if (!isRunning) break
 
 		const market = await PolymarketApi.cache.getItem(key)
@@ -36,12 +43,23 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 
 		let updated = false
 
-		//--- fixing clob data complete
-		const complete = updateClobDataComplete(market)
-		if (complete !== clob._complete){  //changed complete status
-			console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
-			clob._complete = complete
+		//--- update chartData version
+		if (market.chartData?.version !== chartDataVersion) {
+			console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
+			const csvPath = market.filePath.replace('.json', '.csv')
+			market.chartData = await getChartData(market, csvPath)
+			market.chartData.clob._complete = updateClobDataComplete(market)
+			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
 			updated = true
+
+		}else{
+			//--- fixing clob data complete
+			const complete = updateClobDataComplete(market)
+			if (complete !== clob._complete){  //changed complete status
+				console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
+				clob._complete = complete
+				updated = true
+			}
 		}
 
 		//--- fixing openPrice
@@ -60,6 +78,11 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 		if (updated) {
 			await PolymarketApi.cacheMarket(market)
 			await PolymarketApi.saveMarket(market, true)
+
+			count++
+			if (count % 1000 === 0) console.clear()
+			console.log('market updated:', count, index, '/', updateKeys.length, market.slug)
+			console.log('')
 		}
 	}
 
@@ -909,6 +932,7 @@ export const updateAllMarketData_clob = async (all: boolean = false) => {
 
 
 // ---------------------------------------------------------------------------- updateMarketData
+// csvPath sample: A:/DATA/polymarket/clob/btc-updown-5m/2026-04-02/btc-updown-5m-1775127000.csv
 export const updateMarketData_clob = async (slug: string, csvPath: string, useCache: boolean = true)
 	: Promise<{market: Market | null, updated: boolean}> => {
 	let updated:boolean = false
@@ -950,7 +974,7 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 	if (market.marketData?.closed){
 		updated = updated || await updatePriceData(market)
 
-		if (!useCache || !market.chartData?._complete) {
+		if (!useCache || !market.chartData?._complete || market.chartData?.version !== chartDataVersion) {
 			market.chartData = await getChartData(market, csvPath)
 
 			market.chartData.clob._complete = updateClobDataComplete(market)
@@ -1049,8 +1073,9 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 	}
 
 	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
-	const firstTimestamp = market.startTimestamp + 5 * 60 * 1000	//5 minutes
-	const lastTimestamp = market.endTimestamp - 5 * 60 * 1000	//5 minutes
+	const timeLimit = market.duration / 5 * 60 * 1000
+	const firstTimestamp = market.startTimestamp + timeLimit
+	const lastTimestamp = market.endTimestamp - timeLimit
 	const tickers: any = {} as any
 
 	for (const source of Object.keys(tickerDataSources)) {
@@ -1061,8 +1086,8 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 
 		// Prevent duplicates from getting into the array based on timestamp and price
 		tickerData = tickerData
-			.filter((item: any) => item.timestamp >= market.startTimestamp
-				&& item.timestamp <= market.endTimestamp)
+			.filter((item: any) => item.timestamp >= market.startTimestamp - preOffset
+				&& item.timestamp <= market.endTimestamp + postOffset)
 			.reduce((acc: any[], item: any) => {		//prevent duplicates
 				const last = acc.length > 0 ? acc[acc.length - 1] : null
 				if (!last || last[0] !== item.timestamp || last[1] !== item.price) {
@@ -1079,6 +1104,7 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 	}
 
 	return {
+		version: chartDataVersion,
 		clob: {up, down},
 		ticker: tickers
 	} as any
@@ -1086,7 +1112,7 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 
 
 // ---------------------------------------------------------------------------- updateClobDataComplete
-const updateClobDataComplete = (market: Market) => {
+const updateClobDataComplete = (market: Market): boolean => {
 	if (!market.marketData?.closed) return false
 
 	const clob = market?.chartData?.clob
