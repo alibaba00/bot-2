@@ -14,7 +14,7 @@ console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_log
 
 export const preOffset = 40000		//get tickerdata 40 seconds before startTimestamp
 export const postOffset = 20000	//get tickerdata 20 seconds after endTimestamp
-const chartDataVersion = 1
+const chartDataVersion = 2
 
 
 // ---------------------------------------------------------------------------- fixingClobData
@@ -45,11 +45,11 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 
 		//--- update chartData version
 		if (market.chartData?.version !== chartDataVersion) {
-			console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
-			const csvPath = market.filePath.replace('.json', '.csv')
-			market.chartData = await getChartData(market, csvPath)
+// console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
+			// const csvPath = market.filePath.replace('.json', '.csv')
+			// market.chartData = await getChartData(market, csvPath)
 			market.chartData.clob._complete = updateClobDataComplete(market)
-			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
+			// market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
 			updated = true
 
 		}else{
@@ -80,9 +80,11 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 			await PolymarketApi.saveMarket(market, true)
 
 			count++
-			if (count % 1000 === 0) console.clear()
-			console.log('market updated:', count, index, '/', updateKeys.length, market.slug)
-			console.log('')
+			if (count % 1000 === 0){
+				// console.clear()
+				console.log('market updated:', count, index, '/', updateKeys.length, market.slug)
+			}
+			// console.log('')
 		}
 	}
 
@@ -1112,31 +1114,37 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 
 
 // ---------------------------------------------------------------------------- updateClobDataComplete
-const updateClobDataComplete = (market: Market): boolean => {
-	if (!market.marketData?.closed) return false
+const updateClobDataComplete = (market: Market): number => {
+	if (!market.marketData?.closed) return 0
 
 	const clob = market?.chartData?.clob
-	if (!clob) return false
+	if (!clob) return -1
 
 	const up = clob.up
 	const down = clob.down
 	const limit = parseNumber((market.duration / 5) * 60 * 1000)	//20% limit
 
-	if (up.length < 20 || down.length < 20) return false
-	if (market.outcome === 'up' && (up[up.length-1][1] <= 0.95 || down[down.length-1][1] >= 0.05)) return false
-	if (market.outcome === 'down' && (up[up.length-1][1] >= 0.05 || down[down.length-1][1] <= 0.95)) return false
-	if (up[0][0] - market.startTimestamp > limit) return false
+	if (!up || !down || up.length < 20 || down.length < 20) return -2
+	if (market.outcome === 'up' && (up[up.length-1][1] <= 0.95 || down[down.length-1][1] >= 0.05)) return -3
+	if (market.outcome === 'down' && (up[up.length-1][1] >= 0.05 || down[down.length-1][1] <= 0.95)) return -4
+	if (up[0][0] - market.startTimestamp > limit) return -5
 	if (market.endTimestamp - up[up.length-1][0] > limit
-		&& (up[up.length-1][1] > 0.02 && up[up.length-1][1] < 0.98)) return false
-	if (down[0][0] - market.startTimestamp > limit) return false
+		&& (up[up.length-1][1] > 0.02 && up[up.length-1][1] < 0.98)) return -6
+	if (down[0][0] - market.startTimestamp > limit) return -7
 	if (market.endTimestamp - down[down.length-1][0] > limit
-		&& (down[down.length-1][1] > 0.02 && down[down.length-1][1] < 0.98)) return false
-	if (up.find((e: any, i:number) => i > 0 && (e[1] > 0.02 && e[1] < 0.98)
-		&& e[0] - up[i-1][0] > limit)) return false
-	if (down.find((e: any, i:number) => i > 0 && (e[1] > 0.02 && e[1] < 0.98)
-		&& e[0] - down[i-1][0] > limit)) return false
+		&& (down[down.length-1][1] > 0.02 && down[down.length-1][1] < 0.98)) return -8
 
-	return true
+	//check if there is a gap, greater than limit in the data
+	if (up.find((e: any, i:number) => i > 0
+		&& e[0] >= market.startTimestamp && e[0] <= market.endTimestamp
+		&& (e[1] > 0.02 && e[1] < 0.98)
+		&& e[0] - up[i-1][0] > limit)) return -9
+	if (down.find((e: any, i:number) => i > 0
+		&& e[0] >= market.startTimestamp && e[0] <= market.endTimestamp
+		&& (e[1] > 0.02 && e[1] < 0.98)
+		&& e[0] - down[i-1][0] > limit)) return -10
+
+	return 1
 }
 
 

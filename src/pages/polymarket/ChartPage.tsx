@@ -849,7 +849,7 @@ const MarketItem = ({ market }: { market: any }) => {
 					}}>Update</Button>
 				<span
 					className={`inline-block w-3 h-3 rounded-full mr-2 ${data?.closed
-						? (data?.chartData?.ticker?.chainlink?._complete && data?.chartData?.clob?._complete)
+						? (data?.chartData?.ticker?.chainlink?._complete && data?.chartData?.clob?._complete === 1)
 						? 'bg-green-500' : 'bg-yellow-500'
 						: 'bg-red-500'}`}
 				></span>

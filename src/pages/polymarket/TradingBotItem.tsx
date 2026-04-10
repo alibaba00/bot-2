@@ -183,13 +183,13 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		side.price = price
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && side.price <= 0.39){
+		if (side.state === 'pending' && side.price >= 0.69){
 			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, side.price)
 			side.state = 'active'
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:side.outcome,
-				price		:0.40,
+				price		:0.7,
 				timestamp	:Date.now(),
 				size		:10,		//2 * 0.6 = 1.2
 			})		//-> active
@@ -198,12 +198,12 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			})
 
 		}else if (side.state === 'active'){
-			if (side.price >= 0.59){
+			if (side.price >= 0.97){
 				side.state = 'selling'
 				setOrder(setup, trade, {
 					type		:'SELL',
 					outcome		:side.outcome,
-					price		:0.60,
+					price		:0.97,
 					timestamp	:Date.now(),
 				})		//-> active
 			}
@@ -212,7 +212,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				setOrder(setup, trade, {
 					type		:'SELL',
 					outcome		:side.outcome,
-					price		:0.01,
+					price		:0.03,
 					timestamp	:Date.now(),
 				})		//-> active
 			}

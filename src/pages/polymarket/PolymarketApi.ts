@@ -485,7 +485,7 @@ class PolymarketApi {
 
 	// ---------------------------------------------------------------------------- cacheMarket
 	async cacheMarket(market: Market): Promise<void> {
-		console.log('market cached:', market.slug, 'openPrice:', market.openPrice, 'closePrice:', market.closePrice)
+// console.log('market cached:', market.slug, 'openPrice:', market.openPrice, 'closePrice:', market.closePrice)
 		await cache.setItem(market.slug, market)
 	}
 
@@ -718,7 +718,7 @@ return
 		}
 
 		await fsPromises?.writeFile(filePath, JSON.stringify(market, null, '\t'))
-		console.log('market saved to:', filePath)
+// console.log('market saved to:', filePath)
 	}
 
 

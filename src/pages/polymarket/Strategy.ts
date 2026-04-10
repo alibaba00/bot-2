@@ -438,7 +438,7 @@ class _Strategy2 {
 	async checkData(market: Market, stats: any, markets: any[]): Promise<void> {
 		// const startTimestamp = market.startTimestamp
 		// const endTimestamp = market.endTimestamp
-		if (!market.chartData?.clob?._complete) return
+		if (market.chartData?.clob?._complete !== 1) return
 
 		const up = market.chartData.clob.up
 		const down = market.chartData.clob.down
@@ -604,10 +604,10 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 		}
 
 		const market = await PolymarketApi.cache.getItem(key)
-		if (!market?.closed || !market.chartData?._complete) continue //market not closed or chart data not complete
+		if (!market?.closed || !market.chartData._complete) continue //market not closed or chart data not complete
 
 		if (!data.allMarkets[key]){		// new market found
-			if (!market.chartData?.clob?._complete){
+			if (market.chartData?.clob?._complete !== 1){
 				data.allMarkets[key] = 'invalid'
 				data.invalid++
 			}else{
@@ -647,13 +647,13 @@ class _Strategy3 {
 	setup: any = {
 		symbol : 'xrp',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-03-25 12:00:00').getTime(),
-		toDate: new Date('2026-03-25 23:59:59').getTime(),
+		fromDate: new Date('2026-04-09 00:00:00').getTime(),
+		toDate: new Date('2026-04-10 23:59:59').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout before buying
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
-		'up': {buyLimit: 0.6, size: 1, sellLimit: 0.97, closeLimit: 0.03},
-		'down': {buyLimit: 0.6, size: 1, sellLimit: 0.97, closeLimit: 0.03},
+		'up': {buyLimit: 0.7, size: 1, sellLimit: 0.97, closeLimit: 0.03},
+		'down': {buyLimit: 0.7, size: 1, sellLimit: 0.97, closeLimit: 0.03},
 	}
 
 	constructor() {
@@ -672,18 +672,22 @@ class _Strategy3 {
 			usedMarkets: data.usedMarkets.length,
 			tradedMarkets: 0,				//total traded markets
 			up: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.up.buyLimit},
-			// down: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.down.buyLimit},
+			down: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.down.buyLimit},
 			winrate: 0,
 			pnl: 0,
 		}
 
 		for (const key of data.usedMarkets) {
 			const market = await PolymarketApi.cache.getItem(key)
+			if (market.chartData?.clob?._complete !== 1) continue
 // console.log(market.slug)
 			this.parseMarket(market, stats)
 		}
 
-		stats.winrate = parseNumber(1 + (stats.pnl / stats.tradedMarkets))
+		stats.winrate = parseNumber(1 + ((stats.up.pnl + stats.down.pnl) / stats.tradedMarkets))
+		// stats.up.winrate = parseNumber(1 + (stats.up.pnl / stats.tradedMarkets))
+		// stats.down.winrate = parseNumber(1 + (stats.down.pnl / stats.tradedMarkets))
+
 
 		console.table(this.setup)
 		console.table(stats)
@@ -719,7 +723,7 @@ class _Strategy3 {
 
 			for (const key of data.usedMarkets) {
 				const market = await PolymarketApi.cache.getItem(key)
-				if (!market.chartData?.clob?._complete) continue
+				if (market.chartData?.clob?._complete !== 1) continue
 
 				this.parseMarket(market, statsUp)
 				this.parseMarket(market, statsDown)
