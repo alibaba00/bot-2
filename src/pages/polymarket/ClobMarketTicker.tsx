@@ -3,9 +3,21 @@ import { useCLOBMarketWebSocket } from "@/hooks/use-clob-market-websocket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
 
-type PriceEntry = { price: number; timestamp: number };
+type PriceEntry = {
+	price: number;
+	timestamp: number;
+	best_bid?: number;
+	best_ask?: number;
+};
 
 const TICKER_FLUSH_MS = 150;
+
+/** Wie Polymarket „Buy“-Buttons: Anzeige in Cent (0–1 → „82¢“). */
+function formatPolymarketBuyHeadline(p: number): string {
+	if (!Number.isFinite(p)) return "—";
+	if (p >= 0 && p <= 1) return `${Math.round(p * 100)}¢`;
+	return p.toFixed(4);
+}
 
 export type LastTrade = {
 	price: number;
@@ -20,6 +32,10 @@ export type LastTrade = {
 export default function ClobMarketTicker({ market, onUpdate, autoConnect, onTime }:
 	{ market: MarketData, onUpdate?: (lastTrade: LastTrade) => void, autoConnect?: boolean, onTime?: (restSeconds: number) => void }) {
 	const [marketPrices, setMarketPrices] = useState<Record<string, PriceEntry>>({});
+	/** Nur aus WebSocket `price_change` / `price_changes` (kein REST-Seed beim Marktwechsel). */
+	const [priceChangeEventPrices, setPriceChangeEventPrices] = useState<
+		Record<string, PriceEntry>
+	>({});
 	const [lastTradePrices, setLastTradePrices] = useState<
 		Record<
 			string,
@@ -47,6 +63,7 @@ useEffect(() => {
 
 	const pendingLastTradesRef = useRef<Record<string, LastTrade>>({});
 	const pendingPricesRef = useRef<Record<string, PriceEntry>>({});
+	const pendingPriceChangeEventRef = useRef<Record<string, PriceEntry>>({});
 	const flushScheduledRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const normalizedOutcomesRef = useRef<Array<{ id: string; title: string; price: number }>>([]);
 
@@ -62,6 +79,11 @@ useEffect(() => {
 			pendingPricesRef.current = {};
 			setMarketPrices((prev) => ({ ...prev, ...prices }));
 		}
+		const pc = pendingPriceChangeEventRef.current;
+		if (Object.keys(pc).length > 0) {
+			pendingPriceChangeEventRef.current = {};
+			setPriceChangeEventPrices((prev) => ({ ...prev, ...pc }));
+		}
 		setError(null);
 	}, []);
 
@@ -76,9 +98,22 @@ useEffect(() => {
 			const currentAssetIds = assetIdsRef.current;
 			if (!currentAssetIds.includes(update.asset_id)) return;
 
+			// `update.price` = Orderbuch-Level; Hauptzeile: Mid; Touch-Preise separat (Trading).
+			const quote = update.book_mid ?? update.price;
+			const bb = update.best_bid;
+			const ba = update.best_ask;
+
 			pendingPricesRef.current[update.asset_id] = {
-				price: update.price,
-				timestamp: update.timestamp
+				price: quote,
+				timestamp: update.timestamp,
+				...(Number.isFinite(bb) ? { best_bid: bb } : {}),
+				...(Number.isFinite(ba) ? { best_ask: ba } : {})
+			};
+			pendingPriceChangeEventRef.current[update.asset_id] = {
+				price: quote,
+				timestamp: update.timestamp,
+				...(Number.isFinite(bb) ? { best_bid: bb } : {}),
+				...(Number.isFinite(ba) ? { best_ask: ba } : {})
 			};
 			scheduleFlush();
 		},
@@ -144,14 +179,37 @@ useEffect(() => {
 			return Number.isFinite(parsed) ? parsed : 0;
 		});
 
-		const outcomes =
+		// Immer CLOB-Token-ID pro Index nutzen (muss zu `price_changes[].asset_id` passen).
+		// Rohe API-`outcomes` nutzen oft `outcome_id`/andere IDs — dann teilen sich Zeilen
+		// fälschlich State oder springen zwischen Up/Down-Preisen.
+		const rawOutcomes =
 			Array.isArray((market as any).outcomes) && (market as any).outcomes.length > 0
-				? (market as any).outcomes
-				: outcomeTitles.map((title, index) => ({
-						id: clobTokenIds[index] || `${index}`,
-						title,
-						price: outcomePrices[index] ?? 0
-				  }));
+				? ((market as any).outcomes as Array<{ id?: string; title?: string; price?: number }>)
+				: null;
+		const rowCount = Math.max(
+			rawOutcomes?.length ?? 0,
+			outcomeTitles.length,
+			clobTokenIds.length,
+			outcomePrices.length,
+			0
+		);
+		if (rowCount === 0) {
+			return { normalizedOutcomes: [], marketAssetIds: clobTokenIds };
+		}
+		const outcomes = Array.from({ length: rowCount }, (_, index) => {
+			const fromApi = rawOutcomes?.[index];
+			const tokenId =
+				(clobTokenIds[index] != null && String(clobTokenIds[index])) ||
+				(fromApi?.id != null ? String(fromApi.id) : "") ||
+				`${index}`;
+			const title =
+				fromApi?.title ?? outcomeTitles[index] ?? `Outcome ${index + 1}`;
+			const p =
+				typeof fromApi?.price === "number" && Number.isFinite(fromApi.price)
+					? fromApi.price
+					: outcomePrices[index] ?? 0;
+			return { id: tokenId, title, price: p };
+		});
 
 		return { normalizedOutcomes: outcomes, marketAssetIds: clobTokenIds };
 	}, [market]);
@@ -196,6 +254,8 @@ useEffect(() => {
 			}
 		});
 		setMarketPrices(initialPrices);
+		setPriceChangeEventPrices({});
+		pendingPriceChangeEventRef.current = {};
 	}, [market]);
 
 
@@ -230,20 +290,25 @@ useEffect(() => {
 		if (!market || normalizedOutcomes.length === 0) return [];
 		return normalizedOutcomes.map((outcome) => {
 			const lastTrade = lastTradePrices[outcome.id];
-			const livePrice = marketPrices[outcome.id]?.price;
-			const price = lastTrade?.price ?? livePrice ?? outcome.price;
-			const timestamp =
-				lastTrade?.timestamp ?? marketPrices[outcome.id]?.timestamp ?? null;
+			const mp = marketPrices[outcome.id];
+			// Polymarket-Website (Buy): große Zahl = best_ask pro Outcome-Token
+			// (z. B. „Up 82¢“ / „Down 19¢“ auf polymarket.com)
+			const bestAsk = mp?.best_ask;
+			const price =
+				bestAsk != null && Number.isFinite(bestAsk)
+					? bestAsk
+					: lastTrade?.price ?? mp?.price ?? outcome.price;
+			const priceChangeEvent = priceChangeEventPrices[outcome.id];
 			return {
 				id: outcome.id,
 				title: outcome.title,
 				price,
-				side: lastTrade?.side,
-				size: lastTrade?.size,
-				timestamp
+				bestBid: priceChangeEvent?.best_bid,
+				bestAsk: priceChangeEvent?.best_ask,
+				priceChangeEventTimestamp: priceChangeEvent?.timestamp ?? null
 			};
 		});
-	}, [lastTradePrices, market, marketPrices]);
+	}, [lastTradePrices, market, marketPrices, priceChangeEventPrices]);
 
 	if (!market) {
 		return (
@@ -319,18 +384,41 @@ useEffect(() => {
 						key={outcome.id}
 						className="flex flex-1 items-center justify-between gap-3 rounded-md bg-black/5 dark:bg-white/5 px-3 py-2"
 						>
-						<div className="flex flex-col">
-							<span className="text-sm font-medium">{outcome.title}</span>
-							<span className="text-xs text-muted-foreground">
-								{outcome.timestamp
-									? new Date(outcome.timestamp).toLocaleTimeString()
-									: "keine Updates"}
-								{outcome.side ? ` · ${outcome.side}` : ""}
-								{outcome.size ? ` · Size ${outcome.size.toFixed(3)}` : ""}
+						<div className="flex min-w-0 flex-col items-start gap-0.5 text-left">
+							<span className="text-lg font-medium tabular-nums leading-tight">
+								{outcome.title}
+							</span>
+							<span className="text-[11px] leading-tight tabular-nums text-muted-foreground">
+								{outcome.priceChangeEventTimestamp != null
+									? new Date(outcome.priceChangeEventTimestamp).toLocaleTimeString()
+									: "—"}
 							</span>
 						</div>
-						<div className="text-lg tabular-nums">
-							{outcome.price.toFixed(4)}
+						<div className="flex min-w-0 flex-col items-end gap-0.5 text-right">
+							<div
+								className="text-lg font-medium tabular-nums leading-tight"
+								title="best_ask — entspricht Polymarket bei aktivem „Buy“ (Kaufpreis pro Share)"
+							>
+								{formatPolymarketBuyHeadline(outcome.price)}
+							</div>
+							<div
+								className="text-[11px] leading-tight tabular-nums text-right"
+								title="best_bid (grün) / best_ask (rot) aus price_change."
+							>
+								<span className="text-red-600 dark:text-red-400">
+									ask{" "}
+									{outcome.bestAsk != null && Number.isFinite(outcome.bestAsk)
+										? outcome.bestAsk.toFixed(4)
+										: "—"}
+								</span>
+								<span className="text-muted-foreground"> · </span>
+								<span className="text-green-600 dark:text-green-400">
+									bid{" "}
+									{outcome.bestBid != null && Number.isFinite(outcome.bestBid)
+										? outcome.bestBid.toFixed(4)
+										: "—"}
+								</span>
+							</div>
 						</div>
 					</div>
 				))}

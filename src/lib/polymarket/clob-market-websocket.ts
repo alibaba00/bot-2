@@ -30,13 +30,25 @@ export interface CLOBMarketMessage {
 
 export interface CLOBMarketPriceUpdate {
 	asset_id: string
+	/** Preis des geänderten Orderbuch-Levels (springt stark — nicht als „Kurs“ nutzen). */
 	price: number
+	/** Stabiler Referenzpreis: Mitte aus best_bid/best_ask (Polymarket-Doku). */
+	book_mid?: number
 	timestamp: number
 	side?: 'BUY' | 'SELL'
 	size?: number
 	best_bid?: number
 	best_ask?: number
 	hash?: string
+}
+
+function bookMidFromBestBidAsk(bestBid: number, bestAsk: number): number | undefined {
+	const bbOk = Number.isFinite(bestBid)
+	const baOk = Number.isFinite(bestAsk)
+	if (bbOk && baOk) return (bestBid + bestAsk) / 2
+	if (bbOk) return bestBid
+	if (baOk) return bestAsk
+	return undefined
 }
 
 export interface CLOBLastTradePriceUpdate {
@@ -310,14 +322,18 @@ export class CLOBMarketWebSocket {
 			: Date.now()
 
 		message.price_changes.forEach((priceChange) => {
+			const bestBid = parseFloat(priceChange.best_bid)
+			const bestAsk = parseFloat(priceChange.best_ask)
+			const bookMid = bookMidFromBestBidAsk(bestBid, bestAsk)
 			const update: CLOBMarketPriceUpdate = {
-				asset_id: priceChange.asset_id,
+				asset_id: String(priceChange.asset_id),
 				price: parseFloat(priceChange.price),
+				book_mid: bookMid,
 				timestamp,
 				side: priceChange.side,
 				size: parseFloat(priceChange.size),
-				best_bid: parseFloat(priceChange.best_bid),
-				best_ask: parseFloat(priceChange.best_ask),
+				best_bid: bestBid,
+				best_ask: bestAsk,
 				hash: priceChange.hash
 			}
 
