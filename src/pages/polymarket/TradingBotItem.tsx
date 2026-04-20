@@ -164,14 +164,26 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 
 	// ---------------------------------------------------------------------------- setMarketPrice
-	const setMarketPrice = (lastTrade: LastTrade) => {
-		// console.log(trade, time)
+	// const setMarketPrice = (lastTrade: LastTrade) => {
+	// 	// console.log(trade, time)
+	// 	if (trade.state === 'closed' || trade.state === 'cancelled') return
+
+	// 	if (lastTrade.outcome_title === 'up'){
+	// 		updatePrice(trade.up, lastTrade.price)
+	// 	}else if (lastTrade.outcome_title === 'down'){
+	// 		updatePrice(trade.down, lastTrade.price)
+	// 	}
+	// 	// console.log('--- setMarketPrice:', trade.up.price, trade.down.price)
+	// 	render()
+	// }
+	const setMarketPrice = (value: any) => {
+		// console.log('--- setMarketPrice:', value)
 		if (trade.state === 'closed' || trade.state === 'cancelled') return
 
-		if (lastTrade.outcome_title === 'up'){
-			updatePrice(trade.up, lastTrade.price)
-		}else if (lastTrade.outcome_title === 'down'){
-			updatePrice(trade.down, lastTrade.price)
+		if (value.outcome === 'up'){
+			updatePrice(trade.up, value.price, value.ask, value.bid)
+		}else if (value.outcome === 'down'){
+			updatePrice(trade.down, value.price, value.ask, value.bid)
 		}
 		// console.log('--- setMarketPrice:', trade.up.price, trade.down.price)
 		render()
@@ -179,12 +191,12 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 
 	// ---------------------------------------------------------------------------- buyTrade
-	const updatePrice = (side: TradeSide, price: number) => {
-		side.price = price
+	const updatePrice = (side: TradeSide, price: number, ask: number, bid: number) => {
+		// side.price = price
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && side.price >= 0.69){
-			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, side.price)
+		if (side.state === 'pending' && ask >= 0.69){
+			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
 			side.state = 'active'
 			setOrder(setup, trade, {
 				type		:'BUY',
@@ -198,21 +210,21 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			})
 
 		}else if (side.state === 'active'){
-			if (side.price >= 0.97){
+			if (bid >= 0.97){
 				side.state = 'selling'
 				setOrder(setup, trade, {
 					type		:'SELL',
 					outcome		:side.outcome,
-					price		:0.97,
+					price		:0.98,
 					timestamp	:Date.now(),
 				})		//-> active
 			}
-			else if (side.price <= 0.03){
+			else if (ask <= 0.28){
 				side.state = 'selling'
 				setOrder(setup, trade, {
 					type		:'SELL',
 					outcome		:side.outcome,
-					price		:0.03,
+					price		:0.29,
 					timestamp	:Date.now(),
 				})		//-> active
 			}
@@ -282,8 +294,8 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	// ---------------------------------------------------------------------------- onTime
 	const onMarketTime = (restSeconds: number) => {
 		if (trade.state === 'open') {
-			if (setup.currentMarket?.endTimestamp && Date.now() + 10000 > setup.currentMarket.endTimestamp) {
-				setup._createMarket?.(20000)	//create next valid market from now + 20 seconds
+			if (setup.currentMarket?.endTimestamp && Date.now() + 60000 > setup.currentMarket.endTimestamp) {
+				setup._createMarket?.(70000)	//create next valid market from now + 70 seconds
 			}
 			if (restSeconds <= -10){
 				setState('closed')

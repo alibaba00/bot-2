@@ -14,7 +14,7 @@ console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_log
 
 export const preOffset = 40000		//get tickerdata 40 seconds before startTimestamp
 export const postOffset = 20000	//get tickerdata 20 seconds after endTimestamp
-const chartDataVersion = 2
+const chartDataVersion = 3
 
 
 // ---------------------------------------------------------------------------- fixingClobData
@@ -46,20 +46,24 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 		//--- update chartData version
 		if (market.chartData?.version !== chartDataVersion) {
 // console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
-			// const csvPath = market.filePath.replace('.json', '.csv')
-			// market.chartData = await getChartData(market, csvPath)
+			const csvPath = market.filePath.replace('.json', '.csv')
+			market.chartData = await getClobTickerData(market, csvPath)
 			market.chartData.clob._complete = updateClobDataComplete(market)
-			// market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
+			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
 			updated = true
 
-		}else{
-			//--- fixing clob data complete
-			const complete = updateClobDataComplete(market)
-			if (complete !== clob._complete){  //changed complete status
-				console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
-				clob._complete = complete
-				updated = true
-			}
+		// }else{
+		// 	//--- fixing clob data complete
+		// 	const complete = updateClobDataComplete(market)
+		// 	if (complete !== clob._complete){  //changed complete status
+		// 		console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
+		// 		clob._complete = complete
+		// 		updated = true
+		// 	}
+		}
+
+		if (market.chartData._complete && !market.chartData?.grid){
+			///
 		}
 
 		//--- fixing openPrice
@@ -977,7 +981,7 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 		updated = updated || await updatePriceData(market)
 
 		if (!useCache || !market.chartData?._complete || market.chartData?.version !== chartDataVersion) {
-			market.chartData = await getChartData(market, csvPath)
+			market.chartData = await getClobTickerData(market, csvPath)
 
 			market.chartData.clob._complete = updateClobDataComplete(market)
 			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
@@ -1042,33 +1046,37 @@ const updatePriceData = async (market: Market) => {
 }
 
 
-// ---------------------------------------------------------------------------- getChartData
-export const getChartData = async (market: Market, csvFilePath: string) => {
-	console.log('getChartData from', csvFilePath)
-
+// ---------------------------------------------------------------------------- getClobTickerData
+export const getClobTickerData = async (market: Market, csvFilePath: string) => {
+	// console.log('getChartData from', csvFilePath)
 	const up: any = []
 	const down: any = []
-	const last: any = {up: null, down: null, ticker: null}
+	const last: any = {ts: 0, up_ask: null, up_bid: null, down_ask: null, down_bid: null}
 
 	const logData = fs.existsSync(csvFilePath) ? await fsPromises.readFile(csvFilePath, 'utf8') : null
 	if (logData) {
 		const lines = logData.split('\n')
-	
-		const data = lines.map((line) => {
-			const [timestamp, side, price, type] = line.split(',')
-			return { timestamp: parseInt(timestamp), side, type, price: parseFloat(price) }
-		}).filter((item) => item.timestamp > 0 && item.price > 0)
-	
-		data.forEach((item) => {
-			if (item.type === 'UP') {
-				if (item.price !== last.up) {		//prevent duplicate entries
-					last.up = item.price
-					up.push([item.timestamp, item.price] as any)
-				}
-			} else {
-				if (item.price !== last.down) {		//prevent duplicate entries
-					last.down = item.price
-					down.push([item.timestamp, item.price] as any)
+
+		// timestamp,side,price,ticker_type,size,best_bid,best_ask
+		lines.forEach((line) => {
+			const [timestamp, side, priceStr, type, size, best_bid, best_ask] = line.split(',')
+			const ts = parseInt(timestamp)
+			const price = parseFloat(priceStr)
+			const ask = parseFloat(best_ask) || price
+			const bid = parseFloat(best_bid) || price
+			if (ts > last.ts && ask && bid && type) {
+				if (type === 'UP') {
+					if (ask !== last.up_ask || bid !== last.up_bid) {		//prevent duplicate entries
+						last.up_ask = ask
+						last.up_bid = bid
+						up.push([ts, ask, bid] as any)
+					}
+				} else {
+					if (bid !== last.down_bid || ask !== last.down_ask) {		//prevent duplicate entries
+						last.down_bid = bid
+						last.down_ask = ask
+						down.push([ts, ask, bid] as any)
+					}
 				}
 			}
 		})
@@ -1110,6 +1118,42 @@ export const getChartData = async (market: Market, csvFilePath: string) => {
 		clob: {up, down},
 		ticker: tickers
 	} as any
+}
+
+
+// ---------------------------------------------------------------------------- getClobGrid
+const getClobGrid = (market: Market) => {
+	const clob = market?.chartData?.clob
+	if (!clob) return null
+
+	const grid = {
+		up_ask	: [] as any[],
+		up_bid	: [] as any[],
+		down_ask: [] as any[],
+		down_bid: [] as any[],
+	}
+
+	// clob.up.forEach((item: any) => {
+	// 	grid.up_ask.push(item[1])
+	// 	grid.up_bid.push(item[2])
+	// })
+	// clob.down.forEach((item: any) => {
+	// 	grid.down_ask.push(item[1])
+	// 	grid.down_bid.push(item[2])
+	// })
+
+	market.chartData.grid = grid
+}
+
+
+// ---------------------------------------------------------------------------- getClobData
+const getClobData = (market: Market) => {
+	const clob = market?.chartData?.clob
+	if (!clob) return null
+
+	// const up = clob.up
+	// const down = clob.down
+	// return {up, down}
 }
 
 

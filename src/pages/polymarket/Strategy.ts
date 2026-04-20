@@ -583,6 +583,7 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 			allMarkets: {},
 			usedMarkets: [],
 			total: 0,
+			notClosed: 0,
 			new: 0,
 			valid: 0,
 			invalid: 0,
@@ -590,6 +591,7 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 		await STORE.setItem('strategie-' + strategy, data)
 	}
 
+	data.notClosed = 0
 	data.new = 0
 	data.usedMarkets = []
 	console.log('   check for valid markets ...')
@@ -604,7 +606,10 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 		}
 
 		const market = await PolymarketApi.cache.getItem(key)
-		if (!market?.closed || !market.chartData._complete) continue //market not closed or chart data not complete
+		if (!market?.closed || !market.chartData._complete){
+			data.notClosed++
+			continue
+		}
 
 		if (!data.allMarkets[key]){		// new market found
 			if (market.chartData?.clob?._complete !== 1){
@@ -625,6 +630,9 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 		}
 	}
 
+	if (data.notClosed > 0){
+		console.log('   not closed markets:', data.notClosed)
+	}
 	if (data.new > 0){
 		console.log('   new markets found:', data.new)
 		await STORE.setItem('strategie-' + strategy, data)
@@ -645,15 +653,15 @@ class _Strategy3 {
 	trades: any[] = []
 
 	setup: any = {
-		symbol : 'xrp',
+		symbol : 'btc',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-04-09 00:00:00').getTime(),
-		toDate: new Date('2026-04-10 23:59:59').getTime(),
+		fromDate: new Date('2026-04-17 00:00:00').getTime(),
+		toDate: new Date('2026-04-17 12:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
-		openTimeLimit: 60 * 1000,		//1 minute timeout before buying
+		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
-		'up': {buyLimit: 0.7, size: 1, sellLimit: 0.97, closeLimit: 0.03},
-		'down': {buyLimit: 0.7, size: 1, sellLimit: 0.97, closeLimit: 0.03},
+		'up': {enabled: true, buyLimit: 0.51, size: 1, sellLimit: 0.94, closeLimit: 0.04},
+		'down': {enabled: true, buyLimit: 0.51, size: 1, sellLimit: 0.94, closeLimit: 0.04},
 	}
 
 	constructor() {
@@ -671,8 +679,8 @@ class _Strategy3 {
 		const stats = {
 			usedMarkets: data.usedMarkets.length,
 			tradedMarkets: 0,				//total traded markets
-			up: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.up.buyLimit},
-			down: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.down.buyLimit},
+			up: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.up.buyLimit, enabled: s.up.enabled},
+			down: {count: 0, won: 0, lost: 0, pnl: 0, buyLimit: s.down.buyLimit, enabled: s.down.enabled},
 			winrate: 0,
 			pnl: 0,
 		}
@@ -684,7 +692,8 @@ class _Strategy3 {
 			this.parseMarket(market, stats)
 		}
 
-		stats.winrate = parseNumber(1 + ((stats.up.pnl + stats.down.pnl) / stats.tradedMarkets))
+		stats.pnl = (stats.up?.pnl || 0) + (stats.down?.pnl || 0)
+		stats.winrate = parseNumber(stats.pnl / stats.tradedMarkets - 1)
 		// stats.up.winrate = parseNumber(1 + (stats.up.pnl / stats.tradedMarkets))
 		// stats.down.winrate = parseNumber(1 + (stats.down.pnl / stats.tradedMarkets))
 
@@ -696,7 +705,7 @@ class _Strategy3 {
 
 
 	//---------------------------------------------------------------------------- run_multi
-	async run_multi(): Promise<void> {
+	async run_multi_(): Promise<void> {
 		const s = this.setup
 		console.log('Strategy 3 running', s.symbol, s.marketType, '...')
 		const data = await loadMarketData(s.symbol, s.marketType, s.fromDate, s.toDate)
@@ -772,7 +781,7 @@ class _Strategy3 {
 		const endTimestamp = market.endTimestamp
 		const openTimeLimit = this.setup.openTimeLimit
 
-		if (stats.up){
+		if (stats.up.enabled){
 			const buyLimit = stats.up.buyLimit
 			if (buyLimit >= 0.5){		//buy limit is greater than 0.5
 				if (up[0][1] > buyLimit) return
@@ -784,7 +793,7 @@ class _Strategy3 {
 					&& e[0] <= endTimestamp - openTimeLimit)
 			}
 		}
-		if (stats.down){
+		if (stats.down.enabled){
 			const buyLimit = stats.down.buyLimit
 			if (buyLimit >= 0.5){		//buy limit is greater than 0.5
 				if (down[0][1] > buyLimit) return
@@ -797,45 +806,52 @@ class _Strategy3 {
 			}
 		}
 
-		if (!buyUp && !buyDown) return
-		if (buyUp || buyDown){
-			stats.tradedMarkets ++
-		}
+		// if (!buyUp && !buyDown) return
+		if (buyUp || buyDown) stats.tradedMarkets ++
 
 		if (buyUp && (this.setup.mode === 'and' || !buyDown || buyDown[0] > buyUp[0])){
-			this.closeTrade('up', stats, market, buyUp[0])
+			this.closeTrade('up', stats.up, market, buyUp)
 		}
 		if (buyDown && (this.setup.mode === 'and' || !buyUp || buyUp[0] > buyDown[0])){
-			this.closeTrade('down', stats, market, buyDown[0])
+			this.closeTrade('down', stats.down, market, buyDown)
 		}
 	}
 
 
 	//---------------------------------------------------------------------------- checkData
-	closeTrade(side: string, stats: any, market: Market, openTime: number): void {
-		const stat = stats[side]
+	closeTrade(side: string, stat: any, market: Market, buy: any): void {
 		stat.count ++
+		const time = buy[0] + this.setup.closeTimeDelay
 		const limits = this.setup[side]
 		const data = market.chartData.clob[side]
 
-		const sell = data.find((e: any) => e[0] > openTime + this.setup.closeTimeDelay && e[1] > limits.sellLimit)
-		const close = data.find((e: any) => e[0] > openTime + this.setup.closeTimeDelay && e[1] < limits.closeLimit)
+		// e[1] = ask, e[2] = bid
+		const sell = data.find((e: any) => e[0] > time && e[2] > limits.sellLimit)
+		const close = data.find((e: any) => e[0] > time && e[2] < limits.closeLimit)
 
 		let pnl = 0
 		if (sell && close){
 			if (sell[0] < close[0]){
+				stat.won ++
+				pnl = sell[1] / buy[1] - 1
+			}else{
+				stat.lost ++
+				pnl = close[1] / buy[1] - 1
+			}
+		}else if (sell){
+			stat.won ++
+			pnl = sell[1] / buy[1] - 1
+		}else if (close){
+			stat.lost ++
+			pnl = close[1] / buy[1] - 1
+		}else{
+			if (market.outcome === side){
 				stat.won ++
 				pnl = limits.sellLimit - stat.buyLimit
 			}else{
 				stat.lost ++
 				pnl = limits.closeLimit - stat.buyLimit
 			}
-		}else if (sell){
-			stat.won ++
-			pnl = limits.sellLimit - stat.buyLimit
-		}else if (close){
-			stat.lost ++
-			pnl = limits.closeLimit - stat.buyLimit
 		}
 
 		// if (market.outcome === side){
@@ -857,5 +873,179 @@ class _Strategy3 {
 		// 	pnl: pnl,
 		// })
 	}
+
+	//---------------------------------------------------------------------------- run_multi
+	async run_multi(): Promise<void> {
+		const s = this.setup
+		console.log('Strategy 3 multi running', s.symbol, s.marketType, '...')
+		const data = await loadMarketData(s.symbol, s.marketType, s.fromDate, s.toDate)
+		console.log('start calculating for', data.usedMarkets.length, 'markets ...');
+
+		const stat = {index:0} as any
+		let index = 0
+		for (let i = 1; i < 100; i++){
+			stat[i] = {}
+			for (let j = i+1; j <= 100; j++){
+				stat[i][j] = {}
+				for (let k = i-1; k >= 0; k--){
+					stat[i][j][k] = {
+						index:index++,
+						trade: [i,j,k],
+						count:0,
+						won:0,
+						lost:0,
+						pnl:0,
+						wr:0,
+						abs:0,
+						id:-1
+					}
+				}
+			}
+		}
+
+		// console.log('stat:', index, stat[60][80][40])
+
+		for (const key of data.usedMarkets) {
+			const market = await PolymarketApi.cache.getItem(key)
+			if (market.chartData?.clob?._complete !== 1) continue
+
+// console.log('market:', market.slug, market)
+			const upData = market.chartData?.clob.up
+			this.parseGrid(upData, market.endTimestamp - this.setup.openTimeLimit, stat, market.outcome === 'up')
+			// this.parseGrid(market.chartData?.clob.down)
+			console.log('ok')
+// break
+		}
+
+		console.log('complete!', index, stat)
+
+		// calc pnl for each trade
+		let node = null as any
+		const best = [] as any[]
+		for (let i = 1; i < 100; i++){
+			for (let j = i+1; j <= 100; j++){
+				for (let k = i-1; k >= 0; k--){
+					node = stat[i][j][k]
+					node.pnl = (node.won * node.trade[1] + node.lost * node.trade[2])
+						/ (node.trade[0])
+					node.wr = node.pnl / node.count
+					node.abs = node.pnl / data.usedMarkets.length
+					if (node.abs > 1.03) best.push(node)
+				}
+			}
+		}
+		best.sort((a, b) => b.abs - a.abs)
+		console.log('best:', best.length, best.slice(0, 100))
+		// console.log('best:', best.length, best)
+
+		console.log('result:', stat[1][51][0])
+	}
+
+
+	//---------------------------------------------------------------------------- parseGrid
+	parseGrid(data: any[], timeLimit: number, stat: any, won: boolean){
+		if (!data?.[0]?.[2]) return		//wrong data
+
+		// create all trades for this market
+		let value = 0
+
+		// const grid = {} as any[]
+		// for (const item of data) {
+		// 	value = Math.floor(parseNumber(item[1] * 100))		//current ask price
+		// 	if (item[0] > timeLimit || value < 1 || value > 99) break
+		// 	if (!grid[value] && stat[value]) grid[value] = [item[0], value, stat[value]]
+		// }
+		// const list = Object.values(grid)
+
+		let min = 0, max = 0
+		if (won){
+			min = Math.floor(Math.min(...data.map(item => item[1])) * 100)
+			max = 100
+		}else{
+			min = 0
+			max = Math.floor(Math.max(...data.map(item => item[1])) * 100)
+		}
+		const list = [] as any[]
+		const first = Math.floor(parseNumber(data[0][1] * 100))
+		for (let i = min; i <= max; i++){
+			const node = i >= first ?
+				data.find((e: any) => Math.floor(parseNumber(e[1] * 100)) >= i)
+				: data.find((e: any) => Math.floor(parseNumber(e[1] * 100)) <= i)
+			if (node){
+				const stat = {}
+				for (let j = i+1; j <= 100; j++){
+					stat[j] = {}
+					for (let k = i-1; k >= 0; k--){
+						stat[j][k] = {
+							trade: [i,j,k],
+							count:0,
+							won:0,
+							lost:0,
+							pnl:0,
+							wr:0,
+							abs:0,
+							id:-1
+						}
+					}
+				}
+				list.push([node[0], i, stat, node[1]])
+				// list.push([node[0], i, stat[i], node[1]])
+			}
+		}
+
+		// search for next sell or close event
+		for (const item of data) {
+			value = Math.floor(parseNumber(item[2] * 100))		//current bid price
+			list.forEach((e: any) => {
+				if (item[0] > e[0]){			//trade is still open and in time
+					if (value > e[1]){			//price is higher (sell won)
+						for (let i = e[1] + 1; i <= value; i++){
+							for (let j = e[1] - 1; j >= 0; j--){
+								if (e[2][i][j].id !== stat.index) {
+									e[2][i][j].id = stat.index
+									e[2][i][j].count ++
+									e[2][i][j].won ++
+// if (e[1] === 1 && i === 51 && j === 0){
+// 	console.log(won, value, min, max, e, item)
+// }
+								}
+							}	
+						}
+					}else if (value < e[1]){	//price is lower (close lost)
+						for (let i = e[1] + 1; i <= 100; i++){
+							for (let j = e[1] - 1; j >= value; j--){
+								if (e[2][i][j].id !== stat.index) {
+									e[2][i][j].id = stat.index
+									e[2][i][j].count ++
+									e[2][i][j].lost ++
+								}
+							}
+						}
+					}
+				}
+			})
+		}
+
+		//close all still open trades
+		list.forEach((e: any) => {
+			for (let i = e[1] + 1; i <= 100; i++){
+				for (let j = e[1] - 1; j >= 0; j--){
+					if (e[2][i][j].id !== stat.index) {
+						e[2][i][j].count ++
+						if (won) e[2][i][j].won ++
+						else e[2][i][j].lost ++
+// if (e[1] === 1 && i === 51 && j === 0){
+// 	console.log('1', min, max)	
+// }
+					}
+				}	
+			}
+		})
+
+		stat.index ++
+		// console.log('grid:', list)
+	}
 }
 export const Strategy3 = new _Strategy3()
+
+

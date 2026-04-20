@@ -30,9 +30,28 @@ export type LastTrade = {
 }
 
 export default function ClobMarketTicker({ market, onUpdate, autoConnect, onTime }:
-	{ market: MarketData, onUpdate?: (lastTrade: LastTrade) => void, autoConnect?: boolean, onTime?: (restSeconds: number) => void }) {
+	{ market: MarketData, onUpdate?: (value: any) => void, autoConnect?: boolean, onTime?: (restSeconds: number) => void }) {
 	const [marketPrices, setMarketPrices] = useState<Record<string, PriceEntry>>({});
-	/** Nur aus WebSocket `price_change` / `price_changes` (kein REST-Seed beim Marktwechsel). */
+
+/** Nur aus WebSocket `price_change` / `price_changes` (kein REST-Seed beim Marktwechsel). */
+/* priceChangeEventPrices:
+{
+    "55002524779482644658535766149927921011314645708548386393290353483758698633388": {
+        "price": 0.705,
+        "timestamp": 1775867892323,
+        "best_bid": 0.7,
+        "best_ask": 0.71
+    },
+    "108306004312278818784777590798784152958414506429215744496454864385723161591810": {
+        "price": 0.295,
+        "timestamp": 1775867892323,
+        "best_bid": 0.29,
+        "best_ask": 0.3
+    }
+}
+*/
+const lastOutcomePricesRef = useRef<Record<string, number>>({});
+
 	const [priceChangeEventPrices, setPriceChangeEventPrices] = useState<
 		Record<string, PriceEntry>
 	>({});
@@ -45,6 +64,8 @@ export default function ClobMarketTicker({ market, onUpdate, autoConnect, onTime
 	const [assetIds, setAssetIds] = useState<string[]>([]);
 	const [error, setError] = useState<string | null>(null);
 const autoReconnectRef = useRef<boolean | undefined>(autoConnect);
+
+
 
 
 useEffect(() => {
@@ -117,25 +138,25 @@ useEffect(() => {
 			};
 			scheduleFlush();
 		},
-		onLastTradePriceUpdate: (update) => {
-			const outcomes = normalizedOutcomesRef.current;
-			const outcome = outcomes.find((o) => o.id === update.asset_id);
-			if (!outcome) return;
+		// onLastTradePriceUpdate: (update) => {
+		// 	const outcomes = normalizedOutcomesRef.current;
+		// 	const outcome = outcomes.find((o) => o.id === update.asset_id);
+		// 	if (!outcome) return;
 
-			const lastTrade: LastTrade = {
-				price: update.price,
-				size: update.size,
-				side: update.side,
-				outcome_id: update.asset_id,
-				outcome_title: outcome?.title?.toLowerCase(),
-				timestamp: update.timestamp,
-				transaction_hash: update.transaction_hash
-			};
-			onUpdate?.(lastTrade);
+		// 	const lastTrade: LastTrade = {
+		// 		price: update.price,
+		// 		size: update.size,
+		// 		side: update.side,
+		// 		outcome_id: update.asset_id,
+		// 		outcome_title: outcome?.title?.toLowerCase(),
+		// 		timestamp: update.timestamp,
+		// 		transaction_hash: update.transaction_hash
+		// 	};
+		// 	onUpdate?.(lastTrade);
 
-			pendingLastTradesRef.current[update.asset_id] = lastTrade;
-			scheduleFlush();
-		},
+		// 	pendingLastTradesRef.current[update.asset_id] = lastTrade;
+		// 	scheduleFlush();
+		// },
 		onError: (err) => {
 			setError(err.message || "CLOB Market WebSocket error");
 		},
@@ -299,6 +320,17 @@ useEffect(() => {
 					? bestAsk
 					: lastTrade?.price ?? mp?.price ?? outcome.price;
 			const priceChangeEvent = priceChangeEventPrices[outcome.id];
+
+			if (price !== lastOutcomePricesRef.current[outcome.id]) {
+				lastOutcomePricesRef.current[outcome.id] = price;
+				onUpdate?.({
+					outcome: outcome.title?.toLowerCase(),
+					price: price,
+					ask: priceChangeEvent?.best_ask,
+					bid: priceChangeEvent?.best_bid,
+				});
+			}
+
 			return {
 				id: outcome.id,
 				title: outcome.title,
