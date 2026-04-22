@@ -655,13 +655,13 @@ class _Strategy3 {
 	setup: any = {
 		symbol : 'btc',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-04-17 00:00:00').getTime(),
-		toDate: new Date('2026-04-17 12:00:00').getTime(),
+		fromDate: new Date('2026-04-22 00:00:00').getTime(),
+		toDate: new Date('2026-04-23 00:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
-		'up': {enabled: true, buyLimit: 0.51, size: 1, sellLimit: 0.94, closeLimit: 0.04},
-		'down': {enabled: true, buyLimit: 0.51, size: 1, sellLimit: 0.94, closeLimit: 0.04},
+		'up': {enabled: true, buyLimit: 55, size: 1, sellLimit: 95, closeLimit: 5},
+		'down': {enabled: true, buyLimit: 55, size: 1, sellLimit: 95, closeLimit: 5},
 	}
 
 	constructor() {
@@ -881,15 +881,14 @@ class _Strategy3 {
 		const data = await loadMarketData(s.symbol, s.marketType, s.fromDate, s.toDate)
 		console.log('start calculating for', data.usedMarkets.length, 'markets ...');
 
-		const stat = {index:0} as any
-		let index = 0
-		for (let i = 1; i < 100; i++){
-			stat[i] = {}
-			for (let j = i+1; j <= 100; j++){
-				stat[i][j] = {}
-				for (let k = i-1; k >= 0; k--){
+		const stat = [] as any[]
+		let i: number, j: number, k: number
+		for (i = 1; i < 100; i++){
+			stat[i] = [] as any[]
+			for (j = i+1; j <= 100; j++){
+				stat[i][j] = [] as any[]
+				for (k = i-1; k >= 0; k--){
 					stat[i][j][k] = {
-						index:index++,
 						trade: [i,j,k],
 						count:0,
 						won:0,
@@ -897,13 +896,13 @@ class _Strategy3 {
 						pnl:0,
 						wr:0,
 						abs:0,
-						id:-1
 					}
 				}
 			}
 		}
 
 		// console.log('stat:', index, stat[60][80][40])
+		let node = null as any
 
 		for (const key of data.usedMarkets) {
 			const market = await PolymarketApi.cache.getItem(key)
@@ -911,26 +910,36 @@ class _Strategy3 {
 
 // console.log('market:', market.slug, market)
 			const upData = market.chartData?.clob.up
-			this.parseGrid(upData, market.endTimestamp - this.setup.openTimeLimit, stat, market.outcome === 'up')
-			// this.parseGrid(market.chartData?.clob.down)
+			const list = this.parseGrid(upData, market.endTimestamp - this.setup.openTimeLimit, market.outcome === 'up')
+// console.log('list:', list)
+			for (i = 1; i < 100; i++){
+				for (j = i+1; j <= 100; j++){
+					for (k = i-1; k >= 0; k--){
+						if (list[i]?.[2]?.[j]?.[k]?.close){
+							node = stat[i][j][k]
+							node.count ++
+							if (list[i][2][j][k].won) node.won ++
+							else node.lost ++
+						}
+					}
+				}
+			}
+
 			console.log('ok')
-// break
 		}
 
-		console.log('complete!', index, stat)
+		console.log('complete!', stat)
 
 		// calc pnl for each trade
-		let node = null as any
 		const best = [] as any[]
 		for (let i = 1; i < 100; i++){
 			for (let j = i+1; j <= 100; j++){
 				for (let k = i-1; k >= 0; k--){
 					node = stat[i][j][k]
-					node.pnl = (node.won * node.trade[1] + node.lost * node.trade[2])
-						/ (node.trade[0])
-					node.wr = node.pnl / node.count
-					node.abs = node.pnl / data.usedMarkets.length
-					if (node.abs > 1.03) best.push(node)
+					node.pnl = parseNumber(((node.won * node.trade[1] + node.lost * node.trade[2]) / node.trade[0]) - node.count)
+					node.wr = parseNumber(1 + (node.pnl / node.count))
+					node.abs = parseNumber(1 + (node.pnl / data.usedMarkets.length))
+					if (node.abs > 1.01) best.push(node)
 				}
 			}
 		}
@@ -938,112 +947,87 @@ class _Strategy3 {
 		console.log('best:', best.length, best.slice(0, 100))
 		// console.log('best:', best.length, best)
 
-		console.log('result:', stat[1][51][0])
+		console.log('result:', stat[55][95][5])
 	}
 
 
 	//---------------------------------------------------------------------------- parseGrid
-	parseGrid(data: any[], timeLimit: number, stat: any, won: boolean){
-		if (!data?.[0]?.[2]) return		//wrong data
+	parseGrid(data: any[], timeLimit: number, won: boolean): any[]{
+		if (!data?.[0]?.[2]) return []		//wrong data
 
 		// create all trades for this market
-		let value = 0
+		data = data.map((e: any) => [e[0], Math.floor(parseNumber(e[1] * 100)), Math.floor(parseNumber(e[2] * 100))])
 
-		// const grid = {} as any[]
-		// for (const item of data) {
-		// 	value = Math.floor(parseNumber(item[1] * 100))		//current ask price
-		// 	if (item[0] > timeLimit || value < 1 || value > 99) break
-		// 	if (!grid[value] && stat[value]) grid[value] = [item[0], value, stat[value]]
-		// }
-		// const list = Object.values(grid)
-
-		let min = 0, max = 0
-		if (won){
-			min = Math.floor(Math.min(...data.map(item => item[1])) * 100)
-			max = 100
-		}else{
-			min = 0
-			max = Math.floor(Math.max(...data.map(item => item[1])) * 100)
+		let min = 100, max = 0, value = 0
+		for (const item of data){
+			if (item[0] > timeLimit) break
+			if (item[1] < min) min = item[1]
+			if (item[1] > max) max = item[1]
 		}
+
 		const list = [] as any[]
-		const first = Math.floor(parseNumber(data[0][1] * 100))
-		for (let i = min; i <= max; i++){
+		const first = data[0][1]	//first ask price value
+		let i: number, j: number, k: number
+
+		// create all valid trades for this market
+		for (i = min+1; i <= max; i++){
+			// search for open trade node of this price
 			const node = i >= first ?
-				data.find((e: any) => Math.floor(parseNumber(e[1] * 100)) >= i)
-				: data.find((e: any) => Math.floor(parseNumber(e[1] * 100)) <= i)
-			if (node){
-				const stat = {}
-				for (let j = i+1; j <= 100; j++){
-					stat[j] = {}
-					for (let k = i-1; k >= 0; k--){
-						stat[j][k] = {
-							trade: [i,j,k],
-							count:0,
-							won:0,
-							lost:0,
-							pnl:0,
-							wr:0,
-							abs:0,
-							id:-1
-						}
+				data.find((e: any) => e[1] >= i) || [timeLimit, 100, 100]
+				: data.find((e: any) => e[1] <= i) || [timeLimit, 0, 0]
+
+			const stat = [] as any[]
+			for (j = i+1; j <= 100; j++){
+				stat[j] = [] as any[]
+				for (k = i-1; k >= 0; k--){
+					stat[j][k] = {
+						open: node[0],
+						close: 0,
+						won:0,
+						lost:0,
+						trade: [i,j,k],
 					}
 				}
-				list.push([node[0], i, stat, node[1]])
-				// list.push([node[0], i, stat[i], node[1]])
 			}
+			list[i] = [node[0], i, stat]
 		}
 
 		// search for next sell or close event
 		for (const item of data) {
-			value = Math.floor(parseNumber(item[2] * 100))		//current bid price
-			list.forEach((e: any) => {
-				if (item[0] > e[0]){			//trade is still open and in time
-					if (value > e[1]){			//price is higher (sell won)
-						for (let i = e[1] + 1; i <= value; i++){
-							for (let j = e[1] - 1; j >= 0; j--){
-								if (e[2][i][j].id !== stat.index) {
-									e[2][i][j].id = stat.index
-									e[2][i][j].count ++
-									e[2][i][j].won ++
-// if (e[1] === 1 && i === 51 && j === 0){
-// 	console.log(won, value, min, max, e, item)
-// }
-								}
-							}	
-						}
-					}else if (value < e[1]){	//price is lower (close lost)
-						for (let i = e[1] + 1; i <= 100; i++){
-							for (let j = e[1] - 1; j >= value; j--){
-								if (e[2][i][j].id !== stat.index) {
-									e[2][i][j].id = stat.index
-									e[2][i][j].count ++
-									e[2][i][j].lost ++
-								}
-							}
-						}
+			value = item[2]		//current bid price
+			for (i = min+1; i < value; i++){		//won
+				list[i]?.[2][value].forEach((e: any) => {
+					if (!e.close && item[0] > e.open) {
+						e.close = item[0]
+						e.won = 1
 					}
-				}
-			})
+				})
+			}
+			for (i = value + 1; i < max; i++){		//lost
+				list[i]?.[2].forEach((e: any[]) => {
+					if (!e[value].close && item[0] > e[value].open) {
+						e[value].close = item[0]
+						e[value].lost = 1
+					}
+				})
+			}
 		}
 
 		//close all still open trades
-		list.forEach((e: any) => {
-			for (let i = e[1] + 1; i <= 100; i++){
-				for (let j = e[1] - 1; j >= 0; j--){
-					if (e[2][i][j].id !== stat.index) {
-						e[2][i][j].count ++
-						if (won) e[2][i][j].won ++
-						else e[2][i][j].lost ++
-// if (e[1] === 1 && i === 51 && j === 0){
-// 	console.log('1', min, max)	
-// }
+		let node = null as any
+		for (i = min+1; i < max; i++){		//won
+			for (j = i+1; j <= 100; j++){
+				for (k = i-1; k >= 0; k--){
+					node = list[i][2][j][k]
+					if (!node.close) {
+						if (won) node.won ++
+						else node.lost ++
+						node.close = timeLimit
 					}
-				}	
+				}
 			}
-		})
-
-		stat.index ++
-		// console.log('grid:', list)
+		}
+		return list
 	}
 }
 export const Strategy3 = new _Strategy3()
