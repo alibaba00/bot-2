@@ -19,7 +19,50 @@ import ReactEcharts from 'echarts-for-react';
 // }
 
 const chartOptions = {
-	series: [] as any[],
+	series: [
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#0f0c',
+			},
+			symbolSize: 0,
+			data: [1,2,3,4,5,6,7,8,9,10] as any[],
+			step: 'end',
+			tooltip: {
+				show: true,
+			},
+			name: "up",
+		}
+	] as any[],
+	xAxis: [
+		{
+			type: 'category',
+			data: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] as any[],
+			splitLine: {
+				show: true,
+				lineStyle: {
+					color: '#fff3',
+					width: 1,
+					type: 'dashed'
+				}
+			}
+		}
+	] as any[],
+	yAxis: [
+		{
+			type: 'value',
+			min: 0,
+			max: 10,
+			splitLine: {
+				show: true,
+				lineStyle: {
+					color: '#fff3',
+					width: 0.5
+				}
+			}
+		}
+	] as any[],
 }
 
 
@@ -49,7 +92,7 @@ export default function StrategyPage() {
 	}, []);
 
 	return (
-		<div className="flex flex-col gap-2 p-4">
+		<div className="flex flex-col gap-2 p-4 h-full w-full">
 			<h2>Strategies:</h2>
 			<div className="flex gap-2 flex-wrap">
 				<Button variant='default' onClick={handleStrategy1}>Strategy 1</Button>
