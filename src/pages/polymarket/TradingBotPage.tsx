@@ -7,14 +7,11 @@ import type { MarketData } from "@/lib/polymarket/types";
 import type { OrderMessage, TradeMessage } from "@/lib/polymarket/user-channel-websocket";
 import { beep } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
-import ClobMarketTicker, { type LastTrade } from "./ClobMarketTicker";
-import { MarketTimer } from "./MarketTimer";
+import { create } from 'zustand';
 import { fsPromises } from "./PolymarketApi";
 import { TRADE_STORE, type Trade } from "./TradingBotItem";
 import TradingBotList from "./TradingBotList";
 import useUserChannel from "./useUserChannel";
-import { getActiveMarketPositionSizes } from "@/lib/polymarket/wallet";
-import { create } from 'zustand'
 
 
 export const useTradingBotStore = create<{

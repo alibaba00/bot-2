@@ -109,13 +109,13 @@ class _Strategy3 {
 	setup: any = {
 		symbol : 'btc',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-04-16 00:00:00').getTime(),
-		toDate: new Date('2026-04-29 00:00:00').getTime(),
+		fromDate: new Date('2026-04-20 00:00:00').getTime(),
+		toDate: new Date('2026-04-30 00:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
-		'up': {enabled: true, buyLimit: 1, size: 1, sellLimit: 2, closeLimit: 0, trades: {} as any[]},
-		'down': {enabled: false, buyLimit: 1, size: 1, sellLimit: 2, closeLimit: 0, trades: {} as any[]},
+		'up': {enabled: true, buyLimit: 20, size: 1, sellLimit: 80, closeLimit: 0, trades: {} as any[]},
+		'down': {enabled: false, buyLimit: 20, size: 1, sellLimit: 80, closeLimit: 0, trades: {} as any[]},
 		isRunning: false
 	}
 
@@ -325,6 +325,7 @@ class _Strategy3 {
 						pnlc	: 1,
 						wr		: 0,
 						abs		: 0,
+// _trades	: [] as any[],
 					}
 				}
 			}
@@ -341,24 +342,24 @@ class _Strategy3 {
 			const upData = market.chartData?.clob.up
 			this.parseGrid(stat, upData, market.endTimestamp - this.setup.openTimeLimit, market.endTimestamp, market.outcome === 'up')
 
-			node = stat[1][2][0]
-			if (node.close){
-				s.up.trades[market.slug] = {
-					outcome: market.outcome,
-					open: node.open,
-					close: node.close,
-					won: node._won
-				}
-			}	
+node = stat[20][80][0]
+if (node.close){
+	s.up.trades[market.slug] = {
+		outcome: market.outcome,
+		open: node.open,
+		close: node.close,
+		won: node._won
+	}
+}	
 			console.log('ok')
 		}
 
 		const time = (performance.now() - t) / 1000
 		console.log('complete!', stat, time, 'seconds')
 
-		// console.log('save stat to file... A:/DATA/polymarket/export.json')
-		// await fsPromises?.writeFile('A:/DATA/polymarket/export.json', JSON.stringify(stat))
-		// console.log('done!')
+// console.log('save stat to file... A:/DATA/polymarket/export.json')
+// await fsPromises?.writeFile('A:/DATA/polymarket/export.json', JSON.stringify(stat))
+// console.log('done!')
 
 		// calc pnl for each trade
 		const best = [] as any[]
@@ -369,15 +370,15 @@ class _Strategy3 {
 					node.pnl = parseNumber(((node.won * node.trade[1] + node.lost * node.trade[2]) / node.trade[0]) - node.count)
 					node.wr = parseNumber(1 + node.pnl / node.count)
 					node.abs = parseNumber(1 + node.pnl / data.usedMarkets.length)
-					if (node.abs > 1.01) best.push(node)
+					if (node.abs > 1.01 && node.won > node.lost / 2) best.push(node)
 				}
 			}
 		}
 		best.sort((a, b) => b.abs - a.abs)
-		console.log('best:', best.length, best.slice(0, 100))
+		console.log('best:', best.length, best.slice(0, 200))
 		// console.log('best:', best.length, best)
 
-		console.log('result:', stat[1][2][0])
+		console.log('result:', stat[20][80][0])
 		console.log('trades:', s.up.trades)
 		s.isRunning = false
 	}
@@ -449,11 +450,15 @@ class _Strategy3 {
 								node.count ++
 								node.close = item[0]
 								node._won = true
+// node._trades.push([node.open, node.close])
+
 							}else if (i > value && k >= value){		//lost
 								node.lost ++
 								node.count ++
 								node.close = item[0]
 								node._won = false
+// node._trades.push([node.open, node.close])
+
 							}
 						}
 					}
@@ -472,6 +477,8 @@ class _Strategy3 {
 						node.count ++
 						node.close = endTimestamp
 						node._won = won
+// node._trades.push([node.open, endTimestamp])
+
 					}
 				}
 			}

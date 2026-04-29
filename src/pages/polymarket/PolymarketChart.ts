@@ -14,7 +14,7 @@ console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_log
 
 export const preOffset = 40000		//get tickerdata 40 seconds before startTimestamp
 export const postOffset = 20000	//get tickerdata 20 seconds after endTimestamp
-const chartDataVersion = 3
+const chartDataVersion = 4
 
 
 // ---------------------------------------------------------------------------- fixingClobData
@@ -1051,7 +1051,7 @@ export const getClobTickerData = async (market: Market, csvFilePath: string) => 
 	// console.log('getChartData from', csvFilePath)
 	const up: any = []
 	const down: any = []
-	const last: any = {ts: 0, up_ask: null, up_bid: null, down_ask: null, down_bid: null}
+	const last: any = {up_ask: null, up_bid: null, down_ask: null, down_bid: null}
 
 	const logData = fs.existsSync(csvFilePath) ? await fsPromises.readFile(csvFilePath, 'utf8') : null
 	if (logData) {
@@ -1064,7 +1064,7 @@ export const getClobTickerData = async (market: Market, csvFilePath: string) => 
 			const price = parseFloat(priceStr)
 			const ask = parseFloat(best_ask) || price
 			const bid = parseFloat(best_bid) || price
-			if (ts > last.ts && ask && bid && type) {
+			if (ts <= market.endTimestamp && ask && bid && type) {
 				if (type === 'UP') {
 					if (ask !== last.up_ask || bid !== last.up_bid) {		//prevent duplicate entries
 						last.up_ask = ask
@@ -1072,7 +1072,7 @@ export const getClobTickerData = async (market: Market, csvFilePath: string) => 
 						up.push([ts, ask, bid] as any)
 					}
 				} else {
-					if (bid !== last.down_bid || ask !== last.down_ask) {		//prevent duplicate entries
+					if (bid !== last.down_bid || ask !== last.down_ask) {	//prevent duplicate entries
 						last.down_bid = bid
 						last.down_ask = ask
 						down.push([ts, ask, bid] as any)
@@ -1166,7 +1166,7 @@ const updateClobDataComplete = (market: Market): number => {
 
 	const up = clob.up
 	const down = clob.down
-	const limit = parseNumber((market.duration / 5) * 60 * 1000)	//20% limit
+	const limit = parseNumber((market.duration / 5) * 60 * 1000)	//20% limit (e.g. limit for 5m-market = 1 Minute)
 
 	if (!up || !down || up.length < 20 || down.length < 20) return -2
 	if (market.outcome === 'up' && (up[up.length-1][1] <= 0.95 || down[down.length-1][1] >= 0.05)) return -3
