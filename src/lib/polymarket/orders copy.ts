@@ -23,12 +23,12 @@ async function loadEnums() {
 	if (isElectron) {
 		// Use require() in Electron for CommonJS modules
 		const nodeRequire = (window as any).require
-		const clobModule = nodeRequire('@polymarket/clob-client')
+		const clobModule = nodeRequire('@polymarket/clob-client-v2')
 		SideEnum = clobModule.Side
 		OrderTypeEnum = clobModule.OrderType
 	} else {
 		// Fallback to import for non-Electron environments
-		const clobModule = await import('@polymarket/clob-client')
+		const clobModule = await import('@polymarket/clob-client-v2')
 		SideEnum = clobModule.Side
 		OrderTypeEnum = clobModule.OrderType
 	}
@@ -122,7 +122,7 @@ console.log('createAndPostOrder result:', result);
 			marketId: params.marketId,
 			outcome: params.outcome,
 			side: params.side,
-			price: params.price,
+			price: params.price ?? 0,
 			quantity: params.quantity,
 			status: 'PENDING',
 			createdAt: new Date().toISOString(),

@@ -22,11 +22,11 @@ async function loadAssetType() {
 	if (isElectron) {
 		// Use require() in Electron for CommonJS modules
 		const nodeRequire = (window as any).require
-		const clobModule = nodeRequire('@polymarket/clob-client')
+		const clobModule = nodeRequire('@polymarket/clob-client-v2')
 		AssetTypeEnum = clobModule.AssetType
 	} else {
 		// Fallback to import for non-Electron environments
-		const clobModule = await import('@polymarket/clob-client')
+		const clobModule = await import('@polymarket/clob-client-v2')
 		AssetTypeEnum = clobModule.AssetType
 	}
 }

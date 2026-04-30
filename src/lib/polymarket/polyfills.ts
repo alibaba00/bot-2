@@ -1,6 +1,6 @@
 /**
  * Polyfills for Node.js modules in Electron renderer
- * These are needed because @polymarket/clob-client uses Node.js modules
+ * These are needed because Polymarket CLOB clients use Node.js modules
  */
 
 // Check if we're in Electron

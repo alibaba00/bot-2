@@ -24,12 +24,12 @@ async function loadEnums() {
 	if (isElectron) {
 		// Use require() in Electron for CommonJS modules
 		const nodeRequire = (window as any).require
-		const clobModule = nodeRequire('@polymarket/clob-client')
+		const clobModule = nodeRequire('@polymarket/clob-client-v2')
 		SideEnum = clobModule.Side
 		OrderTypeEnum = clobModule.OrderType
 	} else {
 		// Fallback to import for non-Electron environments
-		const clobModule = await import('@polymarket/clob-client')
+		const clobModule = await import('@polymarket/clob-client-v2')
 		SideEnum = clobModule.Side
 		OrderTypeEnum = clobModule.OrderType
 	}
@@ -126,9 +126,10 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 			side: params.side === 'BUY' ? SideEnum.BUY : SideEnum.SELL
 		}
 
-		// Create and post the order
+		// Create and post the order (V2 flow: sign locally, then post)
 		const orderType = OrderTypeEnum?.GTC ?? 'GTC'
-		const result = await client.createAndPostOrder(userOrder, marketParams, orderType, false)
+		const signedOrder = await client.createOrder(userOrder, marketParams)
+		const result = await client.postOrder(signedOrder, orderType, false)
 
 		if (result?.error || result?.status >= 400) {
 			const message =
@@ -157,7 +158,7 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 			marketId: params.marketId,
 			outcome: params.outcome,
 			side: params.side,
-			price: params.price,
+			price: params.price ?? 0,
 			quantity: params.quantity,
 			status: 'PENDING',
 			createdAt: new Date().toISOString(),
@@ -194,9 +195,7 @@ export async function cancelOrder(orderId: string): Promise<any> {
 		// Cancel using CLOB client
 		// Note: The actual implementation depends on how orders are stored
 		// For now, we'll use cancelOrder with order payload
-		const response = await client.cancelOrder({
-			orderID: orderId
-		})
+		const response = await client.cancelOrder(orderId)
 
 		// Update order status in database if it exists
 		if (orderRecord) {
@@ -416,7 +415,8 @@ export async function getOrder(orderId: string): Promise<Order | null> {
 			// Try to get from database
 			const cached = await db.orders.get(orderId)
 			if (cached) {
-				const { syncedAt, ...order } = cached
+				const order = { ...cached }
+				delete (order as Partial<OrderRecord>).syncedAt
 				return order
 			}
 			return null
@@ -452,7 +452,8 @@ export async function getCachedOrders(): Promise<Order[]> {
 	try {
 		const records = await db.orders.orderBy('createdAt').reverse().toArray()
 		return records.map((r) => {
-			const { syncedAt, ...order } = r
+			const order = { ...r }
+			delete (order as Partial<OrderRecord>).syncedAt
 			return order
 		})
 	} catch (error) {

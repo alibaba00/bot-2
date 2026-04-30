@@ -28,3 +28,4 @@ backup/
 *-lock.json
 *.lock
 data/
+.env

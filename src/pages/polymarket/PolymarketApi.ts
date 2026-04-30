@@ -320,6 +320,20 @@ class PolymarketApi {
 	}
 
 
+	// ---------------------------------------------------------------------------- getClobPathFromSlug
+	// path: e.g. A:/DATA/polymarket/clob/btc-updown-5m/2025-12-12/
+	getClobPathFromSlug(slug: string): string | null {
+		const marketType = this.getMarketTypeFromPath(slug)
+		if (!marketType) return null
+		const symbol = this.getSymbolFromSlug(slug)
+		const timestamp = parseInt(slug.split('-')[3])
+		const date = new Date(timestamp * 1000)
+		const dateString = this.getUTCDateFormat(date)
+		return this.clobPath + '/' + symbol + '-' + marketType + '/' + dateString + '/'
+	}
+
+
+
 	// ---------------------------------------------------------------------------- getUTCTimestamp
 	// Function to get the current 15-minute UTC timestamp (rounded down to nearest 15-minute interval)
 	// date: e.g. 2025-12-10

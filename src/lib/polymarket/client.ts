@@ -5,42 +5,31 @@
 
 // Import polyfills first
 import './polyfills'
+import { createWalletClient, http } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 
-// Use dynamic import to avoid bundling issues in Vite
+// Prefer Electron require() to keep Node built-ins (crypto, etc.) available.
 let ClobClientModule: any = null
-let ChainEnum: any = null
-let WalletClass: any = null
-let SIGNATURE_TYPE: number = 1
+const SIGNATURE_TYPE = 1
 
-// Lazy load the modules only when needed (and in Electron)
+// Lazy load the module only when needed.
 async function loadClobClient() {
 	if (ClobClientModule) return
 
-	const isElectron =
-		typeof window !== 'undefined' &&
-		(window as any).navigator?.userAgent?.includes('Electron') &&
-		(window as any).require
-
-	if (!isElectron) {
-		throw new Error('Polymarket client can only be used in Electron environment')
-	}
-
 	try {
-		const nodeRequire = (window as any).require
+		const isElectron =
+			typeof window !== 'undefined' &&
+			(window as any).navigator?.userAgent?.includes('Electron') &&
+			(window as any).require
 
-		// Use require() instead of import() for CommonJS modules in Electron
-		ClobClientModule = nodeRequire('@polymarket/clob-client')
-		ChainEnum = ClobClientModule.Chain
-
-		// Use @ethersproject/wallet (ethers v5) which is compatible with CLOB client
-		try {
-			const ethersWallet = nodeRequire('@ethersproject/wallet')
-			WalletClass = ethersWallet.Wallet
-		} catch {
-			// Fallback to dynamic import if require doesn't work
-			const ethersWallet = await import('@ethersproject/wallet')
-			WalletClass = ethersWallet.Wallet
+		if (isElectron) {
+			const nodeRequire = (window as any).require
+			ClobClientModule = nodeRequire('@polymarket/clob-client-v2')
+			return
 		}
+
+		// Fallback for non-Electron environments.
+		ClobClientModule = await import('@polymarket/clob-client-v2')
 	} catch (error) {
 		console.error('Failed to load Polymarket client:', error)
 		throw error
@@ -94,30 +83,32 @@ export async function initializeClient(): Promise<any> {
 		// Load the client module first
 		await loadClobClient()
 
-		if (!ClobClientModule || !WalletClass) {
+		if (!ClobClientModule?.ClobClient) {
 			throw new Error('Failed to load Polymarket client modules')
 		}
 
 		const config = getValidatedConfig()
+		const rpcUrl = import.meta.env.VITE_POLYGON_RPC_URL || 'https://polygon-rpc.com'
 
-		// Create wallet from private key
-		const wallet = new WalletClass(config.privateKey)
-
-		// Use Polygon mainnet (chain ID 137)
-		const chainId = ChainEnum.POLYGON
+		// Build viem signer (required by clob-client-v2)
+		const account = privateKeyToAccount(config.privateKey as `0x${string}`)
+		const signer = createWalletClient({
+			account,
+			transport: http(rpcUrl)
+		})
 
 		// Use proxy address from config or default to Polymarket CLOB API
 		const host = config.proxyAddress || 'https://clob.polymarket.com'
+		const chain = 137
 
-		// Initialize CLOB client first (without credentials)
-		// Use funder/userId for proxy wallets (signature type 1)
-		clobClient = new ClobClientModule.ClobClient(
+		// Initialize CLOB V2 client first (without credentials)
+		clobClient = new ClobClientModule.ClobClient({
 			host,
-			chainId,
-			wallet,
-			SIGNATURE_TYPE,
-			config.userId
-		)
+			chain,
+			signer,
+			signatureType: SIGNATURE_TYPE,
+			funderAddress: config.userId
+		})
 		console.log('Initial CLOB client created')
 
 		// Create or derive API credentials (required for authenticated endpoints)
@@ -126,12 +117,17 @@ export async function initializeClient(): Promise<any> {
 		try {
 			if (!apiCreds) {
 				console.log('Attempting to derive/create API key...')
-				console.log('Wallet address:', wallet.address)
+				console.log('Wallet address:', account.address)
 				console.log('Config userId:', config.userId)
 
 				try {
-					apiCreds = await clobClient.deriveApiKey()
-				} catch (deriveError) {
+					// V2 convenience method
+					if (typeof clobClient.createOrDeriveApiKey === 'function') {
+						apiCreds = await clobClient.createOrDeriveApiKey()
+					} else {
+						apiCreds = await clobClient.deriveApiKey()
+					}
+				} catch {
 					apiCreds = await clobClient.createApiKey()
 				}
 
@@ -188,14 +184,14 @@ Original error: ${apiKeyError?.data?.error || apiKeyError?.message || String(api
 		}
 
 		console.log('Reinitializing client with API credentials...')
-		clobClient = new ClobClientModule.ClobClient(
+		clobClient = new ClobClientModule.ClobClient({
 			host,
-			chainId,
-			wallet,
-			apiCreds,
-			SIGNATURE_TYPE,
-			config.userId
-		)
+			chain,
+			signer,
+			creds: apiCreds,
+			signatureType: SIGNATURE_TYPE,
+			funderAddress: config.userId
+		})
 		console.log('CLOB client initialized with credentials')
 
 		// Test connection by checking server status

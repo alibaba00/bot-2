@@ -50,7 +50,7 @@ export default defineConfig(({ mode }) => {
 			},
 		},
 		ssr: {
-			noExternal: ['@polymarket/clob-client'],
+			noExternal: ['@polymarket/clob-client-v2'],
 		},
 		server: {
 			port,
@@ -66,7 +66,7 @@ export default defineConfig(({ mode }) => {
 		optimizeDeps: {
 			exclude: [
 				// Exclude problematic packages from pre-bundling
-				'@polymarket/clob-client',
+				'@polymarket/clob-client-v2',
 				'@ethereumjs/util',
 				'@metamask/eth-sig-util',
 				'@polymarket/order-utils',

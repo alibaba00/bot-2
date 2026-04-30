@@ -5,7 +5,6 @@ import useLog from "@/hooks/use-log";
 import { fetchMarketBySlugFromGamma } from "@/lib/polymarket/markets";
 import type { MarketData } from "@/lib/polymarket/types";
 import type { OrderMessage, TradeMessage } from "@/lib/polymarket/user-channel-websocket";
-import { beep } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { create } from 'zustand';
 import { fsPromises } from "./PolymarketApi";
@@ -125,7 +124,7 @@ export default function TradingBotPage() {
 			enabled: true,
 		},
 		down : {
-			enabled: true,
+			enabled: false,
 		},
 		sizeFactor: 5.0,		//size factor to multiply the trade size
 		liveTrading: false as boolean,
@@ -162,31 +161,6 @@ export default function TradingBotPage() {
 		console.log('----------------------onInit:')
 		createMarket()
 	}
-
-
-	// ---------------------------------------------------------------------------- onTime
-	const onTime = (restSeconds: number) => {
-		const sc = setup.current
-		// sc._updateTrade?.('time', restSeconds)
-		useTradingBotStore.setState({ time: restSeconds })
-
-		if (sc.currentMarket?.endTimestamp && Date.now() + 10000 > sc.currentMarket.endTimestamp) {
-			createMarket(20000)	//create next valid market from now + 20 seconds
-		}
-	}
-
-
-	// ---------------------------------------------------------------------------- onExpired
-	const onExpired = async () => {
-		const sc = setup.current
-
-		console.log('----------------------onExpired!')
-		sc._updateTrade?.('expired')
-
-		beep(10, 500)
-		// createMarket()
-	}
-
 
 	// ---------------------------------------------------------------------------- onMarketPriceUpdate
 	/* LastTrade example:

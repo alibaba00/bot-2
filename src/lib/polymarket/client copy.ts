@@ -28,7 +28,7 @@ async function loadClobClient() {
 		const nodeRequire = (window as any).require
 
 		// Use require() instead of import() for CommonJS modules in Electron
-		ClobClientModule = nodeRequire('@polymarket/clob-client')
+		ClobClientModule = nodeRequire('@polymarket/clob-client-v2')
 		ChainEnum = ClobClientModule.Chain
 
 		// Use @ethersproject/wallet (ethers v5) which is compatible with CLOB client

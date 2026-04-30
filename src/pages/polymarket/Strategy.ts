@@ -1,7 +1,6 @@
 import type { Market } from '@/lib/polymarket/types'
-import PolymarketApi, { fsPromises } from './PolymarketApi'
+import PolymarketApi, { fsPromises, fs } from './PolymarketApi'
 import localForage from 'localforage'
-import moment from 'moment';
 
 
 const STORE = localForage.createInstance({
@@ -107,10 +106,10 @@ class _Strategy3 {
 	trades: any[] = []
 
 	setup: any = {
-		symbol : 'btc',
+		symbol : 'eth',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-04-20 00:00:00').getTime(),
-		toDate: new Date('2026-04-30 00:00:00').getTime(),
+		fromDate: new Date('2026-04-30 00:00:00').getTime(),
+		toDate: new Date('2026-04-31 00:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
@@ -161,7 +160,7 @@ class _Strategy3 {
 		console.table(stats)
 		console.log('up trades:', s.up.trades)
 		console.log('down trades:', s.down.trades)
-		console.log('complete!')
+		console.log('complete!', Object.keys(lastTrades.up).length)
 
 		if (Object.keys(lastTrades.up).length > 0){
 			for (const key in lastTrades.up){
@@ -174,8 +173,8 @@ class _Strategy3 {
 					if (lastTrade.open !== currentTrade.open || lastTrade.close !== currentTrade.close){
 						console.log('changed close:', key, lastTrade, '->', currentTrade, await PolymarketApi.cache.getItem(key))
 					}
-					if (lastTrade.outcome !== currentTrade.outcome){
-						console.log('changed outcom:', key, lastTrade, '->', currentTrade, await PolymarketApi.cache.getItem(key))
+					if (lastTrade.won !== currentTrade.won){
+						console.log('changed won:', key, lastTrade, '->', currentTrade, await PolymarketApi.cache.getItem(key))
 					}
 				}else{
 					console.log('missing:', key, lastTrade)
@@ -303,24 +302,21 @@ class _Strategy3 {
 		s.up.trades = {}
 		s.down.trades = {}
 
-		const stat = [] as any[]
-		let index = 0
+		const grid = {}
 		let i: number, j: number, k: number
+		let index = 0
 
 		for (i = 1; i < 100; i++){
-			stat[i] = [] as any[]
+			grid[i] = {} as any
 			for (j = i+1; j <= 100; j++){
-				stat[i][j] = [] as any[]
+				grid[i][j] = {} as any
 				for (k = i-1; k >= 0; k--){
-					stat[i][j][k] = {
+					grid[i][j][k] = {
 						index	: index++,
 						trade	: [i,j,k],
 						count	: 0,
 						won		: 0,
 						lost	: 0,
-						open	: null as number | null,
-						close	: null as number | null,
-						_won	: null as boolean | null,
 						pnl		: 0,
 						pnlc	: 1,
 						wr		: 0,
@@ -332,30 +328,48 @@ class _Strategy3 {
 		}
 
 		let node = null as any
+		let stat = null as any
 
-		for (const key of data.usedMarkets) {
+		for (const slug of data.usedMarkets) {
 			if (!s.isRunning) break
 
-			const market = await PolymarketApi.cache.getItem(key)
-			if (market.chartData?.clob?._complete !== 1) continue
+			stat = null
+			const file = PolymarketApi.getClobPathFromSlug(slug) + slug + '_grid.json'
+			if (fs.existsSync(file)){
+				stat = JSON.parse(await fsPromises?.readFile(file, 'utf8'))
+			}
+			if (!stat){
+				const market = await PolymarketApi.cache.getItem(slug)
+				if (market.chartData?.clob?._complete !== 1) continue
+	
+				const upData = market.chartData?.clob.up
+				stat = this.parseGrid(upData, market.endTimestamp - this.setup.openTimeLimit, market.endTimestamp, market.outcome === 'up')
+				await fsPromises?.writeFile(file, JSON.stringify(stat))
+			}
 
-			const upData = market.chartData?.clob.up
-			this.parseGrid(stat, upData, market.endTimestamp - this.setup.openTimeLimit, market.endTimestamp, market.outcome === 'up')
+			for (i = stat._min; i <= stat._max; i++){
+				for (j = i+1; j <= 100; j++){
+					for (k = i-1; k >= 0; k--){
+						node = stat[i][j][k]
+						if (node[1]) grid[i][j][k].won ++
+						else grid[i][j][k].lost ++
+						grid[i][j][k].count ++
 
-node = stat[20][80][0]
-if (node.close){
-	s.up.trades[market.slug] = {
-		outcome: market.outcome,
-		open: node.open,
-		close: node.close,
-		won: node._won
-	}
-}	
+						if (i === 20 && j === 80 && k === 0){
+							s.up.trades[slug] = {
+								open: stat[i]._open,
+								close: node[0],
+								won: node[1],
+							}
+						}
+					}
+				}
+			}	
 			console.log('ok')
 		}
 
 		const time = (performance.now() - t) / 1000
-		console.log('complete!', stat, time, 'seconds')
+		console.log('complete!', grid, time, 'seconds')
 
 // console.log('save stat to file... A:/DATA/polymarket/export.json')
 // await fsPromises?.writeFile('A:/DATA/polymarket/export.json', JSON.stringify(stat))
@@ -366,7 +380,7 @@ if (node.close){
 		for (let i = 1; i < 100; i++){
 			for (let j = i+1; j <= 100; j++){
 				for (let k = i-1; k >= 0; k--){
-					node = stat[i][j][k]
+					node = grid[i][j][k]
 					node.pnl = parseNumber(((node.won * node.trade[1] + node.lost * node.trade[2]) / node.trade[0]) - node.count)
 					node.wr = parseNumber(1 + node.pnl / node.count)
 					node.abs = parseNumber(1 + node.pnl / data.usedMarkets.length)
@@ -376,17 +390,15 @@ if (node.close){
 		}
 		best.sort((a, b) => b.abs - a.abs)
 		console.log('best:', best.length, best.slice(0, 200))
-		// console.log('best:', best.length, best)
-
-		console.log('result:', stat[20][80][0])
+		console.log('result:', grid[20][80][0])
 		console.log('trades:', s.up.trades)
 		s.isRunning = false
 	}
 
 
 	//---------------------------------------------------------------------------- parseGrid
-	parseGrid(stat: any[], data: any[], timeLimit: number, endTimestamp: number, won: boolean){
-		if (!data?.[0]?.[2]) return		//wrong data
+	parseGrid(data: any[], timeLimit: number, endTimestamp: number, won: boolean): any {
+		if (!data?.[0]?.[2]) return []	//wrong data
 
 		const closeTimeDelay = this.setup.closeTimeDelay
 
@@ -408,30 +420,20 @@ if (node.close){
 		let i: number, j: number, k: number
 		let node = null as any
 
-		// reset all trades
-		for (i = 1; i < 100; i++){
-			for (j = i+1; j <= 100; j++){
-				for (k = i-1; k >= 0; k--){
-					node = stat[i][j][k]
-					node.open = null
-					node.close = null
-					node._won = null
-				}
-			}
-		}
+		const stat = {_min: min, _max: max} as any
 
 		// create all valid trades for this market
 		for (i = min; i <= max; i++){
+			stat[i] = {} as any
+
 			// search for open trade node of this price
 			const open = i >= first ?
 				data.find((e: any) => e[1] >= i)?.[0]
 				: data.find((e: any) => e[1] <= i)?.[0]
+			stat[i]._open = open
 
 			for (j = i+1; j <= 100; j++){
-				for (k = i-1; k >= 0; k--){
-					node = stat[i][j][k]
-					node.open = open
-				}
+				stat[i][j] = {}
 			}
 		}
 
@@ -444,21 +446,12 @@ if (node.close){
 				for (j = i+1; j <= 100; j++){
 					for (k = i-1; k >= 0; k--){
 						node = stat[i][j][k]
-						if (node.open && !node.close && time > node.open){
-							if (i < value && j <= value){		//won
-								node.won ++
-								node.count ++
-								node.close = item[0]
-								node._won = true
-// node._trades.push([node.open, node.close])
+						if (!node && time > stat[i]._open){
+							if (i < value && j <= value){			//won
+								stat[i][j][k] = [item[0], true]
 
 							}else if (i > value && k >= value){		//lost
-								node.lost ++
-								node.count ++
-								node.close = item[0]
-								node._won = false
-// node._trades.push([node.open, node.close])
-
+								stat[i][j][k] = [item[0], false]
 							}
 						}
 					}
@@ -471,61 +464,14 @@ if (node.close){
 			for (j = i+1; j <= 100; j++){
 				for (k = i-1; k >= 0; k--){
 					node = stat[i][j][k]
-					if (node.open && !node.close) {
-						if (won) node.won ++
-						else node.lost ++
-						node.count ++
-						node.close = endTimestamp
-						node._won = won
-// node._trades.push([node.open, endTimestamp])
-
+					if (!node) {
+						stat[i][j][k] = [endTimestamp, won]
 					}
 				}
 			}
 		}
+
+		return stat
 	}
 }
 export const Strategy3 = new _Strategy3()
-
-
-/*
-	// search for next sell or close event
-	for (const item of data) {
-		value = item[2]		//current bid price
-		time = item[0] + closeTimeDelay
-		for (i = value+1; i <= max; i++){	//lost
-			list[i]?.forEach((j: any[]) => {
-				for (k = i-1; k > value; k--){
-					if (!j[k].close && time > j[k].open){
-						j[k].won = true
-						j[k].close = item[0]
-					}
-				}
-			})
-		}
-		for (i = min; i < value; i++){	//won
-			list[i]?.forEach((j: any[]) => {
-				for (k = 0; k < i; k++){
-					if (!j[k].close && time > j[k].open){
-						j[k].won = false
-						j[k].close = item[0]
-					}
-				}
-			})
-		}
-	}
-
-	//close all still open trades
-	let node = null as any
-	for (i = min; i <= max; i++){		//won
-		for (j = i+1; j <= 100; j++){
-			for (k = i-1; k >= 0; k--){
-				node = list[i][j][k]
-				if (!node.close) {
-					node.won = won
-					node.close = endTimestamp
-				}
-			}
-		}
-	}
-*/

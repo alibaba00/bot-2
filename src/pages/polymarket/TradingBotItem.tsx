@@ -1,11 +1,10 @@
-import { cancelOrder, getOrder, placeOrder } from "@/lib/polymarket/orders";
+import { getOrder, placeOrder } from "@/lib/polymarket/orders";
 import type { MarketData, PlaceOrderParams, PlaceOrderResponse } from "@/lib/polymarket/types";
 import { beep } from "@/lib/utils";
 import localForage from "localforage";
-import { useEffect, useReducer, useRef, useState } from "react";
-import ClobMarketTicker, { type LastTrade } from "./ClobMarketTicker";
+import { useEffect, useReducer, useState } from "react";
+import ClobMarketTicker from "./ClobMarketTicker";
 import { getActiveMarketPositionSizes } from "@/lib/polymarket/wallet";
-import { useMarketTimer } from "./TradingBot";
 
 export const TRADE_STORE = localForage.createInstance({
 	name: 'polymarket',
@@ -35,6 +34,8 @@ type TradeSide = {
 	buyLimit: number,		//ticker price trigger limit in % of base price
 	sellLimit: number,		//sell limit market price
 	size: number,			//buy size in USD
+	orderSize: number,		//order size in shares
+	positionSize: number,	//position size in shares
 
 	trades: TradeAction[]
 	state: 'pending' | 'active' | 'buying' | 'selling' | 'positioned' | 'completed' | 'cancelled'
@@ -195,13 +196,13 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		// side.price = price
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && ask <= 0.01){
+		if (side.state === 'pending' && ask <= 0.3){
 			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
 			side.state = 'active'
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:side.outcome,
-				price		:0.01,
+				price		:0.2,
 				timestamp	:Date.now(),
 				size		:10,		//2 * 0.6 = 1.2
 			})		//-> active
@@ -210,24 +211,20 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			})
 
 		}else if (side.state === 'active'){
-			if (bid >= 0.9){
+			if (ask <= 0.2){
+				side.state = 'buying'
+				checkPositionSize(trade)
+			}
+		}else if (side.state === 'positioned'){
+			if (bid >= 0.5){
 				side.state = 'selling'
 				setOrder(setup, trade, {
 					type		:'SELL',
 					outcome		:side.outcome,
-					price		:0.9,
+					price		:0.8,
 					timestamp	:Date.now(),
 				})		//-> active
 			}
-			// else if (ask <= 0.28){
-			// 	side.state = 'selling'
-			// 	setOrder(setup, trade, {
-			// 		type		:'SELL',
-			// 		outcome		:side.outcome,
-			// 		price		:0.29,
-			// 		timestamp	:Date.now(),
-			// 	})		//-> active
-			// }
 		}
 	}
 
@@ -330,7 +327,8 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				>
 				<div>{state + (state === 'closed' && trade.outcome ? ' [' + trade.outcome?.toUpperCase() + ']' : '')}</div>
 				<div></div>
-				<div>{(trade.timeFrame / 60000).toFixed(2) + ' | ' + (trade.restTime / 60000).toFixed(2)}</div>
+				{/* <div>{(trade.timeFrame / 60000).toFixed(2) + ' | ' + (trade.restTime / 60000).toFixed(2)}</div> */}
+				<div></div>
 				<div style={{
 					cursor: 'pointer',
 					color: trade.up.state === 'active'
@@ -342,9 +340,8 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				>
 				</div>
 				<TradeState trade={trade} side='up' />
-				<div>{trade.up.state}</div>
-				<div>{trade.up.size.toFixed(2)}</div>
-				<div style={{
+				<div>{trade.up.orderSize.toFixed(2) + ' | ' + trade.up.positionSize.toFixed(2)}</div>
+				{/* <div style={{
 					cursor: 'pointer',
 					color: trade.down.state === 'active'
 						? 'orange' // Tailwind blue-500 hex
@@ -353,10 +350,9 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 							: '#999' // Tailwind gray-500 hex
 				}}
 				>
-				</div>
+				</div> */}
 				<TradeState trade={trade} side='down' />
-					<div>{trade.down.state}</div>
-				<div>{trade.down.size.toFixed(2)}</div>
+				<div>{trade.down.orderSize.toFixed(2) + ' | ' + trade.down.positionSize.toFixed(2)}</div>
 				<div></div>
 			</div>
 			<div className={`absolute top-0 right-0 text-xs text-gray-500 ${trade.isLive ? 'text-green-500' : 'text-red-500'}`}>{trade.isLive ? 'live' : 'not live'}</div>
@@ -372,7 +368,7 @@ const TradeState = ({trade, side}: {trade: Trade, side: 'up' | 'down'}) => {
 
 	return (
 		<div className='flex flex-row justify-between items-center'>
-			<div>{tradeSide.state}</div>
+			<div>{enabled ? tradeSide.state : 'disabled'}</div>
 			{trade.state === 'open' && (
 				<div
 					className={`rounded-full w-3 h-3 cursor-pointer ${enabled ? 'bg-green-600' : 'bg-red-600'}`}
@@ -389,13 +385,27 @@ const TradeState = ({trade, side}: {trade: Trade, side: 'up' | 'down'}) => {
 }
 
 
-// ------------------------------------------------------------------------ parseNumber
-// const parseNumber = (num: number, float: number | null = null) => {
-// 	if (float) num = parseFloat(num.toFixed(float))
-// 	return parseFloat(num.toPrecision(12))
-// }
-const parseNumber = (num: number) => {
-	return parseFloat(num.toFixed(12))
+// ---------------------------------------------------------------------------- checkPositionSize
+const checkPositionSize = async (trade: Trade) => {
+	if (trade.state !== 'open' || (trade.up.state !== 'buying' && trade.down.state !== 'buying')) return
+
+	const sizes = await getActiveMarketPositionSizes({
+		conditionId: trade.conditionId || '',
+		upTokenId: trade.up.tokenId || '',
+		downTokenId: trade.down.tokenId || '',
+	})
+console.log('!!!!!!!!!!!!!!!!!! sizes:', sizes)
+	if (sizes){
+		trade.up.positionSize = sizes.up
+		trade.down.positionSize = sizes.down
+
+		if (trade.up.positionSize > trade.up.orderSize * 0.5) trade.up.state = 'positioned'
+		if (trade.down.positionSize > trade.down.orderSize * 0.5) trade.down.state = 'positioned'
+	}
+	if (trade.up.state === 'buying' || trade.down.state === 'buying'){
+		await new Promise(resolve => setTimeout(resolve, 5000))
+		checkPositionSize(trade)
+	}
 }
 
 
@@ -423,11 +433,14 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 			: action.type === 'BUY' ? 1 : 0
 
 	if (!action.size){
-		action.size = side.size = await getOrderSize(trade, side.outcome)
-		if (!action.size){
+		await setPositionSize(trade)
+		if (!side.positionSize){
 			console.error('Error getting order size:', trade.conditionId)
 			return
 		}
+		action.size = side.positionSize
+	}else{
+		side.orderSize = action.size
 	}
 
 	const orderData: PlaceOrderParams = {
@@ -485,16 +498,17 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 }
 
 
-// ---------------------------------------------------------------------------- getOrderSize
-const getOrderSize = async (trade: Trade, side: 'up' | 'down') => {
-	console.log('---getOrderSize:', trade.conditionId)
+// ---------------------------------------------------------------------------- setPositionSize
+const setPositionSize = async (trade: Trade) => {
+console.log('---setPositionSize:', trade.conditionId)
 	const sizes = await getActiveMarketPositionSizes({
 		conditionId: trade.conditionId || '',
 		upTokenId: trade.up.tokenId || '',
 		downTokenId: trade.down.tokenId || '',
 	})
-	console.log('sizes:', sizes)
-	return sizes[side]
+console.log('sizes:', sizes)
+	trade.up.size = sizes.up
+	trade.down.size = sizes.down
 }
 
 

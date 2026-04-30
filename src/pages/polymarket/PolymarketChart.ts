@@ -534,7 +534,7 @@ const parseNumber = (num: number) => {
 let dirList: any[] = [];
 
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
-	// console.log('getAllMarkets_clob running', symbol, date)
+	console.log('getAllMarkets_clob', symbol || '', date || '', '...')
 
 	dirList = dirList.length? dirList : await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
 	const dateString = (date || new Date()).toISOString().substring(0, 10);
@@ -839,8 +839,10 @@ export const getMarket = async (slug: string, filePath: string | null = null, us
 
 	if (!market && filePath) {		//market not cached! load and update market from file
 		if (fs.existsSync(filePath) && useCache) {
+			console.log('reload market from file:', filePath)
 			const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
 			market = JSON.parse(jsonFileContent) as Market
+			await PolymarketApi.cacheMarket(market)		//reload market cache
 	
 		}else{
 			console.log('market file not found:', filePath)
@@ -864,6 +866,7 @@ export const updateAllMarketData_clob = async (all: boolean = false) => {
 	await PolymarketApi.store.setItem('lastUpdate_clobData', Date.now())
 
 	const dataFiles = await getAllMarkets_clob()
+
 	console.log('Updating all market data from clob (', dataFiles.length,
 		'files, lastUpdate:', moment(new Date(lastUpdate_logfiles)).format('YYYY-MM-DD HH:mm:ss'), ') ...')
 
