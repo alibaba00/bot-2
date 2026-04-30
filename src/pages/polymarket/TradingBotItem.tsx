@@ -199,6 +199,10 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		if (side.state === 'pending' && ask <= 0.3){
 			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
 			side.state = 'active'
+			// Disable the opposite side when a trade is bought
+const oppositeSide = side.outcome === 'up' ? trade.down : trade.up
+oppositeSide.enabled = false
+render()
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:side.outcome,
@@ -216,7 +220,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				checkPositionSize(trade)
 			}
 		}else if (side.state === 'positioned'){
-			if (bid >= 0.5){
+			if (bid >= 0.2){
 				side.state = 'selling'
 				setOrder(setup, trade, {
 					type		:'SELL',
@@ -304,6 +308,32 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		}
 	}
 
+
+	// ---------------------------------------------------------------------------- checkPositionSize
+	const checkPositionSize = async (trade: Trade) => {
+		if (!trade.isLive || trade.state !== 'open' || (trade.up.state !== 'buying' && trade.down.state !== 'buying')) return
+
+		const sizes = await getActiveMarketPositionSizes({
+			conditionId: trade.conditionId || '',
+			upTokenId: trade.up.tokenId || '',
+			downTokenId: trade.down.tokenId || '',
+		})
+	console.log('!!!! sizes:', trade.slug, sizes)
+		if (sizes){
+			trade.up.positionSize = sizes.up
+			trade.down.positionSize = sizes.down
+
+			if (trade.up.positionSize > trade.up.orderSize * 0.5) trade.up.state = 'positioned'
+			if (trade.down.positionSize > trade.down.orderSize * 0.5) trade.down.state = 'positioned'
+			render()
+		}
+		if (trade.up.state === 'buying' || trade.down.state === 'buying'){
+			await new Promise(resolve => setTimeout(resolve, 5000))
+			checkPositionSize(trade)
+		}
+	}
+
+
 	return (
 		<div className='relative w-full p-2 bg-gray-100 dark:bg-gray-900 rounded-md text-xs border-l-4'
 			style={{borderLeftColor: state === 'completed' ? 'green'
@@ -366,6 +396,10 @@ const TradeState = ({trade, side}: {trade: Trade, side: 'up' | 'down'}) => {
 	const tradeSide = trade[side as 'up' | 'down']
 	const [enabled, setEnabled] = useState<boolean>(tradeSide.enabled)
 
+	useEffect(() => {
+		setEnabled(tradeSide.enabled)
+	}, [tradeSide.enabled])
+
 	return (
 		<div className='flex flex-row justify-between items-center'>
 			<div>{enabled ? tradeSide.state : 'disabled'}</div>
@@ -382,30 +416,6 @@ const TradeState = ({trade, side}: {trade: Trade, side: 'up' | 'down'}) => {
 			)}
 		</div>
 	)
-}
-
-
-// ---------------------------------------------------------------------------- checkPositionSize
-const checkPositionSize = async (trade: Trade) => {
-	if (trade.state !== 'open' || (trade.up.state !== 'buying' && trade.down.state !== 'buying')) return
-
-	const sizes = await getActiveMarketPositionSizes({
-		conditionId: trade.conditionId || '',
-		upTokenId: trade.up.tokenId || '',
-		downTokenId: trade.down.tokenId || '',
-	})
-console.log('!!!!!!!!!!!!!!!!!! sizes:', sizes)
-	if (sizes){
-		trade.up.positionSize = sizes.up
-		trade.down.positionSize = sizes.down
-
-		if (trade.up.positionSize > trade.up.orderSize * 0.5) trade.up.state = 'positioned'
-		if (trade.down.positionSize > trade.down.orderSize * 0.5) trade.down.state = 'positioned'
-	}
-	if (trade.up.state === 'buying' || trade.down.state === 'buying'){
-		await new Promise(resolve => setTimeout(resolve, 5000))
-		checkPositionSize(trade)
-	}
 }
 
 

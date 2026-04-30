@@ -43,6 +43,27 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 
 		let updated = false
 
+		//--- update ticker data complete state
+		const timeLimit = market.duration / 5 * 60 * 1000
+		const firstTimestamp = market.startTimestamp + timeLimit
+		const lastTimestamp = market.endTimestamp - timeLimit
+		for (const source of Object.keys(tickerDataSources)) {
+			if (source === 'clob') continue
+			const tickerData = market.chartData.ticker[source]
+		
+			if (tickerData && tickerData._complete === undefined){
+				tickerData._complete = tickerData.length > 20
+					&& tickerData[0][0] < firstTimestamp
+					&& tickerData[tickerData.length-1][0] > lastTimestamp
+		
+				updated = true
+			}
+		}
+		if (updated){
+			console.log('update ticker data complete state:')
+			market.chartData._complete = true
+		}
+		
 		//--- update chartData version
 		if (market.chartData?.version !== chartDataVersion) {
 // console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
@@ -62,10 +83,11 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 		// 	}
 		}
 
-		if (market.chartData._complete && !market.chartData?.grid){
-			///
-		}
+		// if (market.chartData._complete && !market.chartData?.grid){
+		// 	///
+		// }
 
+	
 		//--- fixing openPrice
 		const priceToBeat = market.marketData?.sourceData?.events?.[0]?.eventMetadata?.priceToBeat
 		// if (priceToBeat && priceToBeat !== market.openPrice) {

@@ -106,7 +106,7 @@ class _Strategy3 {
 	trades: any[] = []
 
 	setup: any = {
-		symbol : 'eth',
+		symbol : 'xrp',
 		marketType: 'updown-5m',
 		fromDate: new Date('2026-04-30 00:00:00').getTime(),
 		toDate: new Date('2026-04-31 00:00:00').getTime(),

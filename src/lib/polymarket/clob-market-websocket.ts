@@ -101,6 +101,10 @@ export class CLOBMarketWebSocket {
 			this.reconnectAttempts = 0
 			this.isConnecting = false
 			this.isConnected = false
+			if (this.reconnectTimeoutId !== null) {
+				clearTimeout(this.reconnectTimeoutId)
+				this.reconnectTimeoutId = null
+			}
 			if (this.ws) {
 				this.ws.onopen = null
 				this.ws.onmessage = null
@@ -139,6 +143,12 @@ export class CLOBMarketWebSocket {
 				this.isConnecting = false
 				this.isConnected = true
 				this.reconnectAttempts = 0
+
+				// Drop any stale reconnect from a previous socket close (avoids piled-up timers + bogus logs)
+				if (this.reconnectTimeoutId !== null) {
+					clearTimeout(this.reconnectTimeoutId)
+					this.reconnectTimeoutId = null
+				}
 
 				// Subscribe to market(s)
 				if (this.ws && this.assetIds.length > 0) {
@@ -238,10 +248,17 @@ export class CLOBMarketWebSocket {
 				this.ws = null
 				this.stopPing()
 
+				// Each new TCP/WebSocket session needs a subscribe; do not reuse dedupe key from old socket
+				this.lastSubscriptionKey = null
+
 				this.callbacks.onDisconnect?.()
 
 				// Auto-reconnect nach festem Delay (wie Coinbase), solange gewünscht
 				if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+					if (this.reconnectTimeoutId !== null) {
+						clearTimeout(this.reconnectTimeoutId)
+						this.reconnectTimeoutId = null
+					}
 					this.reconnectAttempts++
 					this.reconnectTimeoutId = setTimeout(() => {
 						this.reconnectTimeoutId = null
