@@ -108,13 +108,13 @@ class _Strategy3 {
 	setup: any = {
 		symbol : 'xrp',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-04-30 00:00:00').getTime(),
-		toDate: new Date('2026-04-31 00:00:00').getTime(),
+		fromDate: new Date('2026-05-01 00:00:00').getTime(),
+		toDate: new Date('2026-05-02 00:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
-		'up': {enabled: true, buyLimit: 20, size: 1, sellLimit: 80, closeLimit: 0, trades: {} as any[]},
-		'down': {enabled: false, buyLimit: 20, size: 1, sellLimit: 80, closeLimit: 0, trades: {} as any[]},
+		'up': {enabled: true, buyLimit: 30, size: 1, sellLimit: 70, closeLimit: 10, trades: {} as any[]},
+		'down': {enabled: false, buyLimit: 30, size: 1, sellLimit: 70, closeLimit: 10, trades: {} as any[]},
 		isRunning: false
 	}
 
@@ -355,7 +355,7 @@ class _Strategy3 {
 						else grid[i][j][k].lost ++
 						grid[i][j][k].count ++
 
-						if (i === 20 && j === 80 && k === 0){
+						if (i === 30 && j === 70 && k === 10){
 							s.up.trades[slug] = {
 								open: stat[i]._open,
 								close: node[0],
@@ -390,7 +390,7 @@ class _Strategy3 {
 		}
 		best.sort((a, b) => b.abs - a.abs)
 		console.log('best:', best.length, best.slice(0, 200))
-		console.log('result:', grid[20][80][0])
+		console.log('result:', grid[30][70][10])
 		console.log('trades:', s.up.trades)
 		s.isRunning = false
 	}

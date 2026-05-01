@@ -26,7 +26,7 @@ type TradeAction = {
 type TradeSide = {
 	enabled: boolean
 	outcome: 'up' | 'down'
-	tokenId: string
+	tokenId: string			//asset id
 	price: number
 
 	orderLimit: number,		//order trigger to set buy limit
@@ -37,12 +37,14 @@ type TradeSide = {
 	orderSize: number,		//order size in shares
 	positionSize: number,	//position size in shares
 
-	trades: TradeAction[]
+	trades: TradeAction[],
+	eventLog: any[],
 	state: 'pending' | 'active' | 'buying' | 'selling' | 'positioned' | 'completed' | 'cancelled'
 	buyOrder?: PlaceOrderResponse | null
 	sellOrder?: PlaceOrderResponse | null
 }
 
+// for TradingBot.ts createTrade
 export type Trade = {
 	symbol: string
 	market?: MarketData
@@ -122,7 +124,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			setState('closed')
 			return
 
-		}else if (type === 'time'){
+		// }else if (type === 'time'){
 			// console.log('---TradeItem onUpdate time:', value)	// 300 -> 0
 			// setTime(value)
 			// const changedUp = checkTradeCancel(trade.up, value)
@@ -132,26 +134,29 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			// 	render()
 			// 	beep(20, 300)
 			// }
-		}else if (type === 'log'){
-			console.log('---TradeItem onUpdate log:', value)
+		// }else if (type === 'log'){
+			// console.log('---TradeItem onUpdate log:', value)
 			// trade.logs.push(value)
 			// saveTrade(trade, 3)
 
-		}else if (type === 'tickerPrice'){
+		// }else if (type === 'tickerPrice'){
 			// setTickerPrice(value.timestamp, value.price)
 
-		}else if (type === 'marketPrice'){
+		// }else if (type === 'marketPrice'){
 			// console.log('---TradeItem onUpdate marketPrice:', value)
 			// setMarketPrice(value.timestamp, value.outcome, value.price)
 
 		// }else if (type === 'tradeUpdate'){
 		// 	console.log('---TradeItem onUpdate tradeUpdate:', value)
 
+		// }else if (type === 'orderUpdate'){
+		// 	console.log('---TradeItem onUpdate orderUpdate:', value)
+
 		}else if (type === 'connected'){
 			trade.isConnected = value
 			render()
 
-		}else if (type === 'state'){
+		// }else if (type === 'state'){
 			// setState(value)
 		}
 	}
@@ -196,7 +201,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		// side.price = price
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && ask <= 0.3){
+		if (side.state === 'pending' && ask <= 0.35){
 			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
 			side.state = 'active'
 			// Disable the opposite side when a trade is bought
@@ -206,26 +211,26 @@ render()
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:side.outcome,
-				price		:0.2,
+				price		:0.3,
 				timestamp	:Date.now(),
-				size		:10,		//2 * 0.6 = 1.2
+				size		:setup.orderSize,
 			})		//-> active
 			.then(() => {
 				// if (trade.isLive) checkTradeSize(trade)
 			})
 
 		}else if (side.state === 'active'){
-			if (ask <= 0.2){
+			if (ask <= 0.3){
 				side.state = 'buying'
 				checkPositionSize(trade)
 			}
 		}else if (side.state === 'positioned'){
-			if (bid >= 0.2){
+			if (bid <= 0.3){
 				side.state = 'selling'
 				setOrder(setup, trade, {
 					type		:'SELL',
 					outcome		:side.outcome,
-					price		:0.8,
+					price		:0.7,
 					timestamp	:Date.now(),
 				})		//-> active
 			}
@@ -465,7 +470,7 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 	action.orderData = orderData
 	console.log('!!!!!!!!!!!!!!!! set order:', trade, trade.isLive, orderData);
 	
-	if (setup._log) setup._log('> set order: ' + action.type, orderData)	//-> onUpdate log
+	if (setup._log) setup._log('> set order: ' + action.type + ' (live:' + trade.isLive + ')', orderData)	//-> onUpdate log
 
 	if (trade.isLive) {
 		let order: PlaceOrderResponse | null = null

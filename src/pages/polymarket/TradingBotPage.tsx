@@ -43,7 +43,7 @@ export default function TradingBotPage() {
 				outcome: trade.outcome,
 				timestamp: trade.timestamp,
 			})
-			setup.current._updateTrade?.('tradeUpdate', trade)
+			// setup.current._updateTrade?.('tradeUpdate', trade)
 		},
 		onOrderUpdate: (order: OrderMessage) => {
 			console.log('---Order Update (UserChannel)', order.type, order)
@@ -59,17 +59,17 @@ export default function TradingBotPage() {
 				outcome: order.outcome,
 				timestamp: order.timestamp,
 			})
-			setup.current._updateTrade?.('orderUpdate', order)
+			// setup.current._updateTrade?.('orderUpdate', order)
 		},
 		onError: (error) => {
 			console.error('---Error (UserChannel)', error)
 			setup.current.isConnected = false
-			setup.current._updateTrade?.('connected', false)
+			// setup.current._updateTrade?.('connected', false)
 		},
 		onConnect: () => {
 			console.log('---Connect (UserChannel)')
 			setup.current.isConnected = true
-			setup.current._updateTrade?.('connected', true)
+			// setup.current._updateTrade?.('connected', true)
 			log('Connect (UserChannel)', 'connected')
 
 		},
@@ -82,7 +82,10 @@ export default function TradingBotPage() {
 	})
 
 	const log = (action: string, data: any) => {
-		setup.current._updateTrade?.('log', {action: action, data: data, timestamp: Date.now()})
+		if (data.asset_id && setup.current.assets[data.asset_id]) {
+			setup.current.assets[data.asset_id].eventLog.push({action: action, data: data, timestamp: Date.now()})
+		}
+		// setup.current._updateTrade?.('log', {action: action, data: data, timestamp: Date.now()})
 		addLog(action, data)
 	}
 
@@ -126,6 +129,7 @@ export default function TradingBotPage() {
 		down : {
 			enabled: true,
 		},
+		orderSize: 10,
 		sizeFactor: 5.0,		//size factor to multiply the trade size
 		liveTrading: false as boolean,
 		isConnected: false as boolean,
@@ -142,7 +146,7 @@ export default function TradingBotPage() {
 			}
 		},
 		trade: null as Trade | null,		//current trade
-		assets: {},		//assets lookup table
+		assets: {},		//assets lookup table to update events. assets are set on TradingBot.ts createTrade
 		_updateTrade: null as ((type: string, value?: any) => void) | null,		//update trade state	
 		_log: log,
 		_createMarket: createMarket,
