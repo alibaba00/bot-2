@@ -201,7 +201,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		// side.price = price
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && ask <= 0.35){
+		if (side.state === 'pending' && ask <= 0.25){
 			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
 			side.state = 'active'
 			// Disable the opposite side when a trade is bought
@@ -211,7 +211,7 @@ render()
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:side.outcome,
-				price		:0.3,
+				price		:0.2,
 				timestamp	:Date.now(),
 				size		:setup.orderSize,
 			})		//-> active
@@ -219,21 +219,21 @@ render()
 				// if (trade.isLive) checkTradeSize(trade)
 			})
 
-		}else if (side.state === 'active'){
-			if (ask <= 0.3){
-				side.state = 'buying'
-				checkPositionSize(trade)
-			}
-		}else if (side.state === 'positioned'){
-			if (bid <= 0.3){
-				side.state = 'selling'
-				setOrder(setup, trade, {
-					type		:'SELL',
-					outcome		:side.outcome,
-					price		:0.7,
-					timestamp	:Date.now(),
-				})		//-> active
-			}
+		// }else if (side.state === 'active'){
+		// 	if (ask <= 0.3){
+		// 		side.state = 'buying'
+		// 		checkPositionSize(trade)
+		// 	}
+		// }else if (side.state === 'positioned'){
+		// 	if (bid <= 0.3){
+		// 		side.state = 'selling'
+		// 		setOrder(setup, trade, {
+		// 			type		:'SELL',
+		// 			outcome		:side.outcome,
+		// 			price		:0.7,
+		// 			timestamp	:Date.now(),
+		// 		})		//-> active
+		// 	}
 		}
 	}
 

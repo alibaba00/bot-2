@@ -30,6 +30,7 @@ interface CryptoPriceResponse {
 	completed?: boolean
 	incomplete?: boolean
 	cached?: boolean
+	failed?: boolean
 }
 
 
@@ -295,20 +296,26 @@ class PolymarketApi {
 		if (market.marketData?.closed) {
 			market.closed = true
 			const priceData = await this.getCryptoPrice(market)
-			if (!priceData) return null
+			if (priceData?.failed){
+				market.state = 'failed'
 
-			console.log('priceData:', priceData)
-			if (priceData?.openPrice) {
-				market.openPrice = priceData.openPrice
-				market.openPriceTimestamp = priceData.timestamp || null
-			}
-			if (priceData?.closePrice) {
-				market.closePrice = priceData.closePrice
-				market.closePriceTimestamp = priceData.timestamp || null
-			}
-			const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
-			if (outcome !== market.outcome) {
-				market.outcome = outcome
+			}else if (!priceData){
+				return null
+
+			}else{
+				console.log('priceData:', priceData)
+				if (priceData?.openPrice) {
+					market.openPrice = priceData.openPrice
+					market.openPriceTimestamp = priceData.timestamp || null
+				}
+				if (priceData?.closePrice) {
+					market.closePrice = priceData.closePrice
+					market.closePriceTimestamp = priceData.timestamp || null
+				}
+				const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
+				if (outcome !== market.outcome) {
+					market.outcome = outcome
+				}
 			}
 		}
 
@@ -413,11 +420,12 @@ class PolymarketApi {
 					errorText
 				)
 				// console.log('❌ getCryptoPrice failed:', market)
-				return null
+				return {failed: true} as CryptoPriceResponse		//market failed
 			}
 			
 			const data = await response.json() as CryptoPriceResponse
 			return data
+
 		} catch (error) {
 			console.error('❌ getCryptoPrice error:', error)
 			return null

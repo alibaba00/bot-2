@@ -108,13 +108,15 @@ class _Strategy3 {
 	setup: any = {
 		symbol : 'xrp',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-05-01 00:00:00').getTime(),
-		toDate: new Date('2026-05-02 00:00:00').getTime(),
+		fromDate: new Date('2026-05-01 20:00:00').getTime(),
+		toDate: new Date('2026-05-03 06:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
+		marketTimeLimit: 20 * 1000,		//20 seconds market timeout before closing (to prevent price glitches)
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
-		'up': {enabled: true, buyLimit: 30, size: 1, sellLimit: 70, closeLimit: 10, trades: {} as any[]},
-		'down': {enabled: false, buyLimit: 30, size: 1, sellLimit: 70, closeLimit: 10, trades: {} as any[]},
+		gridVersion: 1,
+		'up': {enabled: true, buyLimit: 20, size: 1, sellLimit: 100, closeLimit: 0, trades: {} as any[]},
+		'down': {enabled: false, buyLimit: 20, size: 1, sellLimit: 100, closeLimit: 0, trades: {} as any[]},
 		isRunning: false
 	}
 
@@ -199,8 +201,7 @@ class _Strategy3 {
 		let down: any[] = []
 
 		if (stats.up.enabled){
-			up = market.chartData.clob.up
-				.map((e: any) => [e[0], Math.floor(parseNumber(e[1] * 100)), Math.floor(parseNumber(e[2] * 100))])
+			up = this.getMarketClobData(market, 'up')
 
 			const buyLimit = stats.up.buyLimit
 			if (buyLimit >= up[0][1]){		//buy limit is greater than first price
@@ -210,8 +211,7 @@ class _Strategy3 {
 			}
 		}
 		if (stats.down.enabled){
-			down = market.chartData.clob.down
-				.map((e: any) => [e[0], Math.floor(parseNumber(e[1] * 100)), Math.floor(parseNumber(e[2] * 100))])
+			down = this.getMarketClobData(market, 'down')
 
 			const buyLimit = stats.down.buyLimit
 			if (buyLimit >= down[0][1]){		//buy limit is greater than first price
@@ -285,7 +285,7 @@ class _Strategy3 {
 
 
 	//---------------------------------------------------------------------------- run_multi
-	async run_multi(): Promise<void> {
+	async run_multi(side: string = 'up'): Promise<void> {
 		const s = this.setup
 		if (s.isRunning){
 			s.isRunning = false
@@ -334,16 +334,19 @@ class _Strategy3 {
 			if (!s.isRunning) break
 
 			stat = null
-			const file = PolymarketApi.getClobPathFromSlug(slug) + slug + '_grid.json'
+			const file = PolymarketApi.getClobPathFromSlug(slug) + slug + '_' + side + '_grid.json'
 			if (fs.existsSync(file)){
 				stat = JSON.parse(await fsPromises?.readFile(file, 'utf8'))
+				if (stat._version !== this.setup.gridVersion) stat = null
 			}
 			if (!stat){
 				const market = await PolymarketApi.cache.getItem(slug)
 				if (market.chartData?.clob?._complete !== 1) continue
 	
-				const upData = market.chartData?.clob.up
-				stat = this.parseGrid(upData, market.endTimestamp - this.setup.openTimeLimit, market.endTimestamp, market.outcome === 'up')
+				const data = this.getMarketClobData(market, side)
+				stat = this.parseGrid(data, market.endTimestamp - this.setup.openTimeLimit, market.endTimestamp, market.outcome === 'up')
+				stat._version = this.setup.gridVersion
+				stat._createdAt = Date.now()
 				await fsPromises?.writeFile(file, JSON.stringify(stat))
 			}
 
@@ -355,7 +358,7 @@ class _Strategy3 {
 						else grid[i][j][k].lost ++
 						grid[i][j][k].count ++
 
-						if (i === 30 && j === 70 && k === 10){
+						if (i === 20 && j === 100 && k === 0){
 							s.up.trades[slug] = {
 								open: stat[i]._open,
 								close: node[0],
@@ -369,7 +372,7 @@ class _Strategy3 {
 		}
 
 		const time = (performance.now() - t) / 1000
-		console.log('complete!', grid, time, 'seconds')
+		console.log('complete!', side, grid, time, 'seconds')
 
 // console.log('save stat to file... A:/DATA/polymarket/export.json')
 // await fsPromises?.writeFile('A:/DATA/polymarket/export.json', JSON.stringify(stat))
@@ -390,7 +393,7 @@ class _Strategy3 {
 		}
 		best.sort((a, b) => b.abs - a.abs)
 		console.log('best:', best.length, best.slice(0, 200))
-		console.log('result:', grid[30][70][10])
+		console.log('result:', grid[20][100][0])
 		console.log('trades:', s.up.trades)
 		s.isRunning = false
 	}
@@ -398,13 +401,6 @@ class _Strategy3 {
 
 	//---------------------------------------------------------------------------- parseGrid
 	parseGrid(data: any[], timeLimit: number, endTimestamp: number, won: boolean): any {
-		if (!data?.[0]?.[2]) return []	//wrong data
-
-		const closeTimeDelay = this.setup.closeTimeDelay
-
-		// create all trades for this market
-		data = data.map((e: any) => [e[0], Math.floor(parseNumber(e[1] * 100)), Math.floor(parseNumber(e[2] * 100))])
-
 		// get min and max prices
 		let min = 100, max = 0, value = 0, time = 0
 		for (const item of data){
@@ -436,6 +432,8 @@ class _Strategy3 {
 				stat[i][j] = {}
 			}
 		}
+
+		const closeTimeDelay = this.setup.closeTimeDelay
 
 		// search for next sell or close event
 		for (const item of data) {
@@ -473,5 +471,16 @@ class _Strategy3 {
 
 		return stat
 	}
+
+
+	getMarketClobData(market, side: string): any[] {
+		const data = market.chartData?.clob[side]
+		if (!data?.[0]?.[2]) return []		//wrong data
+		const timeLimit = market.endTimestamp - this.setup.marketTimeLimit
+
+		return data.filter((e: any) => e[0] <= timeLimit)
+			.map((e: any) => [e[0], Math.floor(parseNumber(e[1] * 100)), Math.floor(parseNumber(e[2] * 100))])
+	}
+
 }
 export const Strategy3 = new _Strategy3()

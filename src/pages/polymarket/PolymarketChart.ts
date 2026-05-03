@@ -553,18 +553,26 @@ const parseNumber = (num: number) => {
 
 
 // ---------------------------------------------------------------------------- getAllMarkets_clob_2
-let dirList: any[] = [];
+let dirList: any[] = []
 
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
 	console.log('getAllMarkets_clob', symbol || '', date || '', '...')
 
-	dirList = dirList.length? dirList : await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
+	if (!dirList.length){
+		dirList = await PolymarketApi.store.getItem('dirList') as any[]
+
+		if (!dirList?.length){
+			dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
+			dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
+			await PolymarketApi.store.setItem('dirList', dirList)
+		}
+	}
+	if (!dirList?.length) return []
+
 	const dateString = (date || new Date()).toISOString().substring(0, 10);
 
-	const fileList: any[] = dirList.filter((entry: any) => entry.isFile()
-		&& entry.name.endsWith('.csv')
-		// && (symbol ? entry.name.startsWith(symbol) : true)
-		&& (symbol ? entry.path.includes('\\' + symbol + '-') : true)
+	const fileList: any[] = dirList.filter((entry: any) =>
+		(symbol ? entry.path.includes('\\' + symbol + '-') : true)
 		&& (date ? entry.path.endsWith(dateString) : true)
 	).map((entry: any) => ({
 		folder: entry.path.replaceAll('\\', '/'),
@@ -691,6 +699,8 @@ export const updateLogfiles = async () => {
 
 	console.log('update markets logfiles...')
 	dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
+	dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
+	await PolymarketApi.store.setItem('dirList', dirList)
 
 	console.log('---Complete! new total files:', dirList.length)
 }
@@ -1035,6 +1045,13 @@ const updatePriceData = async (market: Market) => {
 			return false
 		}
 		console.log('update priceData:', market.slug, priceData)
+
+		if (priceData?.failed){
+			market.state = 'failed'
+			updated = true
+			return updated		//market failed
+		}
+
 		if (priceData?.openPrice) {
 			market.openPrice = priceData.openPrice
 			market.openPriceTimestamp = priceData.timestamp || null

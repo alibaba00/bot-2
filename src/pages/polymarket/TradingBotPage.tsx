@@ -127,7 +127,7 @@ export default function TradingBotPage() {
 			enabled: true,
 		},
 		down : {
-			enabled: true,
+			enabled: false,
 		},
 		orderSize: 10,
 		sizeFactor: 5.0,		//size factor to multiply the trade size

@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import PolymarketApi from "./PolymarketApi";
 import * as PolymarketChart from "./PolymarketChart";
 import moment from "moment";
+import { Switch } from "@/components/ui/switch";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -350,6 +351,7 @@ export default function ChartPage() {
 	const [marketType, setMarketType] = useState('all')
 	const [side, setSide] = useState('up')
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
+	const [isAutoUpdate, setIsAutoUpdate] = useState(true)
 	// const isLogging = PolymarketApi.use('loggingActive')
 
 
@@ -680,6 +682,12 @@ export default function ChartPage() {
 						{/* <Button onClick={() => PolymarketChart.fixingClobData()}>
 							fixing data
 						</Button> */}
+						<Label className="text-sm font-medium select-none ml-4">auto update</Label>
+						<Switch
+							checked={isAutoUpdate}
+							onCheckedChange={() => setIsAutoUpdate(!isAutoUpdate)}
+							className='ml-0'
+						/>
 					</div>
 					<ReactEcharts
 						option={chartOptions}
