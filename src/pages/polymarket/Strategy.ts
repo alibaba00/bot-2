@@ -59,7 +59,7 @@ export const loadMarketData = async (symbol: string, marketType: string, fromDat
 		}
 
 		const market = await PolymarketApi.cache.getItem(key)
-		if (!market?.closed || !market.chartData._complete){
+		if (!market?.closed || !market.chartData?._complete){
 			data.notClosed++
 			continue
 		}
@@ -108,15 +108,15 @@ class _Strategy3 {
 	setup: any = {
 		symbol : 'xrp',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-05-01 20:00:00').getTime(),
-		toDate: new Date('2026-05-03 06:00:00').getTime(),
+		fromDate: new Date('2026-04-20 00:00:00').getTime(),
+		toDate: new Date('2026-05-05 00:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
 		marketTimeLimit: 20 * 1000,		//20 seconds market timeout before closing (to prevent price glitches)
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
 		gridVersion: 1,
-		'up': {enabled: true, buyLimit: 20, size: 1, sellLimit: 100, closeLimit: 0, trades: {} as any[]},
-		'down': {enabled: false, buyLimit: 20, size: 1, sellLimit: 100, closeLimit: 0, trades: {} as any[]},
+		'up': {enabled: true, buyLimit: 55, size: 1, sellLimit: 97, closeLimit: 0, trades: {} as any[]},
+		'down': {enabled: false, buyLimit: 55, size: 1, sellLimit: 97, closeLimit: 0, trades: {} as any[]},
 		isRunning: false
 	}
 
@@ -135,6 +135,7 @@ class _Strategy3 {
 		const stats = {
 			usedMarkets: data.usedMarkets.length,
 			tradedMarkets: 0,				//total traded markets
+			skippedMarkets: 0,				//total skipped markets
 			up: {count: 0, won: 0, lost: 0, pnl: 0, pnlc: 1, buyLimit: s.up.buyLimit, enabled: s.up.enabled},
 			down: {count: 0, won: 0, lost: 0, pnl: 0, pnlc: 1, buyLimit: s.down.buyLimit, enabled: s.down.enabled},
 			winrate: 0,
@@ -223,6 +224,11 @@ class _Strategy3 {
 
 		// if (!buyUp && !buyDown) return
 		if (buyUp || buyDown) stats.tradedMarkets ++
+		else {
+			stats.skippedMarkets ++
+			// console.log('market skipped:', market.slug)
+			return
+		}
 
 		if (buyUp && (this.setup.mode === 'and' || !buyDown || buyDown[0] > buyUp[0])){
 			this.closeTrade('up', up, stats.up, market, buyUp)
@@ -329,6 +335,9 @@ class _Strategy3 {
 
 		let node = null as any
 		let stat = null as any
+		const g0 = s[side].buyLimit
+		const g1 = s[side].sellLimit
+		const g2 = s[side].closeLimit
 
 		for (const slug of data.usedMarkets) {
 			if (!s.isRunning) break
@@ -358,7 +367,7 @@ class _Strategy3 {
 						else grid[i][j][k].lost ++
 						grid[i][j][k].count ++
 
-						if (i === 20 && j === 100 && k === 0){
+						if (i === g0 && j === g1 && k === g2){
 							s.up.trades[slug] = {
 								open: stat[i]._open,
 								close: node[0],
@@ -387,13 +396,14 @@ class _Strategy3 {
 					node.pnl = parseNumber(((node.won * node.trade[1] + node.lost * node.trade[2]) / node.trade[0]) - node.count)
 					node.wr = parseNumber(1 + node.pnl / node.count)
 					node.abs = parseNumber(1 + node.pnl / data.usedMarkets.length)
-					if (node.abs > 1.01 && node.won > node.lost / 2) best.push(node)
+					if (node.abs > 1.01 && node.won > node.lost / 3) best.push(node)
+					// if (node.abs > 1.01) best.push(node)
 				}
 			}
 		}
 		best.sort((a, b) => b.abs - a.abs)
 		console.log('best:', best.length, best.slice(0, 200))
-		console.log('result:', grid[20][100][0])
+		console.log('result:', grid[g0][g1][g2])
 		console.log('trades:', s.up.trades)
 		s.isRunning = false
 	}

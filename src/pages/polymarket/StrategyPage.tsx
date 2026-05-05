@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label";
 // 	]
 // }
 
-const chartOptions = {
+const lineChartOptions = {
 	series: [
 		{
 			type: 'line',
@@ -67,23 +67,11 @@ const chartOptions = {
 }
 
 
-const handleStrategy3 = async () => {
-	console.log('handleStrategy3 ...')
-	Strategy3.run()
-}
-
-
-const handleStrategy3Multi = async () => {
-	console.log('handleStrategy3Multi ...')
-	await Strategy3.run_multi()
-	console.log('handleStrategy3Multi complete!', Strategy3.setup)
-}
-
-
 export default function StrategyPage() {
 	// const [strategies, setStrategies] = useState<Strategy[]>([]);
 	const [selectedFromDate, setSelectedFromDate] = useState(new Date('2026-04-29'))
 	const [selectedToDate, setSelectedToDate] = useState(new Date('2026-04-30'))
+	const [chartOptions, setChartOptions] = useState(lineChartOptions)
 
 
 	useEffect(() => {
@@ -91,6 +79,29 @@ export default function StrategyPage() {
 		// setStrategies(strategies);
 	}, []);
 
+
+	const handleStrategy3 = async () => {
+		console.log('handleStrategy3 ...')
+		Strategy3.run()
+	}
+	
+	
+	const handleStrategy3Multi = async () => {
+		console.log('handleStrategy3Multi ...')
+		await Strategy3.run_multi()
+		console.log('handleStrategy3Multi complete!', Strategy3.setup)
+		
+		if (Strategy3.setup.up.trades){
+			const upTrades = Strategy3.setup.up.trades
+			// const upData = upTrades.map((trade: any) => [trade.close, trade.won])
+			// setChartOptions({
+			// 	...lineChartOptions,
+			// 	series: [{...lineChartOptions.series[0], data: upData}],
+			// })
+		}
+	}
+
+	
 	return (
 		<div className="flex flex-col gap-4 p-4 h-full w-full justify-start items-start">
 			<h2>Strategies:</h2>
@@ -120,12 +131,12 @@ export default function StrategyPage() {
 				/>
 			</div>
 
-			{/* <ReactEcharts
+			<ReactEcharts
 				option={chartOptions}
 				style={{ height: '50%', width: '100%' }}
 				notMerge={true}
 				lazyUpdate={true}
-			/> */}
+			/>
 
 		</div>
 	)

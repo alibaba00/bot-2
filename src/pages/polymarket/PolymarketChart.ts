@@ -14,7 +14,7 @@ console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_log
 
 export const preOffset = 40000		//get tickerdata 40 seconds before startTimestamp
 export const postOffset = 20000	//get tickerdata 20 seconds after endTimestamp
-const chartDataVersion = 4
+const chartDataVersion = 6
 
 
 // ---------------------------------------------------------------------------- fixingClobData
@@ -65,12 +65,13 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 		}
 		
 		//--- update chartData version
-		if (market.chartData?.version !== chartDataVersion) {
+		if (market.chartData?.version !== chartDataVersion && market.closed) {
 // console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
-			const csvPath = market.filePath.replace('.json', '.csv')
-			market.chartData = await getClobTickerData(market, csvPath)
+			// const csvPath = market.filePath.replace('.json', '.csv')
+			// market.chartData = await getClobTickerData(market, csvPath)
 			market.chartData.clob._complete = updateClobDataComplete(market)
 			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
+			market.chartData.version = chartDataVersion
 			updated = true
 
 		// }else{
@@ -1211,8 +1212,8 @@ const updateClobDataComplete = (market: Market): number => {
 	const limit = parseNumber((market.duration / 5) * 60 * 1000)	//20% limit (e.g. limit for 5m-market = 1 Minute)
 
 	if (!up || !down || up.length < 20 || down.length < 20) return -2
-	if (market.outcome === 'up' && (up[up.length-1][1] <= 0.95 || down[down.length-1][1] >= 0.05)) return -3
-	if (market.outcome === 'down' && (up[up.length-1][1] >= 0.05 || down[down.length-1][1] <= 0.95)) return -4
+	// if (market.outcome === 'up' && (up[up.length-1][1] <= 0.95 || down[down.length-1][1] >= 0.05)) return -3
+	// if (market.outcome === 'down' && (up[up.length-1][1] >= 0.05 || down[down.length-1][1] <= 0.95)) return -4
 	if (up[0][0] - market.startTimestamp > limit) return -5
 	if (market.endTimestamp - up[up.length-1][0] > limit
 		&& (up[up.length-1][1] > 0.02 && up[up.length-1][1] < 0.98)) return -6
@@ -1221,15 +1222,22 @@ const updateClobDataComplete = (market: Market): number => {
 		&& (down[down.length-1][1] > 0.02 && down[down.length-1][1] < 0.98)) return -8
 
 	//check if there is a gap, greater than limit in the data
-	if (up.find((e: any, i:number) => i > 0
-		&& e[0] >= market.startTimestamp && e[0] <= market.endTimestamp
-		&& (e[1] > 0.02 && e[1] < 0.98)
-		&& e[0] - up[i-1][0] > limit)) return -9
-	if (down.find((e: any, i:number) => i > 0
-		&& e[0] >= market.startTimestamp && e[0] <= market.endTimestamp
-		&& (e[1] > 0.02 && e[1] < 0.98)
-		&& e[0] - down[i-1][0] > limit)) return -10
-
+	let test = up.find((e: any, i:number) => i > 0
+	&& up[i-1][0] >= market.startTimestamp && e[0] <= market.endTimestamp
+	&& (e[1] > 0.03 && e[1] < 0.97)
+	&& e[0] - up[i-1][0] > limit)
+	if (test){
+		// console.log('gap found:', market.slug, test[0], test[1], limit, up[0], up[1])
+		return -9
+	}
+	test = down.find((e: any, i:number) => i > 0
+		&& down[i-1][0] >= market.startTimestamp && e[0] <= market.endTimestamp
+		&& (e[1] > 0.03 && e[1] < 0.97)
+		&& e[0] - down[i-1][0] > limit)
+	if (test){
+		// console.log('gap found:', market.slug, test[0], test[1], limit, down[0], down[1])
+		return -10
+	}
 	return 1
 }
 
