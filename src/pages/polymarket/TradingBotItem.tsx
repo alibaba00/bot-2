@@ -201,7 +201,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		// side.price = price
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && ask <= 0.25){
+		if (side.state === 'pending' && ask >= 0.54){
 			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
 			side.state = 'active'
 			// Disable the opposite side when a trade is bought
@@ -211,7 +211,7 @@ render()
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:side.outcome,
-				price		:0.2,
+				price		:0.55,
 				timestamp	:Date.now(),
 				size		:setup.orderSize,
 			})		//-> active
@@ -219,21 +219,30 @@ render()
 				// if (trade.isLive) checkTradeSize(trade)
 			})
 
-		// }else if (side.state === 'active'){
-		// 	if (ask <= 0.3){
-		// 		side.state = 'buying'
-		// 		checkPositionSize(trade)
-		// 	}
-		// }else if (side.state === 'positioned'){
-		// 	if (bid <= 0.3){
-		// 		side.state = 'selling'
-		// 		setOrder(setup, trade, {
-		// 			type		:'SELL',
-		// 			outcome		:side.outcome,
-		// 			price		:0.7,
-		// 			timestamp	:Date.now(),
-		// 		})		//-> active
-		// 	}
+		}else if (side.state === 'active'){
+			// if (ask <= 0.3){
+				side.state = 'buying'
+				checkPositionSize(trade)		//-> positioned
+			// }
+		}else if (side.state === 'positioned'){
+			// if (bid >= 0.9){
+			// 	side.state = 'selling'
+			// 	setOrder(setup, trade, {
+			// 		type		:'SELL',
+			// 		outcome		:side.outcome,
+			// 		price		:0.9,
+			// 		timestamp	:Date.now(),
+			// 	})		//-> active
+			// }else
+			if (bid <= 0.5){
+				side.state = 'selling'
+				setOrder(setup, trade, {
+					type		:'SELL',
+					outcome		:side.outcome,
+					price		:0.49,
+					timestamp	:Date.now(),
+				})		//-> active
+			}
 		}
 	}
 
@@ -448,7 +457,7 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 			: action.type === 'BUY' ? 1 : 0
 
 	if (!action.size){
-		await setPositionSize(trade)
+		await setPositionSize(trade)	//make a final size update before placing order
 		if (!side.positionSize){
 			console.error('Error getting order size:', trade.conditionId)
 			return

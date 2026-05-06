@@ -101,6 +101,7 @@ self.onmessage = async (event: MessageEvent) => {
 			}
 
 			if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true });
+			// self.postMessage({ type: 'log', args: ['copyFile:', filePath, '->', exportFile, '...'] });
 			await fsPromises.copyFile(filePath, exportFile);
 		}
 

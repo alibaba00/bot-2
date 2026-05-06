@@ -1,6 +1,7 @@
 import type { Market } from '@/lib/polymarket/types'
 import PolymarketApi, { fsPromises, fs } from './PolymarketApi'
 import localForage from 'localforage'
+import moment from 'moment';
 
 
 const STORE = localForage.createInstance({
@@ -106,18 +107,21 @@ class _Strategy3 {
 	trades: any[] = []
 
 	setup: any = {
-		symbol : 'xrp',
+		symbol : 'btc',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-04-20 00:00:00').getTime(),
-		toDate: new Date('2026-05-05 00:00:00').getTime(),
+		// fromDate: new Date('2026-05-04 15:30:00').getTime(),
+		fromDate: new Date('2026-05-05 00:00:00').getTime(),
+		toDate: new Date('2026-05-07 00:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
 		marketTimeLimit: 20 * 1000,		//20 seconds market timeout before closing (to prevent price glitches)
-		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
+		closeTimeDelay: 5 * 1000,	//5 seconds delay before selling
+		// closeTimeDelay: 1 * 1000,		//1 second delay before selling
 		gridVersion: 1,
-		'up': {enabled: true, buyLimit: 55, size: 1, sellLimit: 97, closeLimit: 0, trades: {} as any[]},
-		'down': {enabled: false, buyLimit: 55, size: 1, sellLimit: 97, closeLimit: 0, trades: {} as any[]},
-		isRunning: false
+		'up': {enabled: true, size: 1, buyLimit: 55, sellLimit: 100, closeLimit: 49, trades: [] as any[]},
+		'down': {enabled: false, size: 1, buyLimit: 55, sellLimit: 100, closeLimit: 50, trades: [] as any[]},
+		isRunning: false,
+		stats: null as any,
 	}
 
 	constructor() {
@@ -128,11 +132,11 @@ class _Strategy3 {
 	//---------------------------------------------------------------------------- run
 	async run(): Promise<void> {
 		const s = this.setup
-		console.log('Strategy 3 running', s.symbol, s.marketType, '...')
+		console.log('Strategy 3 running', s.symbol, s.marketType, moment(s.fromDate).format('YYYY-MM-DD HH:mm:ss'), '->', moment(s.toDate).format('YYYY-MM-DD HH:mm:ss'), '...')
 		const data = await loadMarketData(s.symbol, s.marketType, s.fromDate, s.toDate)
 		console.log('   calc', data.usedMarkets.length, 'markets ...');
 
-		const stats = {
+		const stats = s.stats = {
 			usedMarkets: data.usedMarkets.length,
 			tradedMarkets: 0,				//total traded markets
 			skippedMarkets: 0,				//total skipped markets
@@ -145,8 +149,8 @@ class _Strategy3 {
 		}
 
 		const lastTrades = {up: s.up.trades, down: s.down.trades}
-		s.up.trades = {}
-		s.down.trades = {}
+		s.up.trades = []
+		s.down.trades = []
 
 		for (const key of data.usedMarkets) {
 			const market = await PolymarketApi.cache.getItem(key)
@@ -159,36 +163,40 @@ class _Strategy3 {
 		stats.winrate = 1 + parseNumber(stats.pnl / stats.tradedMarkets)
 		stats.abs = 1 + parseNumber(stats.pnl / data.usedMarkets.length)
 
-		console.table(this.setup)
+		// console.table(this.setup)
 		console.table(stats)
 		console.log('up trades:', s.up.trades)
 		console.log('down trades:', s.down.trades)
 		console.log('complete!', Object.keys(lastTrades.up).length)
 
-		if (Object.keys(lastTrades.up).length > 0){
-			for (const key in lastTrades.up){
-				const lastTrade = lastTrades.up[key]
-				if (s.up.trades[key]){
-					const currentTrade = s.up.trades[key]
-					if (lastTrade.open !== currentTrade.open){
-						console.log('changed open:', key, lastTrade, '->', currentTrade, await PolymarketApi.cache.getItem(key))
+		if (lastTrades.up.length > 0){
+			const lookup = {} as any
+			for (const trade of s.up.trades) lookup[trade.slug] = trade
+
+			for (const trade of lastTrades.up){
+				if (lookup[trade.slug]){
+					const currentTrade = lookup[trade.slug]
+					if (trade.open !== currentTrade.open){
+						console.log('changed open:', trade.slug, trade, '->', currentTrade, await PolymarketApi.cache.getItem(trade.slug))
 					}
-					if (lastTrade.open !== currentTrade.open || lastTrade.close !== currentTrade.close){
-						console.log('changed close:', key, lastTrade, '->', currentTrade, await PolymarketApi.cache.getItem(key))
+					if (trade.open !== currentTrade.open || trade.close !== currentTrade.close){
+						console.log('changed close:', trade.slug, trade, '->', currentTrade, await PolymarketApi.cache.getItem(trade.slug))
 					}
-					if (lastTrade.won !== currentTrade.won){
-						console.log('changed won:', key, lastTrade, '->', currentTrade, await PolymarketApi.cache.getItem(key))
+					if (trade.won !== currentTrade.won){
+						console.log('changed won:', trade.slug, trade, '->', currentTrade, await PolymarketApi.cache.getItem(trade.slug))
 					}
 				}else{
-					console.log('missing:', key, lastTrade)
+					console.log('missing:', trade.slug, trade)
 				}
 			}
-			for (const key in s.up.trades){
-				if (!lastTrades.up[key]){
-					console.log('added:', s.up.trades[key])
+			for (const trade of s.up.trades){
+				if (!lastTrades.up.find((e: any) => e.slug === trade.slug)){
+					console.log('added:', trade)
 				}
 			}
 		}
+
+		return s
 	}
 
 
@@ -279,14 +287,15 @@ class _Strategy3 {
 		stat.pnl = parseNumber(stat.pnl + pnl - 1)
 		stat.pnlc = parseNumber(stat.pnlc * (won ? 1.1 : 0.9))
 
-		sideData.trades[market.slug] = {
+		sideData.trades.push({
+			slug: market.slug,
 			outcome: market.outcome,
 			open: buy[0],
 			close: won ? sell[0] : close[0],
 			won: won,
 			pnl: pnl - 1,
 			pnlc: stat.pnlc,
-		}
+		})
 	}
 
 
@@ -305,8 +314,8 @@ class _Strategy3 {
 		const t = performance.now()
 		console.log('start calculating for', data.usedMarkets.length, 'markets ...');
 
-		s.up.trades = {}
-		s.down.trades = {}
+		s.up.trades = [] as any[]
+		s.down.trades = [] as any[]
 
 		const grid = {}
 		let i: number, j: number, k: number
@@ -346,7 +355,7 @@ class _Strategy3 {
 			const file = PolymarketApi.getClobPathFromSlug(slug) + slug + '_' + side + '_grid.json'
 			if (fs.existsSync(file)){
 				stat = JSON.parse(await fsPromises?.readFile(file, 'utf8'))
-				if (stat._version !== this.setup.gridVersion) stat = null
+				if (stat?._version !== this.setup.gridVersion) stat = null
 			}
 			if (!stat){
 				const market = await PolymarketApi.cache.getItem(slug)
@@ -368,11 +377,12 @@ class _Strategy3 {
 						grid[i][j][k].count ++
 
 						if (i === g0 && j === g1 && k === g2){
-							s.up.trades[slug] = {
+							s[side].trades.push({
+								slug: slug,
 								open: stat[i]._open,
 								close: node[0],
 								won: node[1],
-							}
+							})
 						}
 					}
 				}

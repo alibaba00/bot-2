@@ -420,7 +420,9 @@ class PolymarketApi {
 					errorText
 				)
 				// console.log('❌ getCryptoPrice failed:', market)
-				return {failed: true} as CryptoPriceResponse		//market failed
+				await new Promise(resolve => setTimeout(resolve, 1000))
+				if (response.status === 400) return {failed: true} as CryptoPriceResponse
+				return null
 			}
 			
 			const data = await response.json() as CryptoPriceResponse

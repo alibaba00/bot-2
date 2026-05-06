@@ -20,26 +20,26 @@ import { Label } from "@/components/ui/label";
 // }
 
 const lineChartOptions = {
-	series: [
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#0f0c',
-			},
-			symbolSize: 0,
-			data: [1,2,3,4,5,6,7,8,9,10] as any[],
-			step: 'end',
-			tooltip: {
-				show: true,
-			},
-			name: "up",
-		}
-	] as any[],
+	// Choose axis ticks based on UTC time.
+	useUTC: true,
+	// title: {
+	// 	text: 'Intraday Chart with Breaks (Single Day)',
+	// 	left: 'center'
+	// },
+	tooltip: {
+		show: true,
+		trigger: 'axis',
+	},
 	xAxis: [
 		{
-			type: 'category',
-			data: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] as any[],
+			type: 'time',
+			boundaryGap: false,
+			axisLabel: {
+				showMinLabel: true,
+				showMaxLabel: true,
+			},
+			data: [] as any[],
+			// show a vertical line every X minutes
 			splitLine: {
 				show: true,
 				lineStyle: {
@@ -49,12 +49,12 @@ const lineChartOptions = {
 				}
 			}
 		}
-	] as any[],
+	],
 	yAxis: [
 		{
 			type: 'value',
-			min: 0,
-			max: 10,
+			scale: true,
+			// interval: 0.1,
 			splitLine: {
 				show: true,
 				lineStyle: {
@@ -62,10 +62,40 @@ const lineChartOptions = {
 					width: 0.5
 				}
 			}
+		},
+	],
+	dataZoom: [
+		{
+			type: 'inside',
+			xAxisIndex: 0
+		},
+		{
+			type: 'slider',
+			xAxisIndex: 0
 		}
-	] as any[],
-}
-
+	],
+	series: [
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#0f0c',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			step: 'end',
+			tooltip: {
+				show: true,
+			},
+			name: "up",
+		},
+	],
+	grid: {
+		top: 0,
+		left: 0,
+		right: 0,
+	}
+} as any
 
 export default function StrategyPage() {
 	// const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -82,7 +112,29 @@ export default function StrategyPage() {
 
 	const handleStrategy3 = async () => {
 		console.log('handleStrategy3 ...')
-		Strategy3.run()
+		await Strategy3.run()
+		console.log('handleStrategy3 complete!', Strategy3.setup)
+
+		const upData = Strategy3.setup.up
+		const upTrades = upData.trades
+
+		let pnl = 1
+		const win = (upData.sellLimit - upData.buyLimit) / upData.buyLimit
+		const loss = (upData.closeLimit - upData.buyLimit) / upData.buyLimit
+
+		if (upTrades.length > 0){
+			const upData = upTrades.map((trade: any) => {
+				pnl += trade.won ? win : loss
+				return [trade.close, pnl]
+			})
+			setChartOptions({
+				...lineChartOptions,
+				series: [{
+					...lineChartOptions.series[0],
+					data: upData						//up data (green)
+				}],
+			})
+		}
 	}
 	
 	
@@ -92,7 +144,7 @@ export default function StrategyPage() {
 		console.log('handleStrategy3Multi complete!', Strategy3.setup)
 		
 		if (Strategy3.setup.up.trades){
-			const upTrades = Strategy3.setup.up.trades
+			// const upTrades = Strategy3.setup.up.trades
 			// const upData = upTrades.map((trade: any) => [trade.close, trade.won])
 			// setChartOptions({
 			// 	...lineChartOptions,

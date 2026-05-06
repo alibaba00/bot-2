@@ -118,7 +118,7 @@ export default function TradingBotPage() {
 
 	// ---------------------------------------------------------------------------- setup
 	const setup = useRef({
-		symbol: 'xrp',
+		symbol: 'btc',
 		timeFrame: 5,
 		marketType: 'updown-5m',
 		openTimeLimit: 60,	//open limit time in seconds before market ended
@@ -130,7 +130,7 @@ export default function TradingBotPage() {
 			enabled: false,
 		},
 		orderSize: 10,
-		sizeFactor: 5.0,		//size factor to multiply the trade size
+		// sizeFactor: 5.0,		//size factor to multiply the trade size
 		liveTrading: false as boolean,
 		isConnected: false as boolean,
 		currentMarket: null as MarketData | null,

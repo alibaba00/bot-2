@@ -987,18 +987,23 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 		return {market: null, updated: false}
 	}
 
-	if (market.state === 'failed') return {market: null, updated: false}
+	// if (market.state === 'failed') return {market: null, updated: false}
 
-	if (!fs.existsSync(filePath)) updated = true	//market file not saved
+	if (!fs.existsSync(filePath)){
+// console.log(1)
+		updated = true	//market file not saved
+	}
 
 	if (!market.marketData || (!market.marketData.closed && Date.parse(market.marketData.endDate || '') < Date.now())) {
 		market.marketData = await PolymarketApi.fetchMarketBySlug(slug, true)
 		if (!market.marketData) market.state = 'failed'
+// console.log(2)
 		updated = true
 	}
 
 	if (market.symbol === 'bitcoin'){		//fixing wrong symbol
 		market.symbol = 'btc'
+// console.log(3)
 		updated = true
 	}
 
@@ -1009,19 +1014,20 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 			market.duration = PolymarketApi.getMarketDurationFromType(market.marketType) || 0
 			market.endTimestamp = new Date(market.marketData.endDate).getTime()
 			market.startTimestamp = market.endTimestamp - market.duration * 60 * 1000
+// console.log(4)
 			updated = true
 		}
 	}
 
 	if (market.marketData?.closed){
 		updated = updated || await updatePriceData(market)
-
-		if (!useCache || !market.chartData?._complete || market.chartData?.version !== chartDataVersion) {
+		// if (!useCache || !market.chartData?._complete || market.chartData?.version !== chartDataVersion) {
+		if (!market.chartData?._complete || market.chartData?.version !== chartDataVersion) {
 			market.chartData = await getClobTickerData(market, csvPath)
-
 			market.chartData.clob._complete = updateClobDataComplete(market)
 			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
 			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
+// console.log(5, market.chartData._complete)
 			updated = true
 		}
 	}
@@ -1039,18 +1045,16 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 const updatePriceData = async (market: Market) => {
 	let updated: boolean = false
 
-	if (!market.openPrice || !market.closePrice) {
+	if (market.openPrice === null || market.closePrice === null) {
 		const priceData = await PolymarketApi.getCryptoPrice(market)
-		if (!priceData){
-			await new Promise(resolve => setTimeout(resolve, 200))
-			return false
-		}
+		if (!priceData) return false
 		console.log('update priceData:', market.slug, priceData)
 
-		if (priceData?.failed){
-			market.state = 'failed'
+		if (priceData?.failed){		//price not available
+			market.openPrice = 0
+			market.closePrice = 0
 			updated = true
-			return updated		//market failed
+			return updated		//price data failed
 		}
 
 		if (priceData?.openPrice) {

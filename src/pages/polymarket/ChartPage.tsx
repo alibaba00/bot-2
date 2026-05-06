@@ -636,7 +636,7 @@ export default function ChartPage() {
 		<ResizablePanelGroup direction='vertical'>
 			<ResizablePanel defaultSize={50}>
 				<div className='h-full w-full flex flex-col gap-4 p-4'>
-					<div className='flex flex-row items-center justify-center gap-4'>
+					<div className='flex flex-row flex-wrap items-center gap-4'>
 						<Label className='text-sm text-muted-foreground ml-4'>Logging</Label>
 						{/* <Switch
 							checked={isLogging}
@@ -654,9 +654,9 @@ export default function ChartPage() {
 							Update clob data
 						</Button>
 
-						{/* <Button onClick={() => PolymarketChart.updateAllMarketData_clob(true)}>
+						<Button onClick={() => PolymarketChart.updateAllMarketData_clob(true)}>
 							Update all clob data
-						</Button> */}
+						</Button>
 
 						<Button onClick={() => PolymarketChart.fixingClobData()}>
 							Fixing clob data
