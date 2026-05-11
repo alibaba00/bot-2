@@ -13,8 +13,8 @@ const audioCtx = new (window as any).AudioContext();
 export const beep = (duration:number=60, frequency:number=745, volume:number=0.5, type:string='sine', callback?:() => void) => {
 	if (!audioCtx) return null;
 	
-	var oscillator: OscillatorNode = audioCtx.createOscillator();
-	var gainNode: GainNode = audioCtx.createGain();
+	const oscillator: OscillatorNode = audioCtx.createOscillator();
+	const gainNode: GainNode = audioCtx.createGain();
 
 	oscillator.connect(gainNode);
 	gainNode.connect(audioCtx.destination);

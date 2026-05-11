@@ -91,7 +91,10 @@ self.onmessage = async (event: MessageEvent) => {
 				stat.exists++;
 				const exportCreatedAt = fs.statSync(exportFile).ctime;
 				const importCreatedAt = fs.statSync(filePath).ctime;
-				if (exportCreatedAt >= importCreatedAt) continue;
+				if (exportCreatedAt >= importCreatedAt){
+					self.postMessage({ type: 'completeFile', args: [entry.name] });
+					continue;
+				}
 
 				stat.updatedFiles++;
 				self.postMessage({ type: 'log', args: ['', 'update file:', exportFile] });

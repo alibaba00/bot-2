@@ -555,12 +555,15 @@ const parseNumber = (num: number) => {
 
 // ---------------------------------------------------------------------------- getAllMarkets_clob_2
 let dirList: any[] = []
+let completeList: any = {} as any	//.csv files alrey completed to ignore them
+
 
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
 	console.log('getAllMarkets_clob', symbol || '', date || '', '...')
 
 	if (!dirList.length){
 		dirList = await PolymarketApi.store.getItem('dirList') as any[]
+		completeList = await PolymarketApi.store.getItem('completeList') as any || {}
 
 		if (!dirList?.length){
 			dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
@@ -600,6 +603,7 @@ export const getAllMarkets_clob = async (symbol: string | null = null, date: Dat
 // - date: the date of the market
 // - symbol: the symbol of the market
 //
+/*
 export const getAllMarkets = async (symbol: string | null = null, date: Date | null = null) => {
 	const rootPath = PolymarketApi.marketsPath;
 
@@ -676,6 +680,7 @@ export const getAllMarkets = async (symbol: string | null = null, date: Date | n
 	}
 	return out;
 }
+*/
 
 
 // ---------------------------------------------------------------------------- updateLogfiles
@@ -684,6 +689,12 @@ export const updateLogfiles = async () => {
 	lastUpdate_logfiles = Date.now() as number
 	await PolymarketApi.store.setItem('lastUpdate_logfiles', lastUpdate_logfiles)
 	console.log('---Updating logfiles...', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
+
+	// if (!dirLookup){
+	// 	dirLookup = {} as any
+	// 	for (const entry of dirList) dirLookup[entry.name] = entry.path
+	// 	console.log('dirLookup created:', dirList.length, 'entries')
+	// }
 
 	await updateLogData_worker('clob')
 	console.log('')
@@ -702,6 +713,8 @@ export const updateLogfiles = async () => {
 	dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
 	dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
 	await PolymarketApi.store.setItem('dirList', dirList)
+
+	await PolymarketApi.store.setItem('completeList', completeList)
 
 	console.log('---Complete! new total files:', dirList.length)
 }
@@ -782,12 +795,22 @@ const tickerDataSources: any = {
 }
 
 // ---------------------------------------------------------------------------- updateLogData
+/*
+{
+    "name": "xrp-updown-5m-1777313400.csv",
+    "parentPath": "H:\\DEV\\TRADE\\POLY\\bot-3\\logs\\clob\\xrp-updown-5m\\2026-04-27",
+    "path": "H:\\DEV\\TRADE\\POLY\\bot-3\\logs\\clob\\xrp-updown-5m\\2026-04-27"
+}
+*/
 export const updateLogData = async (type: string = 'clob') => {
 	console.log('Updating log data:', type)
 
 	const importPath = tickerDataSources[type].importPath
 	const exportPath = tickerDataSources[type].exportPath
-	const importList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
+	let importList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
+	importList = importList.filter((entry: any) => entry.isFile()
+		&& entry.name.endsWith('.csv')
+		&& !completeList[entry.name])	//ignore files that are already completed
 
 	const stat = {
 		exists: 0,
@@ -795,44 +818,52 @@ export const updateLogData = async (type: string = 'clob') => {
 		newFiles: 0,
 	}
 
-	for (const entry of importList) {
-		if (entry.isDirectory() || !entry.name.endsWith('.csv')) continue
+	console.log('importList:', importList.length, 'files to import ...')
+	for (const entry of importList) {		//iterate over all .csv files to import
 		const path = entry.path.replaceAll('\\', '/')
 		const filePath = path + '/' + entry.name
 		const symbol = type === 'clob' ? path.split('logs/')[1] : path.split('/').pop()
 		const exportDir = exportPath + symbol
-		const exportFile = exportDir + '/' + entry.name
+		const exportFile = exportDir + '/' + entry.name;
 
-		if (fs.existsSync(exportFile)){	//export file exists
+		if (fs.existsSync(exportFile)){			//export .csv file exists
 			stat.exists++
 			const exportCreatedAt = fs.statSync(exportFile).ctime
 			const importCreatedAt = fs.statSync(filePath).ctime
-			if (exportCreatedAt >= importCreatedAt) continue
-
+			if (exportCreatedAt >= importCreatedAt){
+				completeList[entry.name] = true		//add to complete list
+				continue							//file is up to date
+			}
+	
 			stat.updatedFiles++
-			console.log('')
 			console.log('update file:', exportFile)
 		}else{
 			stat.newFiles++
 			console.log('export new file:', exportFile)
 		}
 
-		if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true })
-		await fsPromises.copyFile(filePath, exportFile)
-	}
+		try{
+			await fsPromises.copyFile(filePath, exportFile)
 
-	console.log('stat:', stat)
+		}catch(err){
+			if (!fs.existsSync(exportDir)){
+				console.log('create export directory:', exportDir)
+				fs.mkdirSync(exportDir, { recursive: true })
+			}
+			await fsPromises.copyFile(filePath, exportFile)
+		}
+	}
 }
 
 
 // ---------------------------------------------------------------------------- updateLogData_worker
 export const updateLogData_worker = async (type: string = 'clob') => {
 	// Fallback, falls keine Worker unterstützt werden
-	if (typeof window === 'undefined' || typeof Worker === 'undefined') {
+	// if (typeof window === 'undefined' || typeof Worker === 'undefined') {
 		console.warn('Web Worker nicht verfügbar, fallback auf updateLogData()')
 		await updateLogData(type)
 		return
-	}
+	// }
 
 	return await new Promise<void>((resolve, reject) => {
 		const worker = new Worker(
@@ -851,6 +882,8 @@ export const updateLogData_worker = async (type: string = 'clob') => {
 			} else if (data.type === 'done') {
 				worker.terminate()
 				resolve()
+			} else if (data.type === 'completeFile') {
+				completeList[data.args[0]] = true		//add to complete list
 			}
 		}
 
@@ -1883,9 +1916,11 @@ const initData = async () => {
 	return data
 }
 
-
+/*
 // ---------------------------------------------------------------------------- getChartDistributionData
 export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
+	console.log('getChartDistributionData:', symbol, dateString, '...')
+
 	let data: any[] = []
 	if (dateString) {
 		data = await getChartTickerData(symbol, dateString)
@@ -1959,7 +1994,7 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 	// console.log('ranges:', ranges)
 	return ranges
 }
-
+*/
 
 // ---------------------------------------------------------------------------- smoothRatios
 // Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
@@ -1980,7 +2015,7 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 	}
 
 
-
+/*
 // ---------------------------------------------------------------------------- getChartDistributionData
 export const _getChartDistributionData = async (symbol: string, dateString: string | null = null, range: number = 15) => {
 	let data: any[] = []
@@ -2048,6 +2083,7 @@ export const _getChartDistributionData = async (symbol: string, dateString: stri
 
 	return distribution
 }
+*/
 
 
 // ---------------------------------------------------------------------------- normalizeData

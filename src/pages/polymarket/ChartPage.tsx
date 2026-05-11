@@ -32,6 +32,18 @@ const assetContent = [
 		value: 'xrp',
 	},
 	{
+		label: 'DOGE',
+		value: 'doge',
+	},
+	{
+		label: 'HYPE',
+		value: 'hype',
+	},
+	{
+		label: 'BNB',
+		value: 'bnb',
+	},
+	{
 		label: 'ALL',
 		value: 'all',
 	},

@@ -201,17 +201,19 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		// side.price = price
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && ask >= 0.54){
+		if (side.state === 'pending' && ask >= 0.56){
 			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
 			side.state = 'active'
+
 			// Disable the opposite side when a trade is bought
-const oppositeSide = side.outcome === 'up' ? trade.down : trade.up
-oppositeSide.enabled = false
-render()
+			const oppositeSide = side.outcome === 'up' ? trade.down : trade.up
+			oppositeSide.enabled = false
+			render()
+
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:side.outcome,
-				price		:0.55,
+				price		:0.57,
 				timestamp	:Date.now(),
 				size		:setup.orderSize,
 			})		//-> active
@@ -220,28 +222,43 @@ render()
 			})
 
 		}else if (side.state === 'active'){
-			// if (ask <= 0.3){
+			if (ask <= 0.57){
 				side.state = 'buying'
 				checkPositionSize(trade)		//-> positioned
-			// }
-		}else if (side.state === 'positioned'){
-			// if (bid >= 0.9){
+			}
+			// if (ask <= 0.01){
 			// 	side.state = 'selling'
 			// 	setOrder(setup, trade, {
 			// 		type		:'SELL',
 			// 		outcome		:side.outcome,
-			// 		price		:0.9,
+			// 		price		:0.02,
 			// 		timestamp	:Date.now(),
-			// 	})		//-> active
-			// }else
-			if (bid <= 0.5){
+			// 		size		:setup.orderSize,
+
+			// 	}, 20, 2000)		//-> active
+			// }
+
+		}else if (side.state === 'positioned'){
+			// if (bid >= 0.98){
+			// 	side.state = 'selling'
+			// 	setOrder(setup, trade, {
+			// 		type		:'SELL',
+			// 		outcome		:side.outcome,
+			// 		price		:0.98,
+			// 		timestamp	:Date.now(),
+			// 		size		:side.positionSize,
+			// 	}, 10, 2000)		//-> active
+			// }
+			if (bid <= 0.48){
 				side.state = 'selling'
 				setOrder(setup, trade, {
 					type		:'SELL',
 					outcome		:side.outcome,
-					price		:0.49,
+					// price		:0.47,
+					price		:0.01,		//market price
 					timestamp	:Date.now(),
-				})		//-> active
+					size		:side.positionSize,
+				}, 10, 2000)		//-> active
 			}
 		}
 	}
@@ -324,7 +341,7 @@ render()
 
 
 	// ---------------------------------------------------------------------------- checkPositionSize
-	const checkPositionSize = async (trade: Trade) => {
+	const checkPositionSize = async (trade: Trade, retryDelay: number = 2000) => {
 		if (!trade.isLive || trade.state !== 'open' || (trade.up.state !== 'buying' && trade.down.state !== 'buying')) return
 
 		const sizes = await getActiveMarketPositionSizes({
@@ -332,6 +349,7 @@ render()
 			upTokenId: trade.up.tokenId || '',
 			downTokenId: trade.down.tokenId || '',
 		})
+
 	console.log('!!!! sizes:', trade.slug, sizes)
 		if (sizes){
 			trade.up.positionSize = sizes.up
@@ -339,10 +357,15 @@ render()
 
 			if (trade.up.positionSize > trade.up.orderSize * 0.5) trade.up.state = 'positioned'
 			if (trade.down.positionSize > trade.down.orderSize * 0.5) trade.down.state = 'positioned'
+
+			if (trade.up.state === 'positioned' || trade.down.state === 'positioned'){
+				setup._log('< set position size:', sizes)
+			}
 			render()
+
 		}
 		if (trade.up.state === 'buying' || trade.down.state === 'buying'){
-			await new Promise(resolve => setTimeout(resolve, 5000))
+			await new Promise(resolve => setTimeout(resolve, retryDelay))
 			checkPositionSize(trade)
 		}
 	}
@@ -408,20 +431,20 @@ render()
 // ---------------------------------------------------------------------------- TradeState
 const TradeState = ({trade, side}: {trade: Trade, side: 'up' | 'down'}) => {
 	const tradeSide = trade[side as 'up' | 'down']
-	const [enabled, setEnabled] = useState<boolean>(tradeSide.enabled)
+	const [active, setActive] = useState<boolean>(tradeSide.enabled && tradeSide.state !== 'completed')
 
 	useEffect(() => {
-		setEnabled(tradeSide.enabled)
-	}, [tradeSide.enabled])
+		setActive(tradeSide.enabled && tradeSide.state !== 'completed')
+	}, [tradeSide.enabled, tradeSide.state])
 
 	return (
 		<div className='flex flex-row justify-between items-center'>
-			<div>{enabled ? tradeSide.state : 'disabled'}</div>
+			<div>{active ? tradeSide.state : 'disabled'}</div>
 			{trade.state === 'open' && (
 				<div
-					className={`rounded-full w-3 h-3 cursor-pointer ${enabled ? 'bg-green-600' : 'bg-red-600'}`}
+					className={`rounded-full w-3 h-3 cursor-pointer ${active ? 'bg-green-600' : 'bg-red-600'}`}
 					onClick={() => {
-						setEnabled(enabled => {
+						setActive(enabled => {
 							tradeSide.enabled = !enabled
 							return !enabled
 						})
@@ -508,9 +531,12 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 
 			if (action.type === 'BUY'){
 				side.buyOrder = order
+				beep(20, 1000, 0.2)
 
 			}else if (action.type === 'SELL'){
 				side.sellOrder = order
+				beep(20, 500, 0.2)
+
 			}
 
 			setup._log('< set order result:', order)
