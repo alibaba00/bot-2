@@ -1,4 +1,4 @@
-import { getOrder, placeOrder } from "@/lib/polymarket/orders";
+import { getOrder, placeOrder, cancelOrder } from "@/lib/polymarket/orders";
 import type { MarketData, PlaceOrderParams, PlaceOrderResponse } from "@/lib/polymarket/types";
 import { beep } from "@/lib/utils";
 import localForage from "localforage";
@@ -201,7 +201,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 		// side.price = price
 		if (!side.enabled) return false
 
-		if (side.state === 'pending' && ask >= 0.56){
+		if (side.state === 'pending' && ask <= 0.02){
 			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
 			side.state = 'active'
 
@@ -213,7 +213,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:side.outcome,
-				price		:0.57,
+				price		:0.01,
 				timestamp	:Date.now(),
 				size		:setup.orderSize,
 			})		//-> active
@@ -222,7 +222,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			})
 
 		}else if (side.state === 'active'){
-			if (ask <= 0.57){
+			if (ask <= 0.01){
 				side.state = 'buying'
 				checkPositionSize(trade)		//-> positioned
 			}
@@ -249,17 +249,17 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			// 		size		:side.positionSize,
 			// 	}, 10, 2000)		//-> active
 			// }
-			if (bid <= 0.48){
+			// if (bid >= 0.02){
 				side.state = 'selling'
 				setOrder(setup, trade, {
 					type		:'SELL',
 					outcome		:side.outcome,
 					// price		:0.47,
-					price		:0.01,		//market price
+					price		:0.05,		//market price
 					timestamp	:Date.now(),
 					size		:side.positionSize,
 				}, 10, 2000)		//-> active
-			}
+			// }
 		}
 	}
 
@@ -301,6 +301,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				setup._updateTrade = onUpdate
 				break
 			case 'closed':		//market is closed from TradeList market update
+				cancelOpenBuyOrders(setup, trade)
 				delete setup._updateTrade
 				if (setup.trade === trade) setup.trade = null
 				closeTrade(trade)
@@ -461,6 +462,31 @@ const saveTrade = async (trade: Trade, id: number = 1) => {
 	if (!trade?.slug) return null
 	console.log('--- saveTrade:', id, trade.slug)
 	await TRADE_STORE.setItem(trade.slug, trade)
+}
+
+
+// ---------------------------------------------------------------------------- cancelOpenBuyOrders
+const cancelOpenBuyOrders = async (setup: any, trade: Trade) => {
+	if (trade.up.state === 'active' && trade.up.buyOrder?.orderId){
+		const side = trade.up
+		const orderId = side.buyOrder?.orderId
+		if (orderId){
+			setup._log('< cancel order:', orderId)
+			const result = await cancelOrder(orderId)
+			console.log('--- cancelOrder result:', result)
+			setup._log('< cancel order result:', result)
+		}
+	}
+	if (trade.down.state === 'active' && trade.down.buyOrder?.orderId){
+		const side = trade.down
+		const orderId = side.buyOrder?.orderId
+		if (orderId){
+			setup._log('< cancel order:', orderId)
+			const result = await cancelOrder(orderId)
+			console.log('--- cancelOrder result:', result)
+			setup._log('< cancel order result:', result)
+		}
+	}
 }
 
 

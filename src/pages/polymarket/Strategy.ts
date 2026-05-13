@@ -109,8 +109,8 @@ class _Strategy3 {
 	setup: any = {
 		symbol : 'btc',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-05-04 16:00:00').getTime(),
-		toDate: new Date('2026-05-09 00:00:00').getTime(),
+		fromDate: new Date('2026-05-10 00:00:00').getTime(),
+		toDate: new Date('2026-05-13 00:00:00').getTime(),
 		// fromDate: 1778148600000, // new Date('2026-05-06 10:00:00').getTime(),
 		// toDate: 1778217000000, // new Date('2026-05-07 00:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
@@ -119,8 +119,8 @@ class _Strategy3 {
 		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
 		// closeTimeDelay: 1 * 1000,	//1 second delay before selling
 		gridVersion: 1,
-		'up': {enabled: true, size: 1, buyLimit: 57, sellLimit: 100, closeLimit: 0, trades: [] as any[]},
-		'down': {enabled: false, size: 1, buyLimit: 57, sellLimit: 100, closeLimit: 0, trades: [] as any[]},
+		'up': {enabled: true, size: 1, buyLimit: 1, sellLimit: 5, closeLimit: 0, trades: [] as any[]},
+		'down': {enabled: true, size: 1, buyLimit: 1, sellLimit: 5, closeLimit: 0, trades: [] as any[]},
 		isRunning: false,
 		stats: null as any,
 	}

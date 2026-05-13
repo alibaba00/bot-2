@@ -328,7 +328,6 @@ const lineChartOptions = {
 			},
 			name: "coinbase",
 		},
-
 		{
 			type: 'line',
 			lineStyle: {
@@ -342,6 +341,20 @@ const lineChartOptions = {
 				show: false,
 			},
 			name: "grid",
+		},
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: 'violet',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			step: 'end',
+			tooltip: {
+				show: false,
+			},
+			name: "binance",
 		}
 	],
 	grid: {
@@ -365,6 +378,9 @@ export default function ChartPage() {
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 	const [isAutoUpdate, setIsAutoUpdate] = useState(true)
 	// const isLogging = PolymarketApi.use('loggingActive')
+	const [selectedSeries, setSelectedSeries] = useState<string[]>(
+		['up', 'down', 'chainline', 'coinbase', 'grid', 'binance'] as string[]
+	)
 
 
 	const parseLineData = (chartData: any) => {
@@ -406,6 +422,13 @@ export default function ChartPage() {
 		// const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
 		// const scale = parseNumber(parseFloat((Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1))) + 0.2)
 
+		const binanceData = chartData.ticker?.binance?.map((item: any) => {
+			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
+		})
+		// const minValue = binanceData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+		// const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+		// const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
+
 		const coinbaseData = chartData.ticker?.coinbase?.map((item: any) => {
 			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
 		})
@@ -417,6 +440,36 @@ export default function ChartPage() {
 
 		const gridUpData = chartData._grid?.map((item: any) => {
 			return [item[0], item[1]] as any
+		})
+
+		const series: any[] = []
+		if (selectedSeries.includes('up')) series.push({
+			...lineChartOptions.series[0],
+			data: clobData.up						//up data (green)
+		})
+		if (selectedSeries.includes('down')) series.push({
+			...lineChartOptions.series[1],
+			data: clobData.down?.map(([timestamp, value]) => [timestamp, 1 - value])	//invert down data (red)
+		})
+		if (selectedSeries.includes('chainline')) series.push({
+			...lineChartOptions.series[2],
+			data: chainlinkData					//chainlink data (blue)
+		})
+		if (selectedSeries.includes('polling')) series.push({
+			...lineChartOptions.series[3],
+			data: pollingData
+		})
+		if (selectedSeries.includes('coinbase')) series.push({
+			...lineChartOptions.series[4],
+			data: coinbaseData
+		})
+		if (selectedSeries.includes('grid')) series.push({
+			...lineChartOptions.series[5],
+			data: gridUpData
+		})	
+		if (selectedSeries.includes('binance')) series.push({
+			...lineChartOptions.series[6],
+			data: binanceData
 		})
 
 		setChartOptions({
@@ -434,32 +487,7 @@ export default function ChartPage() {
 					max: +scale,
 				} as any
 			],
-			series: [
-				{
-					...lineChartOptions.series[0],
-					data: clobData.up						//up data (green)
-				},
-				{
-					...lineChartOptions.series[1],
-					data: clobData.down?.map(([timestamp, value]) => [timestamp, 1 - value])	//invert down data (red)
-				},
-				{
-					...lineChartOptions.series[2],
-					data: chainlinkData					//chainlink data (blue)
-				},
-				{
-					...lineChartOptions.series[3],		//polling data (magenta)
-					data: pollingData
-				},
-				{
-					...lineChartOptions.series[4],		//coinbase data (yellow)
-					data: coinbaseData
-				},
-				{
-					...lineChartOptions.series[5],
-					data: gridUpData
-				}
-			],
+			series: series,
 		})
 	}
 
@@ -472,16 +500,12 @@ export default function ChartPage() {
 
 		if (chartType === 'bar'){
 			console.log('updateChart:', symbol, chartType)
-			// const data = await PolymarketChart.getChartDistributionData(symbol, '2026-02-08')
-			// if (!data?.[14].length) return
-			const heatmap = await PolymarketApi.store.getItem('heatmap')
-			if (!heatmap) return
-			const map = heatmap[symbol + '-updown-15m']
-			if (!map?.map){
-				setChartOptions({})
-				return
-			}
-			const data = map.map
+			
+			// const heatmap = await PolymarketApi.store.getItem('heatmap')
+			const chartDistributionData = await PolymarketApi.store.getItem(symbol + '-chartDistributionData')
+			if (!chartDistributionData) return setChartOptions({})
+
+			const data = chartDistributionData[0]
 			console.log('data:', data)
 
 			setChartOptions({
@@ -489,7 +513,7 @@ export default function ChartPage() {
 				series: [{
 					...barChartOptions.series[0],
 					// data: data[0].map((item) => [item.index, item.value_s])
-					data: data[14].map((item) => [item.value, item.count])
+					data: data.map((item) => [item.value, item.count])
 				}],
 			})
 			return
@@ -688,7 +712,7 @@ export default function ChartPage() {
 							<ToggleGroupItem value='down' variant='outline'>Down</ToggleGroupItem>
 						</ToggleGroup>
 
-						<Button onClick={() => PolymarketChart.dataTest_3(asset?.value)}>
+						<Button onClick={() => PolymarketChart.getChartDistributionData(asset?.value)}>
 							data test
 						</Button>
 						{/* <Button onClick={() => PolymarketChart.fixingClobData()}>
@@ -700,6 +724,23 @@ export default function ChartPage() {
 							onCheckedChange={() => setIsAutoUpdate(!isAutoUpdate)}
 							className='ml-0'
 						/>
+					</div>
+					<div className="flex flex-row items-center gap-2">
+						<Label className="text-sm font-medium select-none mr-2">show chart:</Label>
+						<ToggleGroup
+							type="multiple"
+							className="flex flex-row"
+							value={selectedSeries}
+							onValueChange={(values: string[]) => {
+								setSelectedSeries(values)
+							}}
+						>
+							<ToggleGroupItem value="up" variant="outline">Up</ToggleGroupItem>
+							<ToggleGroupItem value="down" variant="outline">Down</ToggleGroupItem>
+							<ToggleGroupItem value="chainline" variant="outline">Chainline</ToggleGroupItem>
+							<ToggleGroupItem value="coinbase" variant="outline">Coinbase</ToggleGroupItem>
+							<ToggleGroupItem value="kraken" variant="outline">Kraken</ToggleGroupItem>
+						</ToggleGroup>
 					</div>
 					<ReactEcharts
 						option={chartOptions}

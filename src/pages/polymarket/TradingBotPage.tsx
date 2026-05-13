@@ -129,7 +129,7 @@ export default function TradingBotPage() {
 		down : {
 			enabled: false,
 		},
-		orderSize: 10,
+		orderSize: 20,
 		// sizeFactor: 5.0,		//size factor to multiply the trade size
 		liveTrading: false as boolean,
 		isConnected: false as boolean,

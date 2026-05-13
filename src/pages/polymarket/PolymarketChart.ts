@@ -1488,9 +1488,9 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 		if (diff > 30000) {		//there is a gap of 30 seconds
 			console.log('gap:',
 				chart.length - 1,
-				new Date(lastTimestamp).toISOString().substring(11, 19),
+				moment(lastTimestamp).format('YYYY-MM-DD HH:mm:ss'),
 				'to',
-				new Date(item.timestamp).toISOString().substring(11, 19),
+				moment(item.timestamp).format('YYYY-MM-DD HH:mm:ss'),
 				(diff / min).toFixed(2), 'minutes')
 		}
 		lastTimestamp = item.timestamp
@@ -1916,22 +1916,23 @@ const initData = async () => {
 	return data
 }
 
-/*
+
 // ---------------------------------------------------------------------------- getChartDistributionData
 export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
 	console.log('getChartDistributionData:', symbol, dateString, '...')
 
 	let data: any[] = []
-	if (dateString) {
-		data = await getChartTickerData(symbol, dateString)
+	if (dateString) {	//single date
+console.log('getChartTickerData:', symbol, dateString, 'binance...')
+		data = await getChartTickerData(symbol, dateString, 'binance')
 
-	} else {
+	} else {		//all ticker dat
 		// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
-		const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'coinbase/' + symbol + '-usd', { withFileTypes: true });
+		let dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'binance/' + symbol + 'usdt', { withFileTypes: true });
+		dirList = dirList.filter((entry) => entry.isFile() && entry.name.endsWith('.csv'))
 		console.log('dirList:', dirList)
 	
 		for (const entry of dirList) {
-			if (entry.isDirectory()) continue
 			// const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
 			const dateString = entry.name.split('.')[0]		//yyyy-mm-dd
 
@@ -1939,12 +1940,19 @@ const date = new Date(dateString)
 // if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
 if (date.getTime() < new Date('2026-02-01').getTime()) continue
 
-			const data_ = await getChartTickerData(symbol, dateString, 'coinbase')
+			const data_ = await getChartTickerData(symbol, dateString, 'binance')
 			console.log(entry.path + '/' + entry.name, data_.length)
 			// data.push(...data_ as any)
 			data = data.concat(data_ as any) || []
 		}
 		data.sort((a, b) => a.timestamp - b.timestamp)
+		// check if there are duplicate timestamps
+		// data.forEach((item, index) => {
+		// 	if (index > 0 && item.timestamp === data[index-1].timestamp) {
+		// 		console.log('duplicate:', index, item.timestamp, item.price, data[index-1].price)
+		// 	}
+		// })
+
 		console.log('chartData:', data.length)
 	}
 	if (!data.length) return [] as any
@@ -1991,10 +1999,11 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 			volume += item.count
 		})
 	}
-	// console.log('ranges:', ranges)
+	await PolymarketApi.store.setItem(symbol + '-chartDistributionData', ranges)
+	console.log('chartDistributionData:', ranges)
 	return ranges
 }
-*/
+
 
 // ---------------------------------------------------------------------------- smoothRatios
 // Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
