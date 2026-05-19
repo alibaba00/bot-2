@@ -561,16 +561,16 @@ let completeList: any = {} as any	//.csv files alrey completed to ignore them
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
 	console.log('getAllMarkets_clob', symbol || '', date || '', '...')
 
-	if (!dirList.length){
-		dirList = await PolymarketApi.store.getItem('dirList') as any[]
+	// if (!dirList.length){
 		completeList = await PolymarketApi.store.getItem('completeList') as any || {}
 
+		// dirList = await PolymarketApi.store.getItem('dirList') as any[]
 		if (!dirList?.length){
 			dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
 			dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
 			await PolymarketApi.store.setItem('dirList', dirList)
 		}
-	}
+	// }
 	if (!dirList?.length) return []
 
 	const dateString = (date || new Date()).toISOString().substring(0, 10);
@@ -684,6 +684,7 @@ export const getAllMarkets = async (symbol: string | null = null, date: Date | n
 
 
 // ---------------------------------------------------------------------------- updateLogfiles
+// old function
 export const updateLogfiles = async () => {
 	tickerDataCache = {} as any // clear ticker data cache
 	lastUpdate_logfiles = Date.now() as number
@@ -1469,7 +1470,7 @@ export const getChartTickerData = async (symbol: string, dateString: string, sou
 
 
 // ---------------------------------------------------------------------------- getChartMinuteData
-// get chart data by minute. price is average of the minute.
+// aggregate data by minute with average price.
 export const getChartMinuteData = async (data: { timestamp: number, price: number }[]):
 	Promise<{ timestamp: number, price: number }[]> => {
 	const min = 60000
@@ -1485,7 +1486,7 @@ export const getChartMinuteData = async (data: { timestamp: number, price: numbe
 
 	data.forEach((item) => {
 		const diff = item.timestamp - lastTimestamp
-		if (diff > 30000) {		//there is a gap of 30 seconds
+		if (diff > 30000) {		//there is a gap of more than 30 seconds
 			console.log('gap:',
 				chart.length - 1,
 				moment(lastTimestamp).format('YYYY-MM-DD HH:mm:ss'),
@@ -1938,7 +1939,7 @@ console.log('getChartTickerData:', symbol, dateString, 'binance...')
 
 const date = new Date(dateString)
 // if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
-if (date.getTime() < new Date('2026-02-01').getTime()) continue
+if (date.getTime() < new Date('2026-04-01').getTime()) continue
 
 			const data_ = await getChartTickerData(symbol, dateString, 'binance')
 			console.log(entry.path + '/' + entry.name, data_.length)
@@ -1955,27 +1956,29 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 
 		console.log('chartData:', data.length)
 	}
+
 	if (!data.length) return [] as any
 
 	const minuteData = await getChartMinuteData(data)
 	const normalizedData = normalizeData(minuteData)
 
-	const ranges: any = [] as any
-	const steps = 40
+	const ranges: any = {bars: [], count: 0, values: []} as any
+	const steps = 100
+	const frame = 15
 
-	// only ranges with valid start and end data are considered
-	for (let t = 0; t < 15; t++) {
-		const r = [] as any
+	for (let t = 0; t < frame; t++) {
+		// only ranges with valid start and end data are considered
+		const r = Array(steps).fill(0) as any
 		let total = 0
 		let off = 0
-		for (let v = 0; v < steps; v++) r[v] = 0
+		// for (let v = 0; v < steps; v++) r[v] = 0
 
-		for (let i = 0; i < normalizedData.length + t - 15; i++) {
-			if (!normalizedData[i].valid || !normalizedData[i + 15 - t].valid) continue
+		for (let i = 0; i < normalizedData.length + t - frame; i++) {
+			if (!normalizedData[i].valid || !normalizedData[i + frame - t].valid) continue
 			
 			const firstPrice = normalizedData[i].price		//first valid price of the range
-			const lastPrice = normalizedData[i + 15 - t].price	//last valid price of the range
-			const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
+			const lastPrice = normalizedData[i + frame - t].price	//last valid price of the range
+			const priceRatio = ((lastPrice / firstPrice) - 1) * 100 * 100 // * 60 / range	//price change ratio in percent per hour
 			const value = Math.floor(priceRatio) + steps / 2				//round to the nearest integer (-20 - 19)
 
 			total++
@@ -1986,19 +1989,25 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 		}
 
 		const max = Math.max(...r)
-		ranges[t] = r.map((count: number, index: number) => (
-			{index: index - steps / 2, count: count, value: count / max})
-		)
-		ranges[t]._total = total
+		ranges[t] = {
+			bars: r.map((count: number, index: number) => (
+				{index: index - steps / 2, count: count, value: count / max})
+			),
+			count: total,
+			values: r.map((count: number, index: number) => (
+				{index: index - steps / 2, count: count, value: count / max})
+			)
+		}
 
-		smoothValues(ranges[t])
+		smoothMirrorValues(ranges[t].bars)
 
 		let volume = off
-		ranges[t].forEach((item: any) => {
+		ranges[t].bars.forEach((item: any) => {
 			item.ratio = (volume + item.count / 2) / total
 			volume += item.count
 		})
 	}
+
 	await PolymarketApi.store.setItem(symbol + '-chartDistributionData', ranges)
 	console.log('chartDistributionData:', ranges)
 	return ranges
@@ -2007,7 +2016,29 @@ if (date.getTime() < new Date('2026-02-01').getTime()) continue
 
 // ---------------------------------------------------------------------------- smoothRatios
 // Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
-	const smoothValues = (arr: any[], window: number = 3, valueField: string = 'value'): void => {
+	const smoothMirrorValues = (arr: any[], window: number = 5, valueField: string = 'value'): void => {
+		for (let i = 0; i < arr.length / 2; i++) {
+			let sum = 0
+			let count = 0
+			// Glättung über das Fenster (z.B. 3er-Mittelwert)
+			for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
+				const idx = i + j
+				if (idx >= 0 && idx < arr.length) {
+					sum += arr[idx][valueField]
+					count++
+
+					sum += arr[arr.length-1-idx][valueField]	//add the value of the mirrored index
+					count++
+				}
+			}
+			arr[i][valueField + '_s'] = arr[arr.length-1-i][valueField + '_s'] = sum / count
+		}
+	}
+
+
+	// ---------------------------------------------------------------------------- smoothRatios
+	// Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
+	const smoothValues = (arr: any[], window: number = 5, valueField: string = 'value'): void => {
 		for (let i = 0; i < arr.length; i++) {
 			let sum = 0
 			let count = 0

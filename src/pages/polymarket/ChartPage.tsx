@@ -182,6 +182,36 @@ const barChartOptions = {
 	}
 } as any
 
+const barChartOptions2 = {
+	xAxis: {
+		type: 'category',
+	},
+	yAxis: {
+		type: 'value',
+		splitLine: {
+			show: true,
+			lineStyle: {
+				color: '#fff3',
+				width: 0.5
+			}
+		}
+	},
+	series: [
+		{
+			data: [] as any[],
+			type: 'line',
+			symbolSize: 0,
+		}
+	],
+	grid: {
+		top: 0,
+		bottom: 0,
+		left: 0,
+		right: 0,
+		// containLabel: true
+	}
+} as any
+
 
 const lineChartOptions = {
 	// Choose axis ticks based on UTC time.
@@ -505,16 +535,24 @@ export default function ChartPage() {
 			const chartDistributionData = await PolymarketApi.store.getItem(symbol + '-chartDistributionData')
 			if (!chartDistributionData) return setChartOptions({})
 
-			const data = chartDistributionData[0]
+			const data = chartDistributionData[9].bars
 			console.log('data:', data)
 
 			setChartOptions({
-				...barChartOptions,
+				...barChartOptions2,
 				series: [{
-					...barChartOptions.series[0],
-					// data: data[0].map((item) => [item.index, item.value_s])
-					data: data.map((item) => [item.value, item.count])
-				}],
+					...barChartOptions2.series[0],
+					// data: data.map((item) => [item.value, item.count])
+					// data: data.map((item) => [item.index, item.value])
+					data: chartDistributionData[9].bars.map((item) => [item.index, item.value_s])
+					// data: data.map((item) => [item.index, item.ratio])
+				},
+				{
+					...barChartOptions2.series[0],
+					data: chartDistributionData[0].bars.map((item) => [item.index, item.value_s])
+				}
+
+			],
 			})
 			return
 		}
@@ -680,7 +718,7 @@ export default function ChartPage() {
 							className='ml-0'
 						/> */}
 
-						<Button onClick={() => PolymarketChart.updateLogfiles()}>Update logfiles</Button>
+						{/* <Button onClick={() => PolymarketChart.updateLogfiles()}>Update logfiles</Button> */}
 
 						{/* <Button onClick={() => PolymarketChart.updateOldLogs()}>
 							Update old logs

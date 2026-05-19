@@ -109,18 +109,18 @@ class _Strategy3 {
 	setup: any = {
 		symbol : 'btc',
 		marketType: 'updown-5m',
-		fromDate: new Date('2026-05-10 00:00:00').getTime(),
-		toDate: new Date('2026-05-13 00:00:00').getTime(),
+		fromDate: new Date('2026-05-01 00:00:00').getTime(),
+		toDate: new Date('2026-05-14 00:00:00').getTime(),
 		// fromDate: 1778148600000, // new Date('2026-05-06 10:00:00').getTime(),
 		// toDate: 1778217000000, // new Date('2026-05-07 00:00:00').getTime(),
 		mode: 'and',  //'and' or 'or'
 		openTimeLimit: 60 * 1000,		//1 minute timeout for last buying
 		marketTimeLimit: 20 * 1000,		//20 seconds market timeout before closing (to prevent price glitches)
-		closeTimeDelay: 5 * 1000,		//5 seconds delay before selling
+		closeTimeDelay: 10 * 1000,		//10 seconds delay before selling
 		// closeTimeDelay: 1 * 1000,	//1 second delay before selling
 		gridVersion: 1,
 		'up': {enabled: true, size: 1, buyLimit: 1, sellLimit: 5, closeLimit: 0, trades: [] as any[]},
-		'down': {enabled: true, size: 1, buyLimit: 1, sellLimit: 5, closeLimit: 0, trades: [] as any[]},
+		'down': {enabled: false, size: 1, buyLimit: 1, sellLimit: 2, closeLimit: 0, trades: [] as any[]},
 		isRunning: false,
 		stats: null as any,
 	}
@@ -269,8 +269,8 @@ class _Strategy3 {
 		const sideData = this.setup[side]
 
 		// e[1] = ask, e[2] = bid
-		let sell = data.find((e: any) => e[0] > closeTimeLimit && e[2] >= sideData.sellLimit)
-		let close = data.find((e: any) => e[0] > closeTimeLimit && e[2] <= sideData.closeLimit)
+		let sell = data.find((e: any) => e[0] > closeTimeLimit && e[2] > sideData.sellLimit)
+		let close = data.find((e: any) => e[0] > closeTimeLimit && e[2] < sideData.closeLimit)
 
 		let pnl = 0
 		let won = false
@@ -484,10 +484,10 @@ class _Strategy3 {
 					for (k = i-1; k >= 0; k--){
 						node = stat[i][j][k]
 						if (!node && time > stat[i]._open){
-							if (i < value && j <= value){			//won
+							if (i < value && j < value){			//won
 								stat[i][j][k] = [item[0], true]
 
-							}else if (i > value && k >= value){		//lost
+							}else if (i > value && k > value){		//lost
 								stat[i][j][k] = [item[0], false]
 							}
 						}
