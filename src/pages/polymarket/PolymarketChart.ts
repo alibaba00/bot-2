@@ -561,16 +561,14 @@ let completeList: any = {} as any	//.csv files alrey completed to ignore them
 export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
 	console.log('getAllMarkets_clob', symbol || '', date || '', '...')
 
-	// if (!dirList.length){
-		completeList = await PolymarketApi.store.getItem('completeList') as any || {}
+	completeList = await PolymarketApi.store.getItem('completeList') as any || {} as any
 
-		// dirList = await PolymarketApi.store.getItem('dirList') as any[]
-		if (!dirList?.length){
-			dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
-			dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
-			await PolymarketApi.store.setItem('dirList', dirList)
-		}
-	// }
+	dirList = await PolymarketApi.store.getItem('dirList') as any[] || []
+	if (!dirList?.length){
+		dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
+		dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
+		await PolymarketApi.store.setItem('dirList', dirList)
+	}
 	if (!dirList?.length) return []
 
 	const dateString = (date || new Date()).toISOString().substring(0, 10);
@@ -932,6 +930,7 @@ export const updateAllMarketData_clob = async (all: boolean = false) => {
 
 	await PolymarketApi.store.setItem('lastUpdate_clobData', Date.now())
 
+	dirList = [] as any[]		//clear dirList
 	const dataFiles = await getAllMarkets_clob()
 
 	console.log('Updating all market data from clob (', dataFiles.length,
@@ -1920,16 +1919,26 @@ const initData = async () => {
 
 // ---------------------------------------------------------------------------- getChartDistributionData
 export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
-	console.log('getChartDistributionData:', symbol, dateString, '...')
+	// const source: string = 'binance'
+	const source: string = 'coinbase'
+	// e.g. A:/DATA/polymarket/coinbase/btc-usd
+	const path: string = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
+	console.log('getChartDistributionData:', symbol, dateString, source, '...')
+
+	const cachedData = await PolymarketApi.store.getItem('chartDistributionData-' + symbol)
+	if (cachedData){
+		console.log('chartDistributionData:', cachedData)
+		return cachedData
+	}
 
 	let data: any[] = []
 	if (dateString) {	//single date
-console.log('getChartTickerData:', symbol, dateString, 'binance...')
-		data = await getChartTickerData(symbol, dateString, 'binance')
+		console.log('getChartTickerData:', symbol, dateString, source, '...')
+		data = await getChartTickerData(symbol, dateString, source)
 
 	} else {		//all ticker dat
 		// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
-		let dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'binance/' + symbol + 'usdt', { withFileTypes: true });
+		let dirList = await fsPromises.readdir(path, { withFileTypes: true });
 		dirList = dirList.filter((entry) => entry.isFile() && entry.name.endsWith('.csv'))
 		console.log('dirList:', dirList)
 	
@@ -1939,14 +1948,16 @@ console.log('getChartTickerData:', symbol, dateString, 'binance...')
 
 const date = new Date(dateString)
 // if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
-if (date.getTime() < new Date('2026-04-01').getTime()) continue
+if (date.getTime() < new Date('2026-05-01').getTime()) continue
 
-			const data_ = await getChartTickerData(symbol, dateString, 'binance')
+			const data_ = await getChartTickerData(symbol, dateString, source)
 			console.log(entry.path + '/' + entry.name, data_.length)
 			// data.push(...data_ as any)
 			data = data.concat(data_ as any) || []
 		}
 		data.sort((a, b) => a.timestamp - b.timestamp)
+
+		// await PolymarketApi.store.setItem(symbol + '-chartTickerData-' + source, data)
 		// check if there are duplicate timestamps
 		// data.forEach((item, index) => {
 		// 	if (index > 0 && item.timestamp === data[index-1].timestamp) {
@@ -1958,13 +1969,13 @@ if (date.getTime() < new Date('2026-04-01').getTime()) continue
 	}
 
 	if (!data.length) return [] as any
-
 	const minuteData = await getChartMinuteData(data)
 	const normalizedData = normalizeData(minuteData)
 
 	const ranges: any = {bars: [], count: 0, values: []} as any
 	const steps = 100
 	const frame = 15
+	const range = 0.01	//price range in percent (0.01 = +/-0.5%)
 
 	for (let t = 0; t < frame; t++) {
 		// only ranges with valid start and end data are considered
@@ -1973,17 +1984,17 @@ if (date.getTime() < new Date('2026-04-01').getTime()) continue
 		let off = 0
 		// for (let v = 0; v < steps; v++) r[v] = 0
 
-		for (let i = 0; i < normalizedData.length + t - frame; i++) {
-			if (!normalizedData[i].valid || !normalizedData[i + frame - t].valid) continue
+		for (let i = 0; i < normalizedData.length - (1 + t); i++) {
+			if (!normalizedData[i].valid || !normalizedData[i + 1 + t].valid) continue
 			
 			const firstPrice = normalizedData[i].price		//first valid price of the range
-			const lastPrice = normalizedData[i + frame - t].price	//last valid price of the range
-			const priceRatio = ((lastPrice / firstPrice) - 1) * 100 * 100 // * 60 / range	//price change ratio in percent per hour
+			const lastPrice = normalizedData[i + 1 + t].price	//last valid price of the range
+			const priceRatio = ((lastPrice / firstPrice) - 1) * 100 / range //price change ratio in percent per range
 			const value = Math.floor(priceRatio) + steps / 2				//round to the nearest integer (-20 - 19)
 
 			total++
 			if (value < 0) off++
-			if (value < 0 || value >= steps) continue
+			if (value < 0 || value >= steps) continue	//ignore values outside the range
 
 			r[value]++
 		}
@@ -1994,9 +2005,6 @@ if (date.getTime() < new Date('2026-04-01').getTime()) continue
 				{index: index - steps / 2, count: count, value: count / max})
 			),
 			count: total,
-			values: r.map((count: number, index: number) => (
-				{index: index - steps / 2, count: count, value: count / max})
-			)
 		}
 
 		smoothMirrorValues(ranges[t].bars)
@@ -2008,7 +2016,7 @@ if (date.getTime() < new Date('2026-04-01').getTime()) continue
 		})
 	}
 
-	await PolymarketApi.store.setItem(symbol + '-chartDistributionData', ranges)
+	await PolymarketApi.store.setItem('chartDistributionData-' + symbol, ranges)
 	console.log('chartDistributionData:', ranges)
 	return ranges
 }

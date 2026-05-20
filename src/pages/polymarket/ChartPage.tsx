@@ -396,6 +396,8 @@ const lineChartOptions = {
 
 
 // const chartData = {} as any
+const seriesContent = ['up', 'down', 'chainline', 'coinbase', 'kraken', 'grid', 'binance', 'polling']
+const chartDistributionData: any = {} as any
 
 export default function ChartPage() {
 	const [asset, setAsset] = useState(assetContent[0])
@@ -408,12 +410,10 @@ export default function ChartPage() {
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 	const [isAutoUpdate, setIsAutoUpdate] = useState(true)
 	// const isLogging = PolymarketApi.use('loggingActive')
-	const [selectedSeries, setSelectedSeries] = useState<string[]>(
-		['up', 'down', 'chainline', 'coinbase', 'grid', 'binance'] as string[]
-	)
+	const [selectedSeries, setSelectedSeries] = useState<string[]>(seriesContent)
 
 
-	const parseLineData = (chartData: any) => {
+	const parseLineData = (chartData: any, distData: any) => {
 		// if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
 		// if (!chartData.ticker.length) return
 		if (!selectedMarket || !chartData){
@@ -422,27 +422,34 @@ export default function ChartPage() {
 		}
 
 		const openPrice = selectedMarket.data.openPrice
-		const startTimestamp = selectedMarket.data.startTimestamp - PolymarketChart.preOffset
-		const endTimestamp = selectedMarket.data.endTimestamp + PolymarketChart.postOffset
+		const startTime = selectedMarket.data.startTimestamp - PolymarketChart.preOffset
+		const endTime = selectedMarket.data.endTimestamp + PolymarketChart.postOffset
 		const clobData = chartData.clob
 
 		// add data to the end of the array if the last timestamp is less than the endTimestamp
 		if (clobData.up?.length && clobData.down?.length) {
-			if (clobData.up[clobData.up.length-1][0] < endTimestamp) {
-				clobData.up.push([endTimestamp, clobData.up[clobData.up.length-1][1]])
+			if (clobData.up[clobData.up.length-1][0] < endTime) {
+				clobData.up.push([endTime, clobData.up[clobData.up.length-1][1]])
 			}
-			if (clobData.down[clobData.down.length-1][0] < endTimestamp) {
-				clobData.down.push([endTimestamp, clobData.down[clobData.down.length-1][1]])
+			if (clobData.down[clobData.down.length-1][0] < endTime) {
+				clobData.down.push([endTime, clobData.down[clobData.down.length-1][1]])
 			}
 		}
 
+		let minValue = Infinity
+		let maxValue = -Infinity
+		let value: number
 		const chainlinkData = chartData.ticker?.chainlink?.map((item: any) => {
-			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
+			value = ((item[1] / openPrice) - 1 ) * 100
+			minValue = Math.min(minValue, value)
+			maxValue = Math.max(maxValue, value)
+			return [item[0], value] as any
 		})
-		const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-		const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
-		// const scale = 5
+		// const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
+		// const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
+		// const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
+		const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(2)) + 0.02)
+		// const scale = 0.4
 
 		// const firstPrice = chartData.ticker?.binance?.[0]?.[1]
 		// const binanceData = chartData.ticker?.binance?.map((item: any) => {
@@ -453,26 +460,70 @@ export default function ChartPage() {
 		// const scale = parseNumber(parseFloat((Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1))) + 0.2)
 
 		const binanceData = chartData.ticker?.binance?.map((item: any) => {
-			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
+			return [item[0], ((item[1] / openPrice) - 1 ) * 100] as any
 		})
 		// const minValue = binanceData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
 		// const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
 		// const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
+		const series: any[] = []
 
-		const coinbaseData = chartData.ticker?.coinbase?.map((item: any) => {
-			return [item[0], ((item[1] / openPrice) - 1 ) * 1000] as any
-		})
+const targetPrice = [] as any[]
+const coinbaseData = chartData.ticker?.coinbase?.map((item: any) => {
+	value = ((item[1] / openPrice) - 1 ) * 100		//coinbase price change in percent
+
+	let float, fract_a, a0, a1, a, b, c, d, e, f, g, t0, t1, float_t, fract_t
+
+	if (item[0] < selectedMarket.data.endTimestamp){
+		float = Math.max(Math.min(value / 0.01 + 50, 100), 0)
+
+		a0 = Math.floor(float)
+		fract_a = float - a0
+		a0 = Math.max(Math.min(a0, 99), 0)
+		a1 = a0 < 99 ? a0 + 1 : a0
+
+		float_t = (selectedMarket.data.endTimestamp - item[0]) / 60000
+		t0 = Math.floor(float_t)
+		fract_t = float_t - t0
+
+		t0 = Math.max(Math.min(t0, 14), 0)
+		t1 = t0 < 14 ? t0 + 1 : t0
+		float_t = float_t - t0
+
+		a = distData[t1].bars[a0].ratio
+		b = distData[t1].bars[a1].ratio
+		c = distData[t0].bars[a0].ratio
+		d = distData[t0].bars[a1].ratio
+
+		e = a + (b - a) * fract_a
+		f = c + (d - c) * fract_a
+		g = f - (f - e) * fract_t
+
+		targetPrice.push([item[0], g, a0, t0])
+	}
+
+	return [item[0], value] as any
+})
+
+// console.log(targetPrice)
+series.push({
+	...lineChartOptions.series[0],
+	data: targetPrice,
+	lineStyle: {
+		width: 0.5,
+		color: '#0fcc',
+	},
+})		
+
 
 		const firstPrice = chartData.ticker?.polling?.[0]?.[1]
 		const pollingData = chartData.ticker?.polling?.map((item: any) => {
-			return [item[0], ((item[1] / firstPrice) - 1 ) * 1000] as any
+			return [item[0], ((item[1] / firstPrice) - 1 ) * 100] as any
 		})
 
 		const gridUpData = chartData._grid?.map((item: any) => {
 			return [item[0], item[1]] as any
 		})
 
-		const series: any[] = []
 		if (selectedSeries.includes('up')) series.push({
 			...lineChartOptions.series[0],
 			data: clobData.up						//up data (green)
@@ -506,8 +557,8 @@ export default function ChartPage() {
 			...lineChartOptions,
 			xAxis: [{
 				...lineChartOptions.xAxis[0],
-				min: startTimestamp,
-				max: endTimestamp,
+				min: startTime,
+				max: endTime,
 			}],
 			yAxis: [
 				lineChartOptions.yAxis[0] as any,
@@ -522,36 +573,44 @@ export default function ChartPage() {
 	}
 
 
+	// ---------------------------------------------------------------------------- useEffect selectedSeries
+	useEffect(() => {
+		updateChart()
+	}, [selectedSeries])
+
+
 	// ---------------------------------------------------------------------------- updateChart
 	const updateChart = async () => {
 		const symbol = asset?.value.toLowerCase()
 		console.log('updateChart:', chartType, symbol, selectedMarket?.slug || '')
 		if (!symbol) return
 
+		if (!chartDistributionData[symbol]){
+			chartDistributionData[symbol] = 'loading...'
+			chartDistributionData[symbol] = await PolymarketChart.getChartDistributionData(symbol)
+		}
+
 		if (chartType === 'bar'){
 			console.log('updateChart:', symbol, chartType)
 			
 			// const heatmap = await PolymarketApi.store.getItem('heatmap')
-			const chartDistributionData = await PolymarketApi.store.getItem(symbol + '-chartDistributionData')
-			if (!chartDistributionData) return setChartOptions({})
-
-			const data = chartDistributionData[9].bars
-			console.log('data:', data)
+			// const chartDistributionData = await PolymarketApi.store.getItem(symbol + '-chartDistributionData')
+			// if (!chartDistributionData) return setChartOptions({})
 
 			setChartOptions({
-				...barChartOptions2,
+				...barChartOptions,
 				series: [{
-					...barChartOptions2.series[0],
+					...barChartOptions.series[0],
 					// data: data.map((item) => [item.value, item.count])
 					// data: data.map((item) => [item.index, item.value])
-					data: chartDistributionData[9].bars.map((item) => [item.index, item.value_s])
+					data: chartDistributionData[symbol]?.[14]?.bars?.length ?
+						chartDistributionData[symbol][14].bars.map((item) => [item.index, item.value_s])  : []
 					// data: data.map((item) => [item.index, item.ratio])
 				},
-				{
-					...barChartOptions2.series[0],
-					data: chartDistributionData[0].bars.map((item) => [item.index, item.value_s])
-				}
-
+				// {
+				// 	...barChartOptions.series[0],
+				// 	data: chartDistributionData[0].bars.map((item) => [item.index, item.value_s])
+				// }
 			],
 			})
 			return
@@ -591,7 +650,7 @@ export default function ChartPage() {
 
 		switch (chartType) {
 			case 'line':
-				parseLineData(chartData)
+				parseLineData(chartData, chartDistributionData[symbol])
 				break
 
 			// case 'heatmap':
@@ -773,11 +832,9 @@ export default function ChartPage() {
 								setSelectedSeries(values)
 							}}
 						>
-							<ToggleGroupItem value="up" variant="outline">Up</ToggleGroupItem>
-							<ToggleGroupItem value="down" variant="outline">Down</ToggleGroupItem>
-							<ToggleGroupItem value="chainline" variant="outline">Chainline</ToggleGroupItem>
-							<ToggleGroupItem value="coinbase" variant="outline">Coinbase</ToggleGroupItem>
-							<ToggleGroupItem value="kraken" variant="outline">Kraken</ToggleGroupItem>
+							{seriesContent.map((series) => (
+								<ToggleGroupItem key={series} value={series} variant="outline">{series}</ToggleGroupItem>
+							))}
 						</ToggleGroup>
 					</div>
 					<ReactEcharts
