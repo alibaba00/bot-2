@@ -2,7 +2,12 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
 import path from 'path'
+
+// H: may be a subst drive (e.g. H: => C:\DRIVE.H). Vite resolves module ids via
+// realpath, so root/fs.allow must use the same canonical path or client transforms fail.
+const projectRoot = fs.realpathSync.native(path.resolve(import.meta.dirname))
 
 // Plugin to handle Electron-specific modules
 const electronPlugin = () => ({
@@ -30,6 +35,7 @@ export default defineConfig(({ mode }) => {
 	console.log('vite.config mode:', mode, 'port:', port)
 	
 	return {
+		root: projectRoot,
 		plugins: [
 			react(),
 			tailwindcss(),
@@ -60,8 +66,8 @@ export default defineConfig(({ mode }) => {
 		},
 		resolve: {
 			alias: {
-				'@': path.resolve(__dirname, './src')
-			}
+				'@': path.join(projectRoot, 'src'),
+			},
 		},
 		optimizeDeps: {
 			exclude: [

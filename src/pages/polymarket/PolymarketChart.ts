@@ -7,10 +7,10 @@ const fs = isElectron ? (window as any)?.require?.('fs') : null
 const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 // const path = isElectron ? (window as any)?.require?.('path') : null;
 
-let tickerDataCache: any = {} // ticker data cache
 let isRunning = false
-let lastUpdate_logfiles: number = await PolymarketApi.store.getItem('lastUpdate_logfiles') || 0
-console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
+let tickerDataCache: any = {} // ticker data cache
+// const lastUpdate_logfiles: number = await PolymarketApi.store.getItem('lastUpdate_logfiles') || 0
+// console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
 
 export const preOffset = 40000		//get tickerdata 40 seconds before startTimestamp
 export const postOffset = 20000	//get tickerdata 20 seconds after endTimestamp
@@ -65,12 +65,12 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 		}
 		
 		//--- update chartData version
-		if (market.chartData?.version !== chartDataVersion && market.closed) {
+		if (market.closed && market.chartData?.version !== chartDataVersion) {
 // console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
 			// const csvPath = market.filePath.replace('.json', '.csv')
 			// market.chartData = await getClobTickerData(market, csvPath)
 			market.chartData.clob._complete = updateClobDataComplete(market)
-			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
+			market.chartData._complete = true
 			market.chartData.version = chartDataVersion
 			updated = true
 
@@ -555,15 +555,16 @@ const parseNumber = (num: number) => {
 
 // ---------------------------------------------------------------------------- getAllMarkets_clob_2
 let dirList: any[] = []
-let completeList: any = {} as any	//.csv files alrey completed to ignore them
+// let completeList: any = {} as any	//.csv files alrey completed to ignore them
 
 
-export const getAllMarkets_clob = async (symbol: string | null = null, date: Date | null = null) => {
-	console.log('getAllMarkets_clob', symbol || '', date || '', '...')
+export const getAllMarkets_clob = async (symbol: string | null = null,
+	date: Date | null = null, clearCache: boolean = false) => {
+	console.log('getAllMarkets_clob', symbol || '', date || '', '... (clearCache:', clearCache, ')')
 
-	completeList = await PolymarketApi.store.getItem('completeList') as any || {} as any
+	// completeList = await PolymarketApi.store.getItem('completeList') as any || {} as any
 
-	dirList = await PolymarketApi.store.getItem('dirList') as any[] || []
+	dirList = clearCache? [] : await PolymarketApi.store.getItem('dirList') as any[] || []
 	if (!dirList?.length){
 		dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
 		dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
@@ -683,6 +684,7 @@ export const getAllMarkets = async (symbol: string | null = null, date: Date | n
 
 // ---------------------------------------------------------------------------- updateLogfiles
 // old function
+/*
 export const updateLogfiles = async () => {
 	tickerDataCache = {} as any // clear ticker data cache
 	lastUpdate_logfiles = Date.now() as number
@@ -717,8 +719,9 @@ export const updateLogfiles = async () => {
 
 	console.log('---Complete! new total files:', dirList.length)
 }
+*/
 
-
+/*
 // ---------------------------------------------------------------------------- updateOldLogs
 export const updateOldLogs = async () => {
 	console.log('---Updating old logs...')
@@ -734,7 +737,7 @@ export const updateOldLogs = async () => {
 	// 	if (entry.isDirectory()) continue
 	// }
 }
-
+*/
 
 const tickerDataSources: any = {
 	clob: {
@@ -801,6 +804,7 @@ const tickerDataSources: any = {
     "path": "H:\\DEV\\TRADE\\POLY\\bot-3\\logs\\clob\\xrp-updown-5m\\2026-04-27"
 }
 */
+/*
 export const updateLogData = async (type: string = 'clob') => {
 	console.log('Updating log data:', type)
 
@@ -853,8 +857,9 @@ export const updateLogData = async (type: string = 'clob') => {
 		}
 	}
 }
+*/
 
-
+/*
 // ---------------------------------------------------------------------------- updateLogData_worker
 export const updateLogData_worker = async (type: string = 'clob') => {
 	// Fallback, falls keine Worker unterstützt werden
@@ -895,7 +900,7 @@ export const updateLogData_worker = async (type: string = 'clob') => {
 		worker.postMessage({ type: 'run', logDataType: type })
 	})
 }
-
+*/
 
 // ---------------------------------------------------------------------------- updateMarketData
 export const getMarket = async (slug: string, filePath: string | null = null, useCache: boolean = true): Promise<Market | null> => {
@@ -920,7 +925,7 @@ export const getMarket = async (slug: string, filePath: string | null = null, us
 
 
 // ---------------------------------------------------------------------------- updateAllMarketData_clob
-export const updateAllMarketData_clob = async (all: boolean = false) => {
+export const updateAllMarketData_clob = async () => {
 	if (isRunning){
 		console.log('updateAllMarketData_clob canceled!')
 		isRunning = false
@@ -928,13 +933,95 @@ export const updateAllMarketData_clob = async (all: boolean = false) => {
 	}
 	isRunning = true
 
-	await PolymarketApi.store.setItem('lastUpdate_clobData', Date.now())
+	tickerDataCache = {} as any		//clear ticker data cache
+	
+	const last = await PolymarketApi.store.getItem('lastUpdate_clobData') || 0
+	const now = Date.now()
+	await PolymarketApi.store.setItem('lastUpdate_clobData', now)
 
-	dirList = [] as any[]		//clear dirList
-	const dataFiles = await getAllMarkets_clob()
+	// get all clob market data .csv files
+	//clear cache if last update is more than 1 hour ago
+	const dataFiles = await getAllMarkets_clob(null, null, now - last > 60 * 60 * 1000)
+	console.log('Updating all market data from clob:', dataFiles.length, 'files ...')
 
-	console.log('Updating all market data from clob (', dataFiles.length,
-		'files, lastUpdate:', moment(new Date(lastUpdate_logfiles)).format('YYYY-MM-DD HH:mm:ss'), ') ...')
+	// get all existing market keys from cache
+	const marketKeys = await PolymarketApi.cache.keys()
+	const marketLookup = marketKeys.reduce((acc: any, key: string) => {
+		acc[key] = true
+		return acc
+	}, {})
+
+	// get all existing open markets from store
+	let openMarkets = await PolymarketApi.store.getItem('openMarkets') as string[]
+	const all = openMarkets? false : true
+	openMarkets = openMarkets || []
+
+	console.log('openMarkets:', openMarkets.length)
+	const openMarketsLookup = openMarkets.reduce((acc: any, slug: string) => {
+		acc[slug] = true
+		return acc
+	}, {})
+
+	const stat = {
+		total: dataFiles.length,
+		skipped: 0,
+		new: 0,
+		closed: 0,
+		updated: 0,
+		open: 0,
+	}
+
+	for (const file of dataFiles) {
+		if (!all && marketLookup[file.slug]) {		//market is cached
+			if (!openMarketsLookup[file.slug]){		//market is not open
+				stat.skipped++
+				continue
+			}
+		}else{
+			stat.new++
+		}
+
+		// update cached market or create new market
+		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
+		if (updated) stat.updated++
+
+		if (!market || !market.closed || !market.chartData._complete){
+			stat.open++
+			openMarketsLookup[file.slug] = true
+		}else{
+			delete openMarketsLookup[file.slug]
+			stat.closed++
+		}
+	}
+
+	// update open markets in store
+	await PolymarketApi.store.setItem('openMarkets', Object.keys(openMarketsLookup))
+
+	console.log('complete!', stat)
+	isRunning = false
+
+}
+
+
+// ---------------------------------------------------------------------------- updateAllMarketData_clob
+export const _updateAllMarketData_clob = async (all: boolean = false) => {
+	if (isRunning){
+		console.log('updateAllMarketData_clob canceled!')
+		isRunning = false
+		return
+	}
+	isRunning = true
+
+	const last = await PolymarketApi.store.getItem('lastUpdate_clobData') || 0
+	const now = Date.now()
+	await PolymarketApi.store.setItem('lastUpdate_clobData', now)
+
+	//clear cache if last update is more than 1 hour ago
+	// const dataFiles = await getAllMarkets_clob(null, null, now - last > 60 * 60 * 1000)
+	const dataFiles = await getAllMarkets_clob(null, null)
+
+	console.log('Updating all market data from clob (', dataFiles.length, 'files ...')
+		// 'files, lastUpdate:', moment(new Date(lastUpdate_logfiles)).format('YYYY-MM-DD HH:mm:ss'), ') ...')
 
 	const stat = {
 		totalMarkets: dataFiles.length,
@@ -950,7 +1037,12 @@ export const updateAllMarketData_clob = async (all: boolean = false) => {
 		return acc
 	}, {})
 
-	const openMarkets = all ? [] : await PolymarketApi.store.getItem('openMarkets') || []
+	let openMarkets = all ? [] : await PolymarketApi.store.getItem('openMarkets')
+	if (!openMarkets){
+		all = true		//all = true if openMarkets is not set
+		openMarkets = []
+	}
+
 	const openMarketsLookup = openMarkets.reduce((acc: any, slug: string) => {
 		acc[slug] = true
 		return acc
@@ -975,7 +1067,7 @@ export const updateAllMarketData_clob = async (all: boolean = false) => {
 		}
 
 		if (marketLookup[file.slug]) {				//market is cached
-			if (!openMarketsLookup[file.slug]){		//market is closed
+			if (!openMarketsLookup[file.slug]){		//market is not open
 				stat.closedMarkets++
 				continue
 			}
@@ -983,14 +1075,14 @@ export const updateAllMarketData_clob = async (all: boolean = false) => {
 			stat.newMarkets++
 		}
 
-		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
-		if (updated){
-			stat.updated++
-			console.log('-----> update market:', index, ++count, '/', openMarkets.length, file.slug, file.filePath)
-			console.log('')
-		}
+const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
+if (updated){
+	stat.updated++
+	console.log('-----> update market:', index, ++count, '/', openMarkets.length, file.slug, file.filePath)
+	console.log('')
+}
 
-		if (market && !market.closed){
+		if (market && (!market.closed || !market.chartData._complete)){
 			stat.openMarkets++
 			openMarketsLookup[file.slug] = true
 		}else{
@@ -1007,6 +1099,8 @@ export const updateAllMarketData_clob = async (all: boolean = false) => {
 
 
 // ---------------------------------------------------------------------------- updateMarketData
+// from market list item "Update" button
+// or updateAllMarketData_clob (Update clob data)
 // csvPath sample: A:/DATA/polymarket/clob/btc-updown-5m/2026-04-02/btc-updown-5m-1775127000.csv
 export const updateMarketData_clob = async (slug: string, csvPath: string, useCache: boolean = true)
 	: Promise<{market: Market | null, updated: boolean}> => {
@@ -1059,8 +1153,9 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 			market.chartData = await getClobTickerData(market, csvPath)
 			market.chartData.clob._complete = updateClobDataComplete(market)
 			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
-			market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
-// console.log(5, market.chartData._complete)
+			// market.chartData._complete = lastUpdate_logfiles > market.endTimestamp
+			market.chartData._complete = true
+			market.chartData.version = chartDataVersion
 			updated = true
 		}
 	}
@@ -1920,7 +2015,9 @@ const initData = async () => {
 // ---------------------------------------------------------------------------- getChartDistributionData
 export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
 	// const source: string = 'binance'
-	const source: string = 'coinbase'
+	// const source: string = 'coinbase'
+	const source: string = 'chainlink'
+	
 	// e.g. A:/DATA/polymarket/coinbase/btc-usd
 	const path: string = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
 	console.log('getChartDistributionData:', symbol, dateString, source, '...')

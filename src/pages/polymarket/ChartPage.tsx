@@ -4,7 +4,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ReactEcharts from 'echarts-for-react';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PolymarketApi from "./PolymarketApi";
 import * as PolymarketChart from "./PolymarketChart";
 import moment from "moment";
@@ -212,6 +212,113 @@ const barChartOptions2 = {
 	}
 } as any
 
+const distChartOptions = {
+	useUTC: true,
+
+	xAxis: [
+		{
+			type: 'time',
+			boundaryGap: false,
+			axisLabel: {
+				showMinLabel: true,
+				showMaxLabel: true,
+			},
+			data: [] as any[],
+			// show a vertical line every X minutes
+			splitLine: {
+				show: true,
+				lineStyle: {
+					color: '#fff3',
+					width: 1,
+					type: 'dashed'
+				}
+			}
+		}
+	],
+	yAxis: [
+		{
+			type: 'value',
+			scale: false,
+			min: 0,
+			max: 1,
+			interval: 0.1,
+			splitLine: {
+				show: true,
+				lineStyle: {
+					color: '#fff3',
+					width: 0.5
+				}
+			}
+		},
+	],
+	series: [
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#0f0c',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			step: 'end',
+			tooltip: {
+				show: true,
+			},
+			name: "up",
+		},
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#f00c',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			step: 'end',
+			tooltip: {
+				show: true,
+			},
+			name: "down",
+		},
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#06fc', // set to visible color (e.g. yellow)
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			yAxisIndex: 1,
+			step: 'end',
+			tooltip: {
+				show: false,
+			},
+			name: "chainlink",
+		},
+		{
+			type: 'line',
+			lineStyle: {
+				width: 1,
+				color: '#93fc',
+			},
+			symbolSize: 0,
+			data: [] as any[],
+			yAxisIndex: 1,
+			step: 'end',
+			tooltip: {
+				show: false,
+			},
+			name: "polling",
+		},
+	],
+	grid: {
+		top: 0,
+		bottom: 0,
+		left: 0,
+		right: 0,
+		// containLabel: true
+	}
+} as any
 
 const lineChartOptions = {
 	// Choose axis ticks based on UTC time.
@@ -396,8 +503,11 @@ const lineChartOptions = {
 
 
 // const chartData = {} as any
-const seriesContent = ['up', 'down', 'chainline', 'coinbase', 'kraken', 'grid', 'binance', 'polling']
+const seriesContent = ['up', 'down', 'chainline', 'coinbase', 'kraken', 'dist', 'binance', 'polling']
 const chartDistributionData: any = {} as any
+const autpUpdateInterval = 1000 * 60 * 60 // 1 hour
+let autoUpdateTimer: any = null
+
 
 export default function ChartPage() {
 	const [asset, setAsset] = useState(assetContent[0])
@@ -413,7 +523,21 @@ export default function ChartPage() {
 	const [selectedSeries, setSelectedSeries] = useState<string[]>(seriesContent)
 
 
-	const parseLineData = (chartData: any, distData: any) => {
+	useEffect(() => {
+		if (autoUpdateTimer) clearInterval(autoUpdateTimer)
+		if (isAutoUpdate){
+			console.log('-------------autoUpdateTimer:', isAutoUpdate, autpUpdateInterval)
+			autoUpdateTimer = setInterval(() => {
+				PolymarketChart.updateAllMarketData_clob()
+			}, autpUpdateInterval)
+		}
+		return () => {
+			if (autoUpdateTimer) clearInterval(autoUpdateTimer)
+		}
+	}, [isAutoUpdate])
+
+
+	const parseLineData = (chartData: any) => {
 		// if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
 		// if (!chartData.ticker.length) return
 		if (!selectedMarket || !chartData){
@@ -467,53 +591,22 @@ export default function ChartPage() {
 		// const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
 		const series: any[] = []
 
-const targetPrice = [] as any[]
-const coinbaseData = chartData.ticker?.coinbase?.map((item: any) => {
-	value = ((item[1] / openPrice) - 1 ) * 100		//coinbase price change in percent
+		const coinbaseData = chartData.ticker?.coinbase?.map((item: any) => {
+			value = ((item[1] / openPrice) - 1 ) * 100		//coinbase price change in +/-percent
+			return [item[0], value] as any
+		})
 
-	let float, fract_a, a0, a1, a, b, c, d, e, f, g, t0, t1, float_t, fract_t
+		const targetPrice = chartData.dist || setDistData()
+		if (!targetPrice) return
 
-	if (item[0] < selectedMarket.data.endTimestamp){
-		float = Math.max(Math.min(value / 0.01 + 50, 100), 0)
-
-		a0 = Math.floor(float)
-		fract_a = float - a0
-		a0 = Math.max(Math.min(a0, 99), 0)
-		a1 = a0 < 99 ? a0 + 1 : a0
-
-		float_t = (selectedMarket.data.endTimestamp - item[0]) / 60000
-		t0 = Math.floor(float_t)
-		fract_t = float_t - t0
-
-		t0 = Math.max(Math.min(t0, 14), 0)
-		t1 = t0 < 14 ? t0 + 1 : t0
-		float_t = float_t - t0
-
-		a = distData[t1].bars[a0].ratio
-		b = distData[t1].bars[a1].ratio
-		c = distData[t0].bars[a0].ratio
-		d = distData[t0].bars[a1].ratio
-
-		e = a + (b - a) * fract_a
-		f = c + (d - c) * fract_a
-		g = f - (f - e) * fract_t
-
-		targetPrice.push([item[0], g, a0, t0])
-	}
-
-	return [item[0], value] as any
-})
-
-// console.log(targetPrice)
-series.push({
-	...lineChartOptions.series[0],
-	data: targetPrice,
-	lineStyle: {
-		width: 0.5,
-		color: '#0fcc',
-	},
-})		
-
+		if (selectedSeries.includes('dist')) series.push({
+			...lineChartOptions.series[0],
+			data: targetPrice.dist,
+			lineStyle: {
+				width: 0.5,
+				color: '#0fcc',
+			},
+		})
 
 		const firstPrice = chartData.ticker?.polling?.[0]?.[1]
 		const pollingData = chartData.ticker?.polling?.map((item: any) => {
@@ -573,6 +666,101 @@ series.push({
 	}
 
 
+	// ---------------------------------------------------------------------------- parseDistData
+	const parseDistData = () => {
+		const chartData = selectedMarket?.data?.chartData
+
+		if (!selectedMarket || !chartData){
+			setChartOptions({})
+			return
+		}
+
+		const targetPrice = chartData.dist || setDistData()
+		if (!targetPrice) return
+
+		setChartOptions({
+			...distChartOptions,
+			series: [{
+				...distChartOptions.series[0],
+				data: targetPrice.dist
+			}],
+		})
+
+	}
+
+
+	// ---------------------------------------------------------------------------- setDistData
+	const setDistData = () => {
+		const distData = chartDistributionData[selectedMarket.symbol]
+		if (!distData) return null
+		const endTimestamp = selectedMarket.data.endTimestamp
+		if (!endTimestamp) return null
+
+		const openPrice = selectedMarket.data.openPrice
+		const baseData = selectedMarket.data.chartData.ticker?.chainlink?.filter((item: any) => item[0] < endTimestamp)
+			.map((item: any) => {
+				const value = ((item[1] / openPrice) - 1 ) * 100		//coinbase price change in percent
+				return [item[0], value] as any
+			})
+		if (!baseData) return null
+
+		let float, fract_a, a0, a1, a, b, c, d, e, f, g, t0, t1, float_t, fract_t
+
+		const targetData = baseData.filter((item: any) => item[0] < endTimestamp)
+			.map((item: any) => {
+
+			float = Math.max(Math.min(item[1] / 0.01 + 50, 100), 0)
+		
+			a0 = Math.floor(float)
+			fract_a = float - a0
+			a0 = Math.max(Math.min(a0, 99), 0) // 0 - 99
+			a1 = a0 < 99 ? a0 + 1 : a0
+		
+			float_t = (endTimestamp - item[0]) / 60000
+			t0 = Math.floor(float_t)
+			fract_t = float_t - t0
+		
+			t0 = Math.max(Math.min(t0, 14), 0) - 1
+			t1 = t0 < 14 ? t0 + 1 : t0
+		
+			a = distData[t1].bars[a0].ratio
+			b = distData[t1].bars[a1].ratio
+			c = t0 >= 0 ? distData[t0].bars[a0].ratio : item[1] > 0 ? 1 : 0
+			d = t0 >= 0 ? distData[t0].bars[a1].ratio : item[1] > 0 ? 1 : 0
+		
+			e = a + (b - a) * fract_a
+			f = c + (d - c) * fract_a
+			g = f - (f - e) * fract_t
+
+			return [item[0], g] as any
+		})
+
+		const upData = selectedMarket.data.chartData.clob.up
+		const downData = selectedMarket.data.chartData.clob.down
+
+		const up: any[] = []
+		const down: any[] = []
+
+		let ic = 0
+		let it = 0
+
+		// while (upData[ic]){
+		// 	while (targetData[it][0] < upData[ic][0]){
+		// 		up.push([targetData[it][0], targetData[it][1], upData[ic-1][1]])
+		// 		it++
+		// 	}
+		// 	up.push([upData[ic][0], targetData[it-1][1], upData[ic][1]])
+		// 	ic++
+		// }
+
+		selectedMarket.data.chartData.dist = {
+			dist: targetData,
+		}
+
+		return selectedMarket.data.chartData.dist
+	}
+
+
 	// ---------------------------------------------------------------------------- useEffect selectedSeries
 	useEffect(() => {
 		updateChart()
@@ -616,6 +804,12 @@ series.push({
 			return
 		}
 
+		if (chartType === 'dist'){
+			console.log('updateChart:', symbol, chartType)
+			parseDistData()
+			return
+		}
+
 		if (chartType === 'heatmap'){
 			console.log('updateChart:', symbol, chartType)
 			// const data = await PolymarketChart.getChartDistributionData(symbol, '2026-02-08')
@@ -649,46 +843,46 @@ series.push({
 		if (!chartData) return setChartOptions({})
 
 		switch (chartType) {
-			case 'line':
-				parseLineData(chartData, chartDistributionData[symbol])
-				break
+		case 'line':
+			parseLineData(chartData)		//symbol is in selectedMarket.symbol
+			break
 
-			// case 'heatmap':
-				// if (!chartData.heatmap){
-				// 	const data2 = await PolymarketChart.heatmapData()
-				// 	console.log('data:', data2)
-				// 	chartData.heatmap = data2
-				// }
-				// setChartOptions({
-				// 	...heatmapChartOptions,
-				// 	series: [{
-				// 		...heatmapChartOptions.series[0],
-				// 		data: chartData.heatmap[asset.value][side].map((item) => [item.col, item.row, item.value]),
-				// 	}],
-				// })
-				// break
+		case 'heatmap':
+			// if (!chartData.heatmap){
+			// 	const data2 = await PolymarketChart.heatmapData()
+			// 	console.log('data:', data2)
+			// 	chartData.heatmap = data2
+			// }
+			// setChartOptions({
+			// 	...heatmapChartOptions,
+			// 	series: [{
+			// 		...heatmapChartOptions.series[0],
+			// 		data: chartData.heatmap[asset.value][side].map((item) => [item.col, item.row, item.value]),
+			// 	}],
+			// })
+			break
 
-			case 'scatter':
-				if (!chartData.scatter){
-					const data2 = await PolymarketChart.scatterData()
-					console.log('data:', data2)
-					chartData.scatter = data2
-				}
-				setChartOptions({
-					...scatterChartOptions,
-					series: [
-						{
-							...scatterChartOptions.series[0],
-							data: chartData.scatter[asset.value][side].win.map((item) => [item.time, item.value]),
-						},
-						{
-							...scatterChartOptions.series[1],
-							data: chartData.scatter[asset.value][side].lose.map((item) => [item.time, item.value]),
-						}
-					],
-				})
-				break
+		case 'scatter':
+			if (!chartData.scatter){
+				const data2 = await PolymarketChart.scatterData()
+				console.log('data:', data2)
+				chartData.scatter = data2
 			}
+			setChartOptions({
+				...scatterChartOptions,
+				series: [
+					{
+						...scatterChartOptions.series[0],
+						data: chartData.scatter[asset.value][side].win.map((item) => [item.time, item.value]),
+					},
+					{
+						...scatterChartOptions.series[1],
+						data: chartData.scatter[asset.value][side].lose.map((item) => [item.time, item.value]),
+					}
+				],
+			})
+			break
+		}
 	}
 
 	useEffect(() => {
@@ -799,6 +993,7 @@ series.push({
 							onValueChange={(value: string) => {if (value) setChartType(value)}}>
 							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
 							<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
+							<ToggleGroupItem value='dist' variant='outline'>Dist</ToggleGroupItem>
 							<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
 							<ToggleGroupItem value='scatter' variant='outline'>Scatter</ToggleGroupItem>
 						</ToggleGroup>
