@@ -9,6 +9,7 @@ import PolymarketApi from "./PolymarketApi";
 import * as PolymarketChart from "./PolymarketChart";
 import moment from "moment";
 import { Switch } from "@/components/ui/switch";
+import { lineChartOptions, barChartOptions, distChartOptions, scatterChartOptions, heatmapChartOptions } from "./ChartOptions";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -53,453 +54,44 @@ const assetContent = [
 	},
 ] as any
 
-const heatmapChartOptions = {
-	tooltip: {
-		show: false,
-		trigger: 'axis'
+
+const lineStyle: any = {
+	dist: {
+		color: '#0fcc',
+		width: 0.5,
 	},
-	xAxis: {
-		type: 'category',
-		// data: ['0-3', '3-6', '6-9', '9-12', '12-15'],
-		data: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'],
+	up: {
+		color: '#0f0c',
+		width: 0.5,
 	},
-	yAxis: {
-		type: 'category',
-		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
-		// data: ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
-		data: Array.from({length: 40}, (_, i) => ((i - 20)/20).toFixed(1)),
+	down: {
+		color: '#f00c',
+		width: 0.5,
 	},
-	visualMap: {
-		min: -1,
-		max: 1,
-		calculable: true,
-		orient: 'horizontal',
-		left: 'center',
-		// bottom: '15%',
-		inRange: {
-			color: [
-			'#f00c',
-			'#3333',
-			'#3f0c',
-			]
-		  }
-	  },	
-	series: [
-		{
-			type: 'heatmap',
-			data: []	as any
-		}
-	],
+	chainline: {
+		color: '#06fc',
+		width: 0.5,
+	},
+	polling: {
+		color: '#93fc',
+		width: 0.5,
+	},
+	coinbase: {
+		color: '#ff06',
+		width: 0.5,
+	},
 	grid: {
-		top: 0,
-		bottom: 0,
-		left: 0,
-		right: 0,
-		containLabel: true
-	}
+		color: 'green',
+		width: 0.5,
+	},
+	binance: {
+		color: 'violet',
+		width: 0.5,
+	},
 } as any
 
-const scatterChartOptions = {
-	xAxis: {
-		type: 'value',
-		min: 0,
-		max: 15,
-		name: 'Minuten',
-		splitLine: {
-			show: true,
-			lineStyle: {
-				color: '#fff3',
-				width: 0.5
-			}
-		}
-	},
-	yAxis: {
-		type: 'value',
-		splitLine: {
-			show: true,
-			lineStyle: {
-				color: '#fff3',
-				width: 0.5
-			}
-		}
-	},
-	series: [
-		{
-			type: 'scatter',
-			name: 'Up',
-			data: [] as any[],
-			itemStyle: {
-				color: 'green'
-			},
-			symbolSize: 5,
-		},
-		{
-			type: 'scatter',
-			name: 'Down',
-			data: [] as any[],
-			itemStyle: {
-				color: 'red'
-			},
-			symbolSize: 5,
-		}
-	],
-	grid: {
-		top: 0,
-		bottom: 0,
-		left: 0,
-		right: 0,
-	}
-} as any
 
-const barChartOptions = {
-	xAxis: {
-		type: 'category',
-	},
-	yAxis: {
-		type: 'value',
-		splitLine: {
-			show: true,
-			lineStyle: {
-				color: '#fff3',
-				width: 0.5
-			}
-		}
-	},
-	series: [
-		{
-			data: [] as any[],
-			type: 'bar',
-			barGap: 0,
-			barCategoryGap: 0
-		}
-	],
-	grid: {
-		top: 0,
-		bottom: 0,
-		left: 0,
-		right: 0,
-		// containLabel: true
-	}
-} as any
 
-const barChartOptions2 = {
-	xAxis: {
-		type: 'category',
-	},
-	yAxis: {
-		type: 'value',
-		splitLine: {
-			show: true,
-			lineStyle: {
-				color: '#fff3',
-				width: 0.5
-			}
-		}
-	},
-	series: [
-		{
-			data: [] as any[],
-			type: 'line',
-			symbolSize: 0,
-		}
-	],
-	grid: {
-		top: 0,
-		bottom: 0,
-		left: 0,
-		right: 0,
-		// containLabel: true
-	}
-} as any
-
-const distChartOptions = {
-	useUTC: true,
-
-	xAxis: [
-		{
-			type: 'time',
-			boundaryGap: false,
-			axisLabel: {
-				showMinLabel: true,
-				showMaxLabel: true,
-			},
-			data: [] as any[],
-			// show a vertical line every X minutes
-			splitLine: {
-				show: true,
-				lineStyle: {
-					color: '#fff3',
-					width: 1,
-					type: 'dashed'
-				}
-			}
-		}
-	],
-	yAxis: [
-		{
-			type: 'value',
-			scale: false,
-			min: 0,
-			max: 1,
-			interval: 0.1,
-			splitLine: {
-				show: true,
-				lineStyle: {
-					color: '#fff3',
-					width: 0.5
-				}
-			}
-		},
-	],
-	series: [
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#0f0c',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: true,
-			},
-			name: "up",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#f00c',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: true,
-			},
-			name: "down",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#06fc', // set to visible color (e.g. yellow)
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			yAxisIndex: 1,
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "chainlink",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#93fc',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			yAxisIndex: 1,
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "polling",
-		},
-	],
-	grid: {
-		top: 0,
-		bottom: 0,
-		left: 0,
-		right: 0,
-		// containLabel: true
-	}
-} as any
-
-const lineChartOptions = {
-	// Choose axis ticks based on UTC time.
-	useUTC: true,
-	// title: {
-	// 	text: 'Intraday Chart with Breaks (Single Day)',
-	// 	left: 'center'
-	// },
-	tooltip: {
-		show: true,
-		trigger: 'axis',
-	},
-	xAxis: [
-		{
-			type: 'time',
-			boundaryGap: false,
-			axisLabel: {
-				showMinLabel: true,
-				showMaxLabel: true,
-			},
-			data: [] as any[],
-			// show a vertical line every X minutes
-			splitLine: {
-				show: true,
-				lineStyle: {
-					color: '#fff3',
-					width: 1,
-					type: 'dashed'
-				}
-			}
-		}
-	],
-	yAxis: [
-		{
-			type: 'value',
-			scale: false,
-			min: 0,
-			max: 1,
-			interval: 0.1,
-			splitLine: {
-				show: true,
-				lineStyle: {
-					color: '#fff3',
-					width: 0.5
-				}
-			}
-		},
-		{
-			type: 'value',
-			scale: false,
-			min: -2,
-			max: +2,
-			data: [] as any[],
-			splitLine: {
-				show: true,
-				lineStyle: {
-					color: (value: number) => value === 0 ? '#FF6600' : '#fff3',
-					width: (value: number) => value === 0 ? 2 : 0.5,
-				}
-			},
-		}
-	],
-	dataZoom: [
-		{
-			type: 'inside',
-			xAxisIndex: 0
-		},
-		{
-			type: 'slider',
-			xAxisIndex: 0
-		}
-	],
-	series: [
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#0f0c',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: true,
-			},
-			name: "up",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#f00c',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: true,
-			},
-			name: "down",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#06fc', // set to visible color (e.g. yellow)
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			yAxisIndex: 1,
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "chainlink",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#93fc',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			yAxisIndex: 1,
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "polling",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#ff06',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			yAxisIndex: 1,
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "coinbase",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: 'green',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "grid",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: 'violet',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "binance",
-		}
-	],
-	grid: {
-		top: 0,
-		left: 0,
-		right: 0,
-	}
-} as any
 
 
 // const chartData = {} as any
@@ -537,6 +129,7 @@ export default function ChartPage() {
 	}, [isAutoUpdate])
 
 
+	// ---------------------------------------------------------------------------- parseLineData
 	const parseLineData = (chartData: any) => {
 		// if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
 		// if (!chartData.ticker.length) return
@@ -544,10 +137,10 @@ export default function ChartPage() {
 			setChartOptions({})
 			return
 		}
-
-		const openPrice = selectedMarket.data.openPrice
-		const startTime = selectedMarket.data.startTimestamp - PolymarketChart.preOffset
-		const endTime = selectedMarket.data.endTimestamp + PolymarketChart.postOffset
+		const market = selectedMarket?.data
+		const openPrice = market.openPrice
+		const startTime = market.startTimestamp - PolymarketChart.preOffset
+		const endTime = market.endTimestamp + PolymarketChart.postOffset
 		const clobData = chartData.clob
 
 		// add data to the end of the array if the last timestamp is less than the endTimestamp
@@ -596,16 +189,13 @@ export default function ChartPage() {
 			return [item[0], value] as any
 		})
 
-		const targetPrice = chartData.dist || setDistData()
+		const targetPrice = chartData.dist || calcDistData()
 		if (!targetPrice) return
 
 		if (selectedSeries.includes('dist')) series.push({
 			...lineChartOptions.series[0],
 			data: targetPrice.dist,
-			lineStyle: {
-				width: 0.5,
-				color: '#0fcc',
-			},
+			lineStyle: lineStyle.dist,
 		})
 
 		const firstPrice = chartData.ticker?.polling?.[0]?.[1]
@@ -668,36 +258,59 @@ export default function ChartPage() {
 
 	// ---------------------------------------------------------------------------- parseDistData
 	const parseDistData = () => {
-		const chartData = selectedMarket?.data?.chartData
-
-		if (!selectedMarket || !chartData){
-			setChartOptions({})
-			return
-		}
-
-		const targetPrice = chartData.dist || setDistData()
+		const market = selectedMarket?.data
+		if (!market) return
+		const chartData = market?.chartData
+		const startTime = market.startTimestamp - PolymarketChart.preOffset
+		const endTime = market.endTimestamp + PolymarketChart.postOffset
+		const targetPrice = chartData.dist || calcDistData()
 		if (!targetPrice) return
 
 		setChartOptions({
 			...distChartOptions,
-			series: [{
-				...distChartOptions.series[0],
-				data: targetPrice.dist
+			xAxis: [{
+				...lineChartOptions.xAxis[0],
+				min: startTime,
+				max: endTime,
 			}],
+			series: [
+				{
+					...distChartOptions.series[0],
+					data: targetPrice.dist,
+					lineStyle: lineStyle.dist,
+				},
+				{
+					...distChartOptions.series[1],
+					data: targetPrice.up.map((item: any) => [item[0], item[1]]),
+					lineStyle: lineStyle.up,
+				},
+				// {
+				// 	...distChartOptions.series[2],
+				// 	data: targetPrice.down.map((item: any) => [item[0], 1-item[1]]),
+				// 	lineStyle: lineStyle.down,
+				// },
+				{
+					...distChartOptions.series[2],
+					data: targetPrice.up.map((item: any) => [item[0], item[3]])
+				}
+			],
 		})
-
 	}
 
 
-	// ---------------------------------------------------------------------------- setDistData
-	const setDistData = () => {
-		const distData = chartDistributionData[selectedMarket.symbol]
+	// ---------------------------------------------------------------------------- calcDistData
+	const calcDistData = () => {
+		const market = selectedMarket?.data
+		if (!market) return
+		// console.log('calcDistData:', market.symbol, '...')
+
+		const distData = chartDistributionData[market.symbol]
 		if (!distData) return null
-		const endTimestamp = selectedMarket.data.endTimestamp
+		const endTimestamp = market.endTimestamp
 		if (!endTimestamp) return null
 
-		const openPrice = selectedMarket.data.openPrice
-		const baseData = selectedMarket.data.chartData.ticker?.chainlink?.filter((item: any) => item[0] < endTimestamp)
+		const openPrice = market.openPrice
+		const baseData = market.chartData.ticker?.chainlink?.filter((item: any) => item[0] < endTimestamp)
 			.map((item: any) => {
 				const value = ((item[1] / openPrice) - 1 ) * 100		//coinbase price change in percent
 				return [item[0], value] as any
@@ -735,29 +348,59 @@ export default function ChartPage() {
 			return [item[0], g] as any
 		})
 
-		const upData = selectedMarket.data.chartData.clob.up
-		const downData = selectedMarket.data.chartData.clob.down
+		const upData = market.chartData.clob.up
+		const downData = market.chartData.clob.down
 
-		const up: any[] = []
-		const down: any[] = []
+		const up: any[] = mergeData(upData, targetData)
+		const down: any[] = mergeData(downData, targetData)
 
-		let ic = 0
-		let it = 0
-
-		// while (upData[ic]){
-		// 	while (targetData[it][0] < upData[ic][0]){
-		// 		up.push([targetData[it][0], targetData[it][1], upData[ic-1][1]])
-		// 		it++
-		// 	}
-		// 	up.push([upData[ic][0], targetData[it-1][1], upData[ic][1]])
-		// 	ic++
-		// }
-
-		selectedMarket.data.chartData.dist = {
+		market.chartData.dist = {
 			dist: targetData,
+			up: calcData(up),
+			down: calcData(down),
 		}
 
-		return selectedMarket.data.chartData.dist
+		return market.chartData.dist
+	}
+
+
+	// ---------------------------------------------------------------------------- mergeData
+	// data1 = upDownData, data2 = targetData
+	const mergeData = (data1: any[], data2: any[]) => {
+		let i1 = 0
+		let i2 = 0
+		const data: any[] = []
+
+		while (data1[i1]){
+			while (data2[i2] && data2[i2][0] < data1[i1][0]){
+				if (data1[i1-1]) data.push([data2[i2][0], data1[i1-1][1], data2[i2][1]])
+				i2++
+			}
+			if (data2[i2]?.[0] === data1[i1]?.[0]) i2++
+			if (data2[i2-1]) data.push([data1[i1][0], data1[i1][1], data2[i2-1][1]])
+			i1++
+		}
+		return data
+	}
+
+
+	// ---------------------------------------------------------------------------- calcData
+	/*
+	0 = timestamp
+	1 = up/down price
+	2 = target price
+	3 = ratio
+	*/
+	const calcData = (data: any[]) => {
+		let t, ud, v
+		return data.map((item) => {
+			ud = item[1]	//up/down price
+			t = item[2]		//target price
+			v = (t > ud) ? (t / ud - 1) : (1 - (1 - t) / (1 - ud))
+			item[3] = v
+			return item
+			// return [item[0], v] as any
+		})
 	}
 
 
@@ -770,7 +413,7 @@ export default function ChartPage() {
 	// ---------------------------------------------------------------------------- updateChart
 	const updateChart = async () => {
 		const symbol = asset?.value.toLowerCase()
-		console.log('updateChart:', chartType, symbol, selectedMarket?.slug || '')
+		// console.log('updateChart:', chartType, symbol, selectedMarket?.slug || '')
 		if (!symbol) return
 
 		if (!chartDistributionData[symbol]){
@@ -805,13 +448,13 @@ export default function ChartPage() {
 		}
 
 		if (chartType === 'dist'){
-			console.log('updateChart:', symbol, chartType)
+			// console.log('updateChart:', symbol, chartType)
 			parseDistData()
 			return
 		}
 
 		if (chartType === 'heatmap'){
-			console.log('updateChart:', symbol, chartType)
+			// console.log('updateChart:', symbol, chartType)
 			// const data = await PolymarketChart.getChartDistributionData(symbol, '2026-02-08')
 			const heatmap = await PolymarketApi.store.getItem('heatmap')
 			if (!heatmap) return
@@ -889,75 +532,6 @@ export default function ChartPage() {
 		updateChart()
 	}, [chartType, asset, side, selectedMarket])
 
-/*
-	const onClick = async (type: string) => {
-		switch (type) {
-			case 'load-full-ticker-data':
-				// PolymarketChart.testData(activeNode?.value)
-				break
-
-			case 'load-ticker-data':
-				// if (!activeNode?.value || !selectedDate) return
-				// const markets = PolymarketChart.getMarketDataFromDate(activeNode?.value, selectedDate)
-				// console.log('markets:', markets)
-
-				if (!asset?.value || !selectedDate) return
-				const dateString = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
-				const data1 = await PolymarketChart.getChartTickerData(asset?.value, dateString)
-				const chartData = await PolymarketChart.getChartMinuteData(data1)
-				// const normalizedData = PolymarketChart.normalizeData(chartData, 60)
-				// For time axis, data must be in format [timestamp, value] pairs
-				setChartOptions({
-					...lineChartOptions,
-					series: [{
-						...lineChartOptions.series[0],
-						data: chartData.map((item) => [item.timestamp, item.price])
-					}],
-					xAxis: [{
-						...lineChartOptions.xAxis[0],
-						// Remove data property for time axis - it's not needed
-					}]
-				})
-				break
-
-			case 'line':
-				// const dateString1 = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
-				const data = await PolymarketChart.getChartDistributionData(asset?.value.toLowerCase())
-				// console.log('data:', data)
-				setChartOptions({
-					...barChartOptions,
-					series: [{
-						...barChartOptions.series[0],
-						data: data.map((item) => [item.value, item.count])
-					}],
-				})
-				break
-			case 'market':
-				// setChartOptions(null)
-
-				// const markets = await PolymarketChart.getMarketDataFromDate(activeNode?.value, selectedDate)
-				// console.log('markets:', markets)
-				const dateString2 = PolymarketApi.getUTCDateFormat(selectedDate)		//yyyy-mm-dd
-				let marketData = await PolymarketChart.getMarketChartData(null, asset?.value.toLowerCase(), dateString2)
-				marketData = marketData.filter((item) => item.direction === 'Up')
-				// setTimeout(() => {
-					setChartOptions({
-						...lineChartOptions,
-						series: [{
-							...lineChartOptions.series[0],
-							data: marketData.map((item) => [item.timestamp, item.price])
-						}],
-					})
-				// }, 1000)
-				break
-
-			case 'update data':
-				PolymarketChart.updateAllMarketData()
-				break
-
-		}
-	}
-*/
 
 	return (
 		<ResizablePanelGroup direction='vertical'>

@@ -9,8 +9,6 @@ const fsPromises = isElectron ? (window as any)?.require?.('fs/promises') : null
 
 let isRunning = false
 let tickerDataCache: any = {} // ticker data cache
-// const lastUpdate_logfiles: number = await PolymarketApi.store.getItem('lastUpdate_logfiles') || 0
-// console.log('lastUpdate_logfiles:', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
 
 export const preOffset = 40000		//get tickerdata 40 seconds before startTimestamp
 export const postOffset = 20000	//get tickerdata 20 seconds after endTimestamp
@@ -67,28 +65,12 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 		//--- update chartData version
 		if (market.closed && market.chartData?.version !== chartDataVersion) {
 // console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
-			// const csvPath = market.filePath.replace('.json', '.csv')
-			// market.chartData = await getClobTickerData(market, csvPath)
 			market.chartData.clob._complete = updateClobDataComplete(market)
 			market.chartData._complete = true
 			market.chartData.version = chartDataVersion
 			updated = true
-
-		// }else{
-		// 	//--- fixing clob data complete
-		// 	const complete = updateClobDataComplete(market)
-		// 	if (complete !== clob._complete){  //changed complete status
-		// 		console.log('update complete:', market.slug, complete, 'clob._complete:', clob._complete)
-		// 		clob._complete = complete
-		// 		updated = true
-		// 	}
 		}
 
-		// if (market.chartData._complete && !market.chartData?.grid){
-		// 	///
-		// }
-
-	
 		//--- fixing openPrice
 		const priceToBeat = market.marketData?.sourceData?.events?.[0]?.eventMetadata?.priceToBeat
 		// if (priceToBeat && priceToBeat !== market.openPrice) {
@@ -488,60 +470,6 @@ export const dataTest_1 = async (symbol: string) => {
 	console.table(stats)
 }
 
-/*
-// ---------------------------------------------------------------------------- getGrid
-const getGridData = (market: Market): any => {
-	const tickerData = market.chartData.ticker
-	const upData = market.chartData.up
-	const downData = market.chartData.down
-	if (!upData?.length || !downData?.length || !tickerData?.length) return null
-
-	const startTime = market.startTimestamp
-	const grid = {
-		up: [] as any[],
-		down: [] as any[],
-	}
-	let price: number
-	let nextUp: number = parseNumber(Math.ceil(upData[0][1] * 10) / 10)
-	let nextDown: number = parseNumber(nextUp - 0.1)
-	let tickerIndex = 0
-
-	for (const item of upData) {
-		if (item[1] >= nextUp) {
-			price = nextUp
-			nextUp = parseNumber(nextUp + 0.1)
-		}else if (item[1] <= nextDown) {
-			price = nextDown
-			nextDown = parseNumber(nextDown - 0.1)
-		}else continue
-
-		while (tickerData[tickerIndex][0] < item[0] && tickerIndex < tickerData.length-1) tickerIndex++
-
-		grid.up.push([item[0] - startTime, parseNumber(price), tickerData[tickerIndex][1]] as any)
-	}
-
-	nextUp = parseNumber(Math.ceil(downData[0][1] * 10) / 10)
-	nextDown = parseNumber(nextUp - 0.1)
-	tickerIndex = 0
-
-	for (const item of downData) {
-		if (item[1] >= nextUp) {
-			price = nextUp
-			nextUp = parseNumber(nextUp + 0.1)
-		}else if (item[1] <= nextDown) {
-			price = nextDown
-			nextDown = parseNumber(nextDown - 0.1)
-		}else continue
-
-		while (tickerData[tickerIndex][0] < item[0] && tickerIndex < tickerData.length-1) tickerIndex++
-
-		grid.down.push([item[0] - startTime, parseNumber(price), tickerData[tickerIndex][1]] as any)
-	}
-
-	return grid
-}
-*/
-
 
 // ------------------------------------------------------------------------ parseNumber
 // const parseNumber = (num: number, float: number | null = null) => {
@@ -591,153 +519,6 @@ export const getAllMarkets_clob = async (symbol: string | null = null,
 	return fileList;
 }
 
-
-// ---------------------------------------------------------------------------- getAllMarketLogs
-// get all existing market log files from A:\DATA\polymarket\markets
-// return an array of objects with the following properties:
-// - file: the name of the file
-// - filePath: the full path of the file
-// - slug: the slug of the market
-// - timestamp: the timestamp of the market
-// - date: the date of the market
-// - symbol: the symbol of the market
-//
-/*
-export const getAllMarkets = async (symbol: string | null = null, date: Date | null = null) => {
-	const rootPath = PolymarketApi.marketsPath;
-
-	async function walkDir(currentPath: string, symbol?: string, date?: string) {
-		const result: any = {};
-		let dirList: string[] = [];
-
-		try {
-			dirList = await fsPromises.readdir(currentPath, { withFileTypes: true });
-		} catch (error) {
-			console.error('Error reading directory:', error)
-			return {}
-		}
-
-		for (const entry of dirList) {
-			if (typeof entry === "string") {
-				// Node < v10 fallback (should not happen)
-				continue;
-			}
-			if ((entry as any).isDirectory()) {
-				const dirName = (entry as any).name;
-				// Symbol layer
-				if (!symbol) {
-					// Drill into the symbol
-					result[dirName] = await walkDir(currentPath + '/' + dirName, dirName, undefined);
-				} else if (!date) {
-					// Date layer inside of Symbol
-					result[dirName] = await walkDir(currentPath + '/' + dirName, symbol, dirName);
-				}
-			} else if ((entry as any).isFile() && (entry as any).name.endsWith('.json') && symbol && date) {
-				// Only files of the relevant Symbol + Date
-				if (!result[date]) result[date] = [];
-				
-				// result[date].push((entry as any).name);
-				result[date].push(({
-					file: (entry as any).name,
-					filePath: currentPath + '/' + (entry as any).name,
-					slug: (entry as any).name.replace('.json', ''),
-					timestamp: parseInt((entry as any).name.replace('.json', '').split('-')[3]),
-					date: date,
-					symbol: symbol
-				}));
-			}
-		}
-
-		// Clean up empty keys
-		if (Object.keys(result).length === 0 && symbol && date) return undefined;
-
-		// On date level, we want an array rather than a subobject
-		if (date && Array.isArray(result[date])) return result[date];
-
-		// Remove keys with undefined values (empty)
-		for (const k of Object.keys(result)) if (typeof result[k] === "undefined") delete result[k];
-
-		return result;
-	}
-
-	let out: any = {};
-	if (!symbol && !date) {
-		// List all symbols and all files
-		out = await walkDir(rootPath);
-	} else if (symbol && !date) {
-		// Only for the given symbol
-		out[symbol] = await walkDir(rootPath + '/' + symbol);
-	} else if (symbol && date) {
-		// Only for given symbol & date
-		const dateString = PolymarketApi.getUTCDateFormat(date)
-		const files = await walkDir(rootPath + '/' + symbol + '/' + dateString, symbol, dateString);
-		if (files && Array.isArray(files)) {
-			out[symbol] = { [dateString as string]: files } as any;
-		} else {
-			out[symbol] = {} as any;
-		}
-	}
-	return out;
-}
-*/
-
-
-// ---------------------------------------------------------------------------- updateLogfiles
-// old function
-/*
-export const updateLogfiles = async () => {
-	tickerDataCache = {} as any // clear ticker data cache
-	lastUpdate_logfiles = Date.now() as number
-	await PolymarketApi.store.setItem('lastUpdate_logfiles', lastUpdate_logfiles)
-	console.log('---Updating logfiles...', lastUpdate_logfiles, new Date(lastUpdate_logfiles).toISOString())
-
-	// if (!dirLookup){
-	// 	dirLookup = {} as any
-	// 	for (const entry of dirList) dirLookup[entry.name] = entry.path
-	// 	console.log('dirLookup created:', dirList.length, 'entries')
-	// }
-
-	await updateLogData_worker('clob')
-	console.log('')
-	await updateLogData_worker('chainlink')
-	console.log('')
-	await updateLogData_worker('binance')
-	console.log('')
-	await updateLogData_worker('polling')
-	console.log('')
-	await updateLogData_worker('coinbase')
-	console.log('')
-	await updateLogData_worker('kraken')
-	console.log('')
-
-	console.log('update markets logfiles...')
-	dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
-	dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
-	await PolymarketApi.store.setItem('dirList', dirList)
-
-	await PolymarketApi.store.setItem('completeList', completeList)
-
-	console.log('---Complete! new total files:', dirList.length)
-}
-*/
-
-/*
-// ---------------------------------------------------------------------------- updateOldLogs
-export const updateOldLogs = async () => {
-	console.log('---Updating old logs...')
-	// await PolymarketApi.store.setItem('lastUpdate_oldLogs', Date.now())
-
-	// const importPath = 'A:/DATA/polymarket/clob/'
-
-	// const importPath = 'A:/DATA/polymarket/clob/'
-	// const dirList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
-	// console.log('updateOldLogs dirList:', dirList.length, '...')
-
-	// for (const entry of dirList) {
-	// 	if (entry.isDirectory()) continue
-	// }
-}
-*/
 
 const tickerDataSources: any = {
 	clob: {
@@ -796,111 +577,6 @@ const tickerDataSources: any = {
 	},
 }
 
-// ---------------------------------------------------------------------------- updateLogData
-/*
-{
-    "name": "xrp-updown-5m-1777313400.csv",
-    "parentPath": "H:\\DEV\\TRADE\\POLY\\bot-3\\logs\\clob\\xrp-updown-5m\\2026-04-27",
-    "path": "H:\\DEV\\TRADE\\POLY\\bot-3\\logs\\clob\\xrp-updown-5m\\2026-04-27"
-}
-*/
-/*
-export const updateLogData = async (type: string = 'clob') => {
-	console.log('Updating log data:', type)
-
-	const importPath = tickerDataSources[type].importPath
-	const exportPath = tickerDataSources[type].exportPath
-	let importList = await fsPromises.readdir(importPath, { withFileTypes: true, recursive: true });
-	importList = importList.filter((entry: any) => entry.isFile()
-		&& entry.name.endsWith('.csv')
-		&& !completeList[entry.name])	//ignore files that are already completed
-
-	const stat = {
-		exists: 0,
-		updatedFiles: 0,
-		newFiles: 0,
-	}
-
-	console.log('importList:', importList.length, 'files to import ...')
-	for (const entry of importList) {		//iterate over all .csv files to import
-		const path = entry.path.replaceAll('\\', '/')
-		const filePath = path + '/' + entry.name
-		const symbol = type === 'clob' ? path.split('logs/')[1] : path.split('/').pop()
-		const exportDir = exportPath + symbol
-		const exportFile = exportDir + '/' + entry.name;
-
-		if (fs.existsSync(exportFile)){			//export .csv file exists
-			stat.exists++
-			const exportCreatedAt = fs.statSync(exportFile).ctime
-			const importCreatedAt = fs.statSync(filePath).ctime
-			if (exportCreatedAt >= importCreatedAt){
-				completeList[entry.name] = true		//add to complete list
-				continue							//file is up to date
-			}
-	
-			stat.updatedFiles++
-			console.log('update file:', exportFile)
-		}else{
-			stat.newFiles++
-			console.log('export new file:', exportFile)
-		}
-
-		try{
-			await fsPromises.copyFile(filePath, exportFile)
-
-		}catch(err){
-			if (!fs.existsSync(exportDir)){
-				console.log('create export directory:', exportDir)
-				fs.mkdirSync(exportDir, { recursive: true })
-			}
-			await fsPromises.copyFile(filePath, exportFile)
-		}
-	}
-}
-*/
-
-/*
-// ---------------------------------------------------------------------------- updateLogData_worker
-export const updateLogData_worker = async (type: string = 'clob') => {
-	// Fallback, falls keine Worker unterstützt werden
-	// if (typeof window === 'undefined' || typeof Worker === 'undefined') {
-		console.warn('Web Worker nicht verfügbar, fallback auf updateLogData()')
-		await updateLogData(type)
-		return
-	// }
-
-	return await new Promise<void>((resolve, reject) => {
-		const worker = new Worker(
-			new URL('./updateLogData.worker.ts', import.meta.url),
-			{ type: 'module' },
-		)
-
-		worker.onmessage = (event: MessageEvent) => {
-			const data = event.data
-			if (!data) return
-
-			if (data.type === 'log') {
-				console.log(...(data.args || []))
-			} else if (data.type === 'error') {
-				console.error('updateLogData_worker error:', data.error)
-			} else if (data.type === 'done') {
-				worker.terminate()
-				resolve()
-			} else if (data.type === 'completeFile') {
-				completeList[data.args[0]] = true		//add to complete list
-			}
-		}
-
-		worker.onerror = (err) => {
-			console.error('updateLogData_worker onerror:', err)
-			worker.terminate()
-			reject(err)
-		}
-
-		worker.postMessage({ type: 'run', logDataType: type })
-	})
-}
-*/
 
 // ---------------------------------------------------------------------------- updateMarketData
 export const getMarket = async (slug: string, filePath: string | null = null, useCache: boolean = true): Promise<Market | null> => {
@@ -933,8 +609,41 @@ export const updateAllMarketData_clob = async () => {
 	}
 	isRunning = true
 
+	console.log('updateAllMarketData_clob ...')
 	tickerDataCache = {} as any		//clear ticker data cache
 	
+	// get all existing open markets from store
+	let openMarkets = await PolymarketApi.store.getItem('openMarkets') as string[]
+	const all = openMarkets? false : true
+	openMarkets = openMarkets || []
+
+
+	console.log('openMarkets:', openMarkets.length)
+	const openMarketsLookup = openMarkets.reduce((acc: any, slug: string) => {
+		acc[slug] = true
+		return acc
+	}, {})
+
+	const stat = {
+		total: openMarkets.length,
+		skipped: 0,
+		new: 0,
+		closed: 0,
+		updated: 0,
+		open: 0,
+	}
+
+	for (const slug of openMarkets) {
+		// update cached market or create new market
+		const {market, updated} = await updateMarketData_clob(slug, null, false)
+		if (updated) stat.updated++
+
+		if (market && market.closed && market.chartData._complete){
+			delete openMarketsLookup[slug]
+			stat.closed++
+		}
+	}
+
 	const last = await PolymarketApi.store.getItem('lastUpdate_clobData') || 0
 	const now = Date.now()
 	await PolymarketApi.store.setItem('lastUpdate_clobData', now)
@@ -950,26 +659,6 @@ export const updateAllMarketData_clob = async () => {
 		acc[key] = true
 		return acc
 	}, {})
-
-	// get all existing open markets from store
-	let openMarkets = await PolymarketApi.store.getItem('openMarkets') as string[]
-	const all = openMarkets? false : true
-	openMarkets = openMarkets || []
-
-	console.log('openMarkets:', openMarkets.length)
-	const openMarketsLookup = openMarkets.reduce((acc: any, slug: string) => {
-		acc[slug] = true
-		return acc
-	}, {})
-
-	const stat = {
-		total: dataFiles.length,
-		skipped: 0,
-		new: 0,
-		closed: 0,
-		updated: 0,
-		open: 0,
-	}
 
 	for (const file of dataFiles) {
 		if (!all && marketLookup[file.slug]) {		//market is cached
@@ -995,103 +684,8 @@ export const updateAllMarketData_clob = async () => {
 	}
 
 	// update open markets in store
-	await PolymarketApi.store.setItem('openMarkets', Object.keys(openMarketsLookup))
-
-	console.log('complete!', stat)
-	isRunning = false
-
-}
-
-
-// ---------------------------------------------------------------------------- updateAllMarketData_clob
-export const _updateAllMarketData_clob = async (all: boolean = false) => {
-	if (isRunning){
-		console.log('updateAllMarketData_clob canceled!')
-		isRunning = false
-		return
-	}
-	isRunning = true
-
-	const last = await PolymarketApi.store.getItem('lastUpdate_clobData') || 0
-	const now = Date.now()
-	await PolymarketApi.store.setItem('lastUpdate_clobData', now)
-
-	//clear cache if last update is more than 1 hour ago
-	// const dataFiles = await getAllMarkets_clob(null, null, now - last > 60 * 60 * 1000)
-	const dataFiles = await getAllMarkets_clob(null, null)
-
-	console.log('Updating all market data from clob (', dataFiles.length, 'files ...')
-		// 'files, lastUpdate:', moment(new Date(lastUpdate_logfiles)).format('YYYY-MM-DD HH:mm:ss'), ') ...')
-
-	const stat = {
-		totalMarkets: dataFiles.length,
-		closedMarkets: 0,
-		updated: 0,
-		newMarkets: 0,
-		openMarkets: 0,
-	}
-
-	const marketKeys = await PolymarketApi.cache.keys()
-	const marketLookup = marketKeys.reduce((acc: any, key: string) => {
-		acc[key] = true
-		return acc
-	}, {})
-
-	let openMarkets = all ? [] : await PolymarketApi.store.getItem('openMarkets')
-	if (!openMarkets){
-		all = true		//all = true if openMarkets is not set
-		openMarkets = []
-	}
-
-	const openMarketsLookup = openMarkets.reduce((acc: any, slug: string) => {
-		acc[slug] = true
-		return acc
-	}, {})
-
-	if (!all) console.log('openMarkets:', openMarkets.length)
-	let count = 0
-	let index = 0
-
-	for (const file of dataFiles) {
-		index++
-		if (!isRunning) break
-
-		if (all) {
-			const {updated} = await updateMarketData_clob(file.slug, file.filePath, true)
-			if (updated){
-				stat.updated++
-				console.log('-----> update market:', index, ++count, file.slug, file.filePath)
-				console.log('')
-			}
-			continue
-		}
-
-		if (marketLookup[file.slug]) {				//market is cached
-			if (!openMarketsLookup[file.slug]){		//market is not open
-				stat.closedMarkets++
-				continue
-			}
-		}else{
-			stat.newMarkets++
-		}
-
-const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
-if (updated){
-	stat.updated++
-	console.log('-----> update market:', index, ++count, '/', openMarkets.length, file.slug, file.filePath)
-	console.log('')
-}
-
-		if (market && (!market.closed || !market.chartData._complete)){
-			stat.openMarkets++
-			openMarketsLookup[file.slug] = true
-		}else{
-			delete openMarketsLookup[file.slug]
-			stat.closedMarkets++
-		}
-	}
-
-	await PolymarketApi.store.setItem('openMarkets', Object.keys(openMarketsLookup))
+	openMarkets = Object.keys(openMarketsLookup)
+	await PolymarketApi.store.setItem('openMarkets', openMarkets)
 
 	console.log('complete!', stat)
 	isRunning = false
@@ -1102,15 +696,24 @@ if (updated){
 // from market list item "Update" button
 // or updateAllMarketData_clob (Update clob data)
 // csvPath sample: A:/DATA/polymarket/clob/btc-updown-5m/2026-04-02/btc-updown-5m-1775127000.csv
-export const updateMarketData_clob = async (slug: string, csvPath: string, useCache: boolean = true)
+export const updateMarketData_clob = async (slug: string, csvPath: string | null = null, useCache: boolean = true)
 	: Promise<{market: Market | null, updated: boolean}> => {
 	let updated:boolean = false
 	// let market: Market | null = null
+	if (!csvPath) csvPath = PolymarketApi.getClobFileFromSlug(slug)
+	if (!csvPath) return {market: null, updated: false}
+	
 	const filePath = csvPath.replace('.csv', '.json')
+
+	if (!useCache) 	tickerDataCache = {} as any		//clear ticker data cache
 
 	const market = await getMarket(slug, filePath, useCache)  //-> createMarketFromSlug or load from file
 	if (!market){
 		console.log('market not exists!', slug)
+		return {market: null, updated: false}
+	}
+	if (market.state === 'failed'){
+		console.log('market failed!', slug)
 		return {market: null, updated: false}
 	}
 
@@ -1148,8 +751,9 @@ export const updateMarketData_clob = async (slug: string, csvPath: string, useCa
 
 	if (market.marketData?.closed){
 		updated = updated || await updatePriceData(market)
+		
 		// if (!useCache || !market.chartData?._complete || market.chartData?.version !== chartDataVersion) {
-		if (!market.chartData?._complete || market.chartData?.version !== chartDataVersion) {
+		if (market.state !== 'failed' && (!market.chartData?._complete || market.chartData?.version !== chartDataVersion)) {
 			market.chartData = await getClobTickerData(market, csvPath)
 			market.chartData.clob._complete = updateClobDataComplete(market)
 			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
@@ -1411,77 +1015,7 @@ export const updateTestData = async (market: any): Promise<any> => {
 	market.chartData._grid = chartData
 
 	///
-
 }
-
-
-
-// ---------------------------------------------------------------------------- getChartData
-// data sample: {
-//     "timestamp": 1765406957241,
-//     "direction": "Up",
-//     "type": "SELL",
-//     "price": 0.36,
-//     "volume": 15
-// }
-/*
-export const getChartData = async (market: Market, logFilePath: string) => {
-	console.log('getChartData from', logFilePath)
-
-	const up: any = []
-	const down: any = []
-	const last: any = {up: null, down: null, ticker: null}
-
-	const logData = fs.existsSync(logFilePath) ? await fsPromises.readFile(logFilePath, 'utf8') : null
-
-	if (logData) {
-		const lines = logData.split('\n')
-	
-		const data = lines.map((line) => {
-			const [timestamp, direction, type, price, volume] = line.split(';')
-			return { timestamp: parseInt(timestamp), direction, type, price: parseFloat(price), volume: parseFloat(volume) }
-		}).filter((item) => item.timestamp > 0 && item.price > 0)
-	
-		data.forEach((item) => {
-			if (item.direction === 'Up') {
-				if (last.up !== item.price) {
-					last.up = item.price
-					up.push([item.timestamp, item.price] as any)
-				}
-			} else {
-				if (last.down !== item.price) {
-					last.down = item.price
-					down.push([item.timestamp, item.price] as any)
-				}
-			}
-		})
-	}
-
-	const dateString = PolymarketApi.getUTCDateFormat(new Date(market.startTimestamp))
-	const tickerData = await getChartTickerData(market.symbol, dateString)
-	const ticker = tickerData
-		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
-		.map((item) => [item.timestamp, item.price] as any)
-
-	const tickerData_p = await getChartTickerData(market.symbol, dateString, 'polling')
-	const ticker_p = tickerData_p
-		.filter(item => item.timestamp >= market.startTimestamp && item.timestamp <= market.endTimestamp)
-		.map((item) => [item.timestamp, item.price] as any)
-	
-	return {up, down, ticker, ticker_p} as any
-}
-*/
-
-
-// ---------------------------------------------------------------------------- DateFormat
-// Format date to yyyy-mm-dd
-// const DateFormat = (date: Date) => {
-// 	const pad = (n: number) => n.toString().padStart(2, '0')
-// 	const year = date.getFullYear()
-// 	const month = pad(date.getMonth() + 1)
-// 	const day = pad(date.getDate())
-// 	return `${year}-${month}-${day}`
-// }
 
 
 // ---------------------------------------------------------------------------- getMarketDataFromDate
@@ -1846,128 +1380,6 @@ console.log('test:', test)
 }
 
 
-/*
-// ---------------------------------------------------------------------------- testData
-const testData = async () => {
-	const data_ = await PolymarketApi.store.getItem('chartData') || await initData()
-
-	const test = {
-		up: {win: 0, lose: 0, total: 0},
-		down: {win: 0, lose: 0, total: 0},
-		all: {win: 0, lose: 0, total: 0}
-	} as any
-
-	for (const symbol of Object.keys(data_)) {
-
-		for (const item of data_[symbol]) {
-			if (!item.marketName.endsWith('-updown-15m')) continue
-			
-			item.hits = {up: {}, down: {}}
-			item.grid.up.forEach((el: any) => {
-				el[0] = parseNumber(el[0] / 60000)
-				el[3] = parseNumber(((el[2] / item.openPrice) - 1) * 100)
-				if (!item.hits.up[el[1]]) item.hits.up[el[1]] = el
-			})
-			item.grid.down.forEach((el: any) => {
-				el[0] = parseNumber(el[0] / 60000)
-				el[3] = parseNumber(((el[2] / item.openPrice) - 1) * 100)
-				if (!item.hits.down[el[1]]) item.hits.down[el[1]] = el
-			})
-
-			const outcome = item.outcome as 'up' | 'down'
-
-let el = item.hits.up['0.8']		
-if (el && el[0] > 12 && el[0] < 15){
-	test.up.total++
-	if (outcome === 'up') test.up.win += ((1 / el[1]) - 1)
-	else test.up.lose += 1
-}
-			
-			Object.entries(item.hits.up).forEach(([price_, el]: [string, any]) => {
-// if (el[0] > 12 && el[0] < 15 && el[1] >= 0.6){
-// 	test.up.total++
-// 	if (outcome === 'up') test.up.win += ((1 / el[1]) - 1)
-// 	else test.up.lose += 1
-// }
-				if (el[0] > 0 && el[0] < 15){
-					const price = parseFloat(price_)
-					const row = price * 10 - 1 //0 - 8
-					const col = Math.floor(el[0] / 1) //0 - 4
-					const index = col * 9 + row
-					let item = results[symbol].up[index]
-
-					item.price = price
-					item[outcome]++
-					item.count++
-
-					item = results.all.up[index]
-					item.price = price
-					item[outcome]++
-					item.count++
-				}
-			})
-
-el = item.hits.down['0.8']		
-if (el && el[0] > 12 && el[0] < 15){
-	test.down.total++
-	if (outcome === 'down') test.down.win += ((1 / el[1]) - 1)
-	else test.down.lose += 1
-}
-			
-			Object.entries(item.hits.down).forEach(([price_, el]: [string, any]) => {
-// if (el[0] > 12 && el[0] < 15 && el[1] >= 0.6){
-// 	test.down.total++
-// 	if (outcome === 'down') test.down.win += ((1 / el[1]) - 1)
-// 	else test.down.lose += 1
-// }
-				if (el[0] > 0 && el[0] < 15){
-					const price = parseFloat(price_)
-					const row = price * 10 - 1 //0 - 8
-					const col = Math.floor(el[0] / 1) //0 - 4
-					const index = col * 9 + row
-					let item = results[symbol].down[index]
-
-					item.price = price
-					item[outcome]++
-					item.count++
-
-					item = results.all.down[index]
-					item.price = price
-					item[outcome]++
-					item.count++
-				}
-			})
-		}
-
-		results[symbol].up.forEach((item: any) => {
-			item.value = (item.up / (item.count * item.price) - 1) * 100 * item.count / data_[symbol].length
-			// item.value = ((item.up / item.down) - 1) * 100
-		})
-		results[symbol].down.forEach((item: any) => {
-			item.value = (item.down / (item.count * item.price) - 1) * 100 * item.count / data_[symbol].length
-			// item.value = ((item.down / item.up) - 1) * 100
-		})
-
-		total += data_[symbol].length
-	}
-
-	results.all.up.forEach((item: any) => {
-		if (item.count)	item.value = (item.up / (item.count * item.price) - 1) * 100 * item.count / total
-		// if (item.count)	item.value = ((item.up / item.down) - 1) * 100
-	})
-	results.all.down.forEach((item: any) => {
-		if (item.count)	item.value = (item.down / (item.count * item.price) - 1) * 100 * item.count / total
-		// if (item.count)	item.value = ((item.down / item.up) - 1) * 100
-	})
-
-	// count.value = ((count.up / (0.6 * count.trades)) - 1) * 100
-
-	console.log('complete! data:', total, data_, 'results:', results)
-console.log('test:', test)	
-}
-*/
-
-
 // ---------------------------------------------------------------------------- createMapData
 const createMapData = () => {
 	const map = {up: [], down: []} as any
@@ -2022,7 +1434,9 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 	const path: string = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
 	console.log('getChartDistributionData:', symbol, dateString, source, '...')
 
+	// const cachedData = null
 	const cachedData = await PolymarketApi.store.getItem('chartDistributionData-' + symbol)
+	
 	if (cachedData){
 		console.log('chartDistributionData:', cachedData)
 		return cachedData
@@ -2121,114 +1535,43 @@ if (date.getTime() < new Date('2026-05-01').getTime()) continue
 
 // ---------------------------------------------------------------------------- smoothRatios
 // Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
-	const smoothMirrorValues = (arr: any[], window: number = 5, valueField: string = 'value'): void => {
-		for (let i = 0; i < arr.length / 2; i++) {
-			let sum = 0
-			let count = 0
-			// Glättung über das Fenster (z.B. 3er-Mittelwert)
-			for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
-				const idx = i + j
-				if (idx >= 0 && idx < arr.length) {
-					sum += arr[idx][valueField]
-					count++
+const smoothMirrorValues = (arr: any[], window: number = 5, valueField: string = 'value'): void => {
+	for (let i = 0; i < arr.length / 2; i++) {
+		let sum = 0
+		let count = 0
+		// Glättung über das Fenster (z.B. 3er-Mittelwert)
+		for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
+			const idx = i + j
+			if (idx >= 0 && idx < arr.length) {
+				sum += arr[idx][valueField]
+				count++
 
-					sum += arr[arr.length-1-idx][valueField]	//add the value of the mirrored index
-					count++
-				}
+				sum += arr[arr.length-1-idx][valueField]	//add the value of the mirrored index
+				count++
 			}
-			arr[i][valueField + '_s'] = arr[arr.length-1-i][valueField + '_s'] = sum / count
 		}
+		arr[i][valueField + '_s'] = arr[arr.length-1-i][valueField + '_s'] = sum / count
 	}
-
-
-	// ---------------------------------------------------------------------------- smoothRatios
-	// Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
-	const smoothValues = (arr: any[], window: number = 5, valueField: string = 'value'): void => {
-		for (let i = 0; i < arr.length; i++) {
-			let sum = 0
-			let count = 0
-			// Glättung über das Fenster (z.B. 3er-Mittelwert)
-			for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
-				const idx = i + j
-				if (idx >= 0 && idx < arr.length) {
-					sum += arr[idx][valueField]
-					count++
-				}
-			}
-			arr[i][valueField + '_s'] = sum / count
-		}
-	}
-
-
-/*
-// ---------------------------------------------------------------------------- getChartDistributionData
-export const _getChartDistributionData = async (symbol: string, dateString: string | null = null, range: number = 15) => {
-	let data: any[] = []
-	if (dateString) {
-		data = await getChartTickerData(symbol, dateString)
-
-	} else {
-		// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
-		const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'coinbase/' + symbol + '-usd', { withFileTypes: true });
-		console.log('dirList:', dirList)
-	
-		for (const entry of dirList) {
-			if (entry.isDirectory()) continue
-			// const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
-			const dateString = entry.name.split('.')[0]		//yyyy-mm-dd
-			const data_ = await getChartTickerData(symbol, dateString, 'coinbase')
-			console.log(entry.path + '/' + entry.name, data_.length)
-			// data.push(...data_ as any)
-			data = data.concat(data_ as any) || []
-		}
-		data.sort((a, b) => a.timestamp - b.timestamp)
-		console.log('chartData:', data.length)
-	}
-	if (!data.length) return [] as any
-
-	const minuteData = await getChartMinuteData(data)
-	const normalizedData = normalizeData(minuteData)
-
-	const values: number[] = []
-	const ranges: number[] = []
-
-	// only ranges with valid start and end data are considered
-	for (let i = 0; i < normalizedData.length - range; i++) {
-		if (!normalizedData[i].valid || !normalizedData[i + range].valid) continue
-		
-		const firstPrice = normalizedData[i].price			//first valid price of the range
-		const lastPrice = normalizedData[i + range].price	//last valid price of the range
-		const priceRatio = ((lastPrice / firstPrice) - 1) * 1000 * 2// * 60 / range	//price change ratio in percent per hour
-		const value = Math.floor(priceRatio)				//round to the nearest integer
-		if (value > 19 || value < -20) continue
-
-		values.push(priceRatio)					
-		// value = Math.max(Math.min(value, 19), -20)
-		if (!ranges[value]) ranges[value] = 0
-		ranges[value]++
-	}
-
-	values.sort((a, b) => a - b)		//sort all price values
-
-	const len = values.length
-	const pos = [values[0]]		//first value 0%
-	for (let i = 1; i < 10; i++) {
-		pos.push(values[Math.round(i * len / 10)])
-	}
-	pos.push(values[len - 1])	//last value 100%
-
-	console.log('values:', values.length, pos)
-
-	const distribution = Object.entries(ranges).map(([value, count]) => ({
-		value: parseInt(value),
-		count: count,
-	})).sort((a, b) => a.value - b.value)
-
-	// console.log('distribution:', distribution.length, distribution)
-
-	return distribution
 }
-*/
+
+
+// ---------------------------------------------------------------------------- smoothRatios
+// Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
+const smoothValues = (arr: any[], window: number = 5, valueField: string = 'value'): void => {
+	for (let i = 0; i < arr.length; i++) {
+		let sum = 0
+		let count = 0
+		// Glättung über das Fenster (z.B. 3er-Mittelwert)
+		for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
+			const idx = i + j
+			if (idx >= 0 && idx < arr.length) {
+				sum += arr[idx][valueField]
+				count++
+			}
+		}
+		arr[i][valueField + '_s'] = sum / count
+	}
+}
 
 
 // ---------------------------------------------------------------------------- normalizeData

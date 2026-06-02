@@ -150,6 +150,7 @@ console.log('full market data:', marketData)
 			id: marketData.id || marketData.conditionId || '',
 			question: marketData.question || marketData.title || '',
 			slug: marketData.slug || slug,
+			timeFrame: marketData.timeFrame || '',
 			description: marketData.description,
 			image: marketData.image || marketData.icon,
 			active: marketData.active !== false,
@@ -164,7 +165,7 @@ console.log('full market data:', marketData)
 			outcomes: outcomes,
 			createdAt: marketData.createdAt,
 			updatedAt: marketData.updatedAt,
-			sourceData: marketData
+			sourceData: marketData,
 		}
 
 		// Cache the market

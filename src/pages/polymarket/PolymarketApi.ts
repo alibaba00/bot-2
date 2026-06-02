@@ -297,6 +297,7 @@ class PolymarketApi {
 			market.closed = true
 			const priceData = await this.getCryptoPrice(market)
 			if (priceData?.failed){
+				console.log('priceData failed!')
 				market.state = 'failed'
 
 			}else if (!priceData){
@@ -339,6 +340,13 @@ class PolymarketApi {
 		return this.clobPath + '/' + symbol + '-' + marketType + '/' + dateString + '/'
 	}
 
+
+	// ---------------------------------------------------------------------------- getClobFileFromSlug
+	getClobFileFromSlug(slug: string): string | null {
+		const path = this.getClobPathFromSlug(slug)
+		if (!path) return null
+		return path + slug + '.csv'
+	}
 
 
 	// ---------------------------------------------------------------------------- getUTCTimestamp

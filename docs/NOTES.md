@@ -43,6 +43,19 @@ marketItem:
 
 -> marketCompleted-type
 
+----------------------------
+update clob data:
+
+updateAllMarketData_clob
+	check all openMarkets first
+	getAllMarkets_clob 		//get files list of all openMarkets
+	if market is cached and not open
+		skip
+	else
+		updateMarketData_clob
+			-> getMarket
+			-> updatePriceData
+
 
 ----------------------------
 update process:
