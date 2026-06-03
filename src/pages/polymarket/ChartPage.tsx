@@ -10,6 +10,7 @@ import * as PolymarketChart from "./PolymarketChart";
 import moment from "moment";
 import { Switch } from "@/components/ui/switch";
 import { lineChartOptions, barChartOptions, distChartOptions, scatterChartOptions, heatmapChartOptions } from "./ChartOptions";
+import { lineStyle } from "./ChartOptions";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -55,44 +56,6 @@ const assetContent = [
 ] as any
 
 
-const lineStyle: any = {
-	dist: {
-		color: '#0fcc',
-		width: 0.5,
-	},
-	up: {
-		color: '#0f0c',
-		width: 0.5,
-	},
-	down: {
-		color: '#f00c',
-		width: 0.5,
-	},
-	chainline: {
-		color: '#06fc',
-		width: 0.5,
-	},
-	polling: {
-		color: '#93fc',
-		width: 0.5,
-	},
-	coinbase: {
-		color: '#ff06',
-		width: 0.5,
-	},
-	grid: {
-		color: 'green',
-		width: 0.5,
-	},
-	binance: {
-		color: 'violet',
-		width: 0.5,
-	},
-} as any
-
-
-
-
 
 // const chartData = {} as any
 const seriesContent = ['up', 'down', 'chainline', 'coinbase', 'kraken', 'dist', 'binance', 'polling']
@@ -131,8 +94,6 @@ export default function ChartPage() {
 
 	// ---------------------------------------------------------------------------- parseLineData
 	const parseLineData = (chartData: any) => {
-		// if (!chartData.up.length || !chartData.down.length || !chartData.ticker.length) return
-		// if (!chartData.ticker.length) return
 		if (!selectedMarket || !chartData){
 			setChartOptions({})
 			return
@@ -162,32 +123,10 @@ export default function ChartPage() {
 			maxValue = Math.max(maxValue, value)
 			return [item[0], value] as any
 		})
-		// const minValue = chainlinkData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-		// const maxValue = chainlinkData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		// const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
 		const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(2)) + 0.02)
-		// const scale = 0.4
 
-		// const firstPrice = chartData.ticker?.binance?.[0]?.[1]
-		// const binanceData = chartData.ticker?.binance?.map((item: any) => {
-		// 	return [item[0], ((item[1] / firstPrice) - 1 ) * 1000] as any
-		// })
-		// const minValue = binanceData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-		// const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		// const scale = parseNumber(parseFloat((Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1))) + 0.2)
-
-		const binanceData = chartData.ticker?.binance?.map((item: any) => {
-			return [item[0], ((item[1] / openPrice) - 1 ) * 100] as any
-		})
-		// const minValue = binanceData.reduce((min: number, item: any) => Math.min(min, item[1]), Infinity)
-		// const maxValue = binanceData.reduce((max: number, item: any) => Math.max(max, item[1]), -Infinity)
-		// const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(1)) + 0.2)
 		const series: any[] = []
 
-		const coinbaseData = chartData.ticker?.coinbase?.map((item: any) => {
-			value = ((item[1] / openPrice) - 1 ) * 100		//coinbase price change in +/-percent
-			return [item[0], value] as any
-		})
 
 		const targetPrice = chartData.dist || calcDistData()
 		if (!targetPrice) return
@@ -198,43 +137,49 @@ export default function ChartPage() {
 			lineStyle: lineStyle.dist,
 		})
 
-		const firstPrice = chartData.ticker?.polling?.[0]?.[1]
-		const pollingData = chartData.ticker?.polling?.map((item: any) => {
-			return [item[0], ((item[1] / firstPrice) - 1 ) * 100] as any
-		})
-
-		const gridUpData = chartData._grid?.map((item: any) => {
-			return [item[0], item[1]] as any
-		})
 
 		if (selectedSeries.includes('up')) series.push({
 			...lineChartOptions.series[0],
+			lineStyle: lineStyle.up,
 			data: clobData.up						//up data (green)
 		})
 		if (selectedSeries.includes('down')) series.push({
-			...lineChartOptions.series[1],
+			...lineChartOptions.series[0],
+			lineStyle: lineStyle.down,
 			data: clobData.down?.map(([timestamp, value]) => [timestamp, 1 - value])	//invert down data (red)
 		})
 		if (selectedSeries.includes('chainline')) series.push({
-			...lineChartOptions.series[2],
+			...lineChartOptions.series[1],
+			lineStyle: lineStyle.chainline,
 			data: chainlinkData					//chainlink data (blue)
 		})
-		if (selectedSeries.includes('polling')) series.push({
-			...lineChartOptions.series[3],
-			data: pollingData
-		})
+		if (selectedSeries.includes('polling')){
+			const firstPrice = chartData.ticker?.polling?.find((item: any) => item[0] >= market.startTimestamp)?.[1]
+			series.push({
+				...lineChartOptions.series[1],
+				lineStyle: lineStyle.polling,
+				data: chartData.ticker?.polling?.map((item: any) => 
+					[item[0], ((item[1] / firstPrice) - 1 ) * 100] as any
+				)
+			})
+		}
 		if (selectedSeries.includes('coinbase')) series.push({
-			...lineChartOptions.series[4],
-			data: coinbaseData
+			...lineChartOptions.series[1],
+			lineStyle: lineStyle.coinbase,
+			data: chartData.ticker?.coinbase?.map((item: any) => 
+				[item[0], ((item[1] / openPrice) - 1 ) * 100] as any
+			)
 		})
-		if (selectedSeries.includes('grid')) series.push({
-			...lineChartOptions.series[5],
-			data: gridUpData
-		})	
-		if (selectedSeries.includes('binance')) series.push({
-			...lineChartOptions.series[6],
-			data: binanceData
-		})
+		if (selectedSeries.includes('binance')){
+			const firstPrice = chartData.ticker?.binance?.find((item: any) => item[0] >= market.startTimestamp)?.[1]
+			series.push({
+				...lineChartOptions.series[1],
+				lineStyle: lineStyle.binance,
+				data: chartData.ticker?.binance?.map((item: any) => 
+					[item[0], ((item[1] / firstPrice) - 1 ) * 100] as any
+				)
+			})
+		}
 
 		setChartOptions({
 			...lineChartOptions,
@@ -280,8 +225,8 @@ export default function ChartPage() {
 					lineStyle: lineStyle.dist,
 				},
 				{
-					...distChartOptions.series[1],
-					data: targetPrice.up.map((item: any) => [item[0], item[1]]),
+					...distChartOptions.series[0],
+					data: chartData.clob.up.map((item: any) => [item[0], item[1]]),
 					lineStyle: lineStyle.up,
 				},
 				// {
@@ -290,8 +235,9 @@ export default function ChartPage() {
 				// 	lineStyle: lineStyle.down,
 				// },
 				{
-					...distChartOptions.series[2],
-					data: targetPrice.up.map((item: any) => [item[0], item[3]])
+					...distChartOptions.series[1],
+					data: targetPrice.up.map((item: any) => [item[0], item[3]]),
+					lineStyle: lineStyle.binance,
 				}
 			],
 		})
@@ -310,7 +256,8 @@ export default function ChartPage() {
 		if (!endTimestamp) return null
 
 		const openPrice = market.openPrice
-		const baseData = market.chartData.ticker?.chainlink?.filter((item: any) => item[0] < endTimestamp)
+		// const baseData = market.chartData.ticker?.chainlink?.filter((item: any) => item[0] < endTimestamp)
+		const baseData = market.chartData.ticker?.coinbase?.filter((item: any) => item[0] < endTimestamp)
 			.map((item: any) => {
 				const value = ((item[1] / openPrice) - 1 ) * 100		//coinbase price change in percent
 				return [item[0], value] as any

@@ -1427,15 +1427,15 @@ const initData = async () => {
 // ---------------------------------------------------------------------------- getChartDistributionData
 export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
 	// const source: string = 'binance'
-	// const source: string = 'coinbase'
-	const source: string = 'chainlink'
+	const source: string = 'coinbase'
+	// const source: string = 'chainlink'
 	
 	// e.g. A:/DATA/polymarket/coinbase/btc-usd
 	const path: string = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
 	console.log('getChartDistributionData:', symbol, dateString, source, '...')
 
 	// const cachedData = null
-	const cachedData = await PolymarketApi.store.getItem('chartDistributionData-' + symbol)
+	const cachedData = await PolymarketApi.store.getItem('distData-' + source + '-' + symbol)
 	
 	if (cachedData){
 		console.log('chartDistributionData:', cachedData)
@@ -1527,7 +1527,7 @@ if (date.getTime() < new Date('2026-05-01').getTime()) continue
 		})
 	}
 
-	await PolymarketApi.store.setItem('chartDistributionData-' + symbol, ranges)
+	await PolymarketApi.store.setItem('distData-' + source + '-' + symbol, ranges)
 	console.log('chartDistributionData:', ranges)
 	return ranges
 }

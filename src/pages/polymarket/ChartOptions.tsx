@@ -1,3 +1,39 @@
+export const lineStyle: any = {
+	dist: {
+		color: '#0fc6',
+		width: 1,
+	},
+	up: {
+		color: '#3f0c',
+		width: 1,
+	},
+	down: {
+		color: '#f30c',
+		width: 1,
+	},
+	chainline: {
+		color: '#09fc',
+		width: 1,
+	},
+	polling: {
+		color: '#93fc',
+		width: 1,
+	},
+	coinbase: {
+		color: '#ff06',
+		width: 1,
+	},
+	grid: {
+		color: 'green',
+		width: 1,
+	},
+	binance: {
+		color: '#f0fc',
+		width: 1,
+	},
+} as any
+
+
 export const heatmapChartOptions = {
 	tooltip: {
 		show: false,
@@ -202,8 +238,8 @@ export const distChartOptions = {
 		{
 			type: 'value',
 			scale: false,
-			min: -2,
-			max: 2,
+			min: -1,
+			max: 1,
 			interval: 0.2,
 			splitLine: {
 				show: true,
@@ -227,46 +263,20 @@ export const distChartOptions = {
 	series: [
 		{
 			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#0f0c',
-			},
 			symbolSize: 0,
-			data: [] as any[],
 			step: 'end',
 			tooltip: {
 				show: true,
 			},
-			name: "chain",
 		},
 		{
 			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#06fc',
-			},
 			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: true,
-			},
-			name: "dist",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#f00c',
-			},
-			symbolSize: 0,
-			data: [] as any[],
 			step: 'end',
 			yAxisIndex: 1,
 			tooltip: {
 				show: true,
 			},
-			name: "up/down",
 		}
 	],
 	grid: {
@@ -351,105 +361,21 @@ export const lineChartOptions = {
 	series: [
 		{
 			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#0f0c',
-			},
 			symbolSize: 0,
-			data: [] as any[],
 			step: 'end',
 			tooltip: {
 				show: true,
 			},
-			name: "up",
 		},
 		{
 			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#f00c',
-			},
 			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: true,
-			},
-			name: "down",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#06fc', // set to visible color (e.g. yellow)
-			},
-			symbolSize: 0,
-			data: [] as any[],
 			yAxisIndex: 1,
 			step: 'end',
 			tooltip: {
 				show: false,
 			},
-			name: "chainlink",
 		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#93fc',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			yAxisIndex: 1,
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "polling",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: '#ff06',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			yAxisIndex: 1,
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "coinbase",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: 'green',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "grid",
-		},
-		{
-			type: 'line',
-			lineStyle: {
-				width: 1,
-				color: 'violet',
-			},
-			symbolSize: 0,
-			data: [] as any[],
-			step: 'end',
-			tooltip: {
-				show: false,
-			},
-			name: "binance",
-		}
 	],
 	grid: {
 		top: 0,
