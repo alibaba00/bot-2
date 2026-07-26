@@ -277,6 +277,9 @@ export const distChartOptions = {
 			tooltip: {
 				show: true,
 			},
+			areaStyle: {
+				color: '#f0f3',
+			},
 		}
 	],
 	grid: {

@@ -68,7 +68,9 @@ export default function ChartPage() {
 	const [asset, setAsset] = useState(assetContent[0])
 	const [selectedDate, setSelectedDate] = useState(new Date())
 	// const [chartOptions, setChartOptions] = useState({line: lineChartOptions, bar: barChartOptions, heatmap: heatmapChartOptions})
-	const [chartOptions, setChartOptions] = useState({})
+	const [chartOptions, setChartOptions] = useState<any>({})
+	const [limitedChartOptions, setLimitedChartOptions] = useState<any>({})
+
 	const [chartType, setChartType] = useState('line')
 	const [marketType, setMarketType] = useState('all')
 	const [side, setSide] = useState('up')
@@ -77,6 +79,12 @@ export default function ChartPage() {
 	// const isLogging = PolymarketApi.use('loggingActive')
 	const [selectedSeries, setSelectedSeries] = useState<string[]>(seriesContent)
 
+	useEffect(() => {
+		chartOptions?.series?.forEach((series: any) => {
+			series.data = aggregateAndLimitData(series.data)
+		})
+		setLimitedChartOptions(chartOptions)		
+	}, [chartOptions])
 
 	useEffect(() => {
 		if (autoUpdateTimer) clearInterval(autoUpdateTimer)
@@ -236,7 +244,7 @@ export default function ChartPage() {
 				// },
 				{
 					...distChartOptions.series[1],
-					data: targetPrice.up.map((item: any) => [item[0], item[3]]),
+					data: targetPrice.up.map((item: any) => [item[0], 0-item[3]]),
 					lineStyle: lineStyle.binance,
 				}
 			],
@@ -313,18 +321,18 @@ export default function ChartPage() {
 
 	// ---------------------------------------------------------------------------- mergeData
 	// data1 = upDownData, data2 = targetData
-	const mergeData = (data1: any[], data2: any[]) => {
+	const mergeData = (upDnData: any[], targetData: any[]) => {
 		let i1 = 0
 		let i2 = 0
 		const data: any[] = []
 
-		while (data1[i1]){
-			while (data2[i2] && data2[i2][0] < data1[i1][0]){
-				if (data1[i1-1]) data.push([data2[i2][0], data1[i1-1][1], data2[i2][1]])
+		while (upDnData[i1]){
+			while (targetData[i2] && targetData[i2][0] < upDnData[i1][0]){
+				if (upDnData[i1-1]) data.push([targetData[i2][0], upDnData[i1-1][1], targetData[i2][1]])
 				i2++
 			}
-			if (data2[i2]?.[0] === data1[i1]?.[0]) i2++
-			if (data2[i2-1]) data.push([data1[i1][0], data1[i1][1], data2[i2-1][1]])
+			if (targetData[i2]?.[0] === upDnData[i1]?.[0]) i2++
+			if (targetData[i2-1]) data.push([upDnData[i1][0], upDnData[i1][1], targetData[i2-1][1]])
 			i1++
 		}
 		return data
@@ -363,10 +371,10 @@ export default function ChartPage() {
 		// console.log('updateChart:', chartType, symbol, selectedMarket?.slug || '')
 		if (!symbol) return
 
-		if (!chartDistributionData[symbol]){
+		// if (!chartDistributionData[symbol]){
 			chartDistributionData[symbol] = 'loading...'
 			chartDistributionData[symbol] = await PolymarketChart.getChartDistributionData(symbol)
-		}
+		// }
 
 		if (chartType === 'bar'){
 			console.log('updateChart:', symbol, chartType)
@@ -511,7 +519,8 @@ export default function ChartPage() {
 						</Button>
 
 						<ToggleGroup type='single' defaultValue='line' value={chartType}
-							onValueChange={(value: string) => {if (value) setChartType(value)}}>
+							onValueChange={(value: string) => {if (value) setChartType(value)}}
+							>
 							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
 							<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
 							<ToggleGroupItem value='dist' variant='outline'>Dist</ToggleGroupItem>
@@ -554,7 +563,8 @@ export default function ChartPage() {
 						</ToggleGroup>
 					</div>
 					<ReactEcharts
-						option={chartOptions}
+						// option={chartOptions}
+						option={limitedChartOptions}
 						style={{ height: '100%', width: '100%' }}
 						notMerge={true}
 						lazyUpdate={true}
@@ -640,7 +650,11 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 			if (filter){
 				files = files.filter((market) => filter[market.slug])
 			}else if (marketType !== 'all'){
-				files = files.filter((market) => market.slug.includes('-' + marketType))
+				files = files.filter((market) => {
+					return marketType === '1h' ?
+					market.slug.includes('up-or-down')
+					: market.slug.includes('-' + marketType)
+				})
 			}
 			files = files.sort((b, a) => a.timestamp - b.timestamp)
 
@@ -728,4 +742,20 @@ const MarketItem = ({ market }: { market: any }) => {
 			</div>
 		</div>
 	)
+}
+
+// ---------------------------------------------------------------------------- aggregateAndLimitData
+const aggregateAndLimitData = (data: [number, number][], limit: number = 1000) => {
+	if (data.length <= limit) return data
+
+	let split = Math.ceil(data.length / limit)
+	const result = [] as any[]
+	for (let i = 0; i < data.length; i += split) {
+		if (i + split > data.length) split = data.length - i
+		let sum = 0
+		for (let j = 0; j < split; j++) sum += data[i+j][1]
+		result.push([data[i+split-1][0], sum / split])	// use the last timestamp of the split
+	}
+	return result
+	
 }

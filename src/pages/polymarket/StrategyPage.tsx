@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Strategy3 } from "./Strategy";
+import { Strategy4 } from "./Strategy_4";
 import ReactEcharts from 'echarts-for-react';
 import { Label } from "@/components/ui/label";
 
@@ -153,13 +154,19 @@ export default function StrategyPage() {
 		}
 	}
 
-	
+	const handleStrategy4 = async () => {
+		console.log('handleStrategy4 ...')
+		await Strategy4.run()
+		console.log('handleStrategy4 complete!', Strategy4.setup)
+	}
+
 	return (
 		<div className="flex flex-col gap-4 p-4 h-full w-full justify-start items-start">
 			<h2>Strategies:</h2>
 			<div className="flex gap-2 flex-wrap">
 				<Button variant='default' onClick={handleStrategy3}>Strategy 3</Button>
 				<Button variant='default' onClick={handleStrategy3Multi}>Strategy 3 Multi</Button>
+				<Button variant='default' onClick={handleStrategy4}>Strategy 4</Button>
 			</div>
 
 			<div className="flex gap-2 flex-wrap">

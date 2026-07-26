@@ -27,6 +27,9 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 	console.log('\n--- fixingClobData running', type, '...')
 	const marketKeys = await PolymarketApi.cache.keys()
 	const updateKeys = marketKeys.filter((key: string) => key.includes(type))
+
+const openMarkets: string[] = []
+
 	console.log('updateKeys:', updateKeys.length, 'from', marketKeys.length, type, 'markets ...')
 
 	let count = 0
@@ -36,70 +39,96 @@ export const fixingClobData = async (type: string = 'updown-5m') => {
 		if (!isRunning) break
 
 		const market = await PolymarketApi.cache.getItem(key)
-		const clob = market?.chartData?.clob
-		if (!clob) continue
 
-		let updated = false
-
-		//--- update ticker data complete state
-		const timeLimit = market.duration / 5 * 60 * 1000
-		const firstTimestamp = market.startTimestamp + timeLimit
-		const lastTimestamp = market.endTimestamp - timeLimit
-		for (const source of Object.keys(tickerDataSources)) {
-			if (source === 'clob') continue
-			const tickerData = market.chartData.ticker[source]
-		
-			if (tickerData && tickerData._complete === undefined){
-				tickerData._complete = tickerData.length > 20
-					&& tickerData[0][0] < firstTimestamp
-					&& tickerData[tickerData.length-1][0] > lastTimestamp
-		
-				updated = true
-			}
-		}
-		if (updated){
-			console.log('update ticker data complete state:')
-			market.chartData._complete = true
-		}
-		
-		//--- update chartData version
-		if (market.closed && market.chartData?.version !== chartDataVersion) {
-// console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
-			market.chartData.clob._complete = updateClobDataComplete(market)
-			market.chartData._complete = true
-			market.chartData.version = chartDataVersion
-			updated = true
-		}
-
-		//--- fixing openPrice
-		const priceToBeat = market.marketData?.sourceData?.events?.[0]?.eventMetadata?.priceToBeat
-		// if (priceToBeat && priceToBeat !== market.openPrice) {
-		if (priceToBeat && (priceToBeat / market.openPrice > 1.0001 || market.openPrice / priceToBeat > 1.0001)) {
-				// console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
-			delete market.openPrice
-			const upd = await updatePriceData(market)
-			if (upd) {
-				console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
-				updated = true
-			}
-		}
+		// const updated = await update_1(market)
+		const updated = await update_2(market)
 
 		if (updated) {
-			await PolymarketApi.cacheMarket(market)
-			await PolymarketApi.saveMarket(market, true)
-
 			count++
-			if (count % 1000 === 0){
-				// console.clear()
-				console.log('market updated:', count, index, '/', updateKeys.length, market.slug)
-			}
-			// console.log('')
+			openMarkets.push(market.slug)
+			// await PolymarketApi.cacheMarket(market)
+			// await PolymarketApi.saveMarket(market, true)
 		}
+
+		if (index % 10000 === 0){
+			// console.clear()
+			console.log('market updated:', count, index, '/', updateKeys.length, market.slug)
+		}
+		// console.log('')
 	}
 
-	console.log('fixing clob data complete!')
+// update open markets in store
+await PolymarketApi.store.setItem('openMarkets', openMarkets)
+
+	console.log('fixing clob data complete!', count, 'markets updated')
 	isRunning = false
 }
+
+// ---------------------------------------------------------------------------- update_2
+const update_2 = async (market: Market) => {
+	if (market.state === 'failed') return false
+	if (market.state === 'init' || market.state === 'pending') return true
+	if (!market.closed) return true
+	// market is closed
+	if (market.chartData?.version !== chartDataVersion) return true
+	if (!market.chartData._complete) return true
+	if (market.chartData?.ticker?.chainlink && !market.chartData?.ticker?.chainlink?._complete === undefined) return true
+	if (market.chartData?.ticker?.coinbase && !market.chartData?.ticker?.coinbase?._complete === undefined) return true
+	if (market.chartData?.ticker?.binance && !market.chartData?.ticker?.binance?._complete === undefined) return true
+
+	return false
+}
+
+// ---------------------------------------------------------------------------- update_1
+const update_1 = async (market: Market) => {
+	let updated = false
+	if (!market?.chartData?.clob) return updated
+
+	//--- update ticker data complete state
+	const timeLimit = market.duration / 5 * 60 * 1000
+	const firstTimestamp = market.startTimestamp + timeLimit
+	const lastTimestamp = market.endTimestamp - timeLimit
+	for (const source of Object.keys(tickerDataSources)) {
+		if (source === 'clob') continue
+		const tickerData = market.chartData.ticker[source]
+	
+		if (tickerData && tickerData._complete === undefined){
+			tickerData._complete = tickerData.length > 20
+				&& tickerData[0][0] < firstTimestamp
+				&& tickerData[tickerData.length-1][0] > lastTimestamp
+	
+			updated = true
+		}
+	}
+	if (updated){
+		console.log('update ticker data complete state:')
+		market.chartData._complete = true
+	}
+	
+	//--- update chartData version
+	if (market.closed && market.chartData?.version !== chartDataVersion) {
+// console.log('update chartData version:', market.slug, market.chartData?.version, 'to', chartDataVersion)
+		market.chartData.clob._complete = updateClobDataComplete(market)
+		market.chartData._complete = true
+		market.chartData.version = chartDataVersion
+		updated = true
+	}
+
+	//--- fixing openPrice
+	const priceToBeat = market.marketData?.sourceData?.events?.[0]?.eventMetadata?.priceToBeat
+	// if (priceToBeat && priceToBeat !== market.openPrice) {
+	if (priceToBeat && market.openPrice && (priceToBeat / market.openPrice > 1.0001 || market.openPrice / priceToBeat > 1.0001)) {
+		// console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
+		market.openPrice = null
+		const upd = await updatePriceData(market)
+		if (upd) {
+			console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
+			updated = true
+		}
+	}
+	return updated
+}
+
 
 
 // ---------------------------------------------------------------------------- dataTest
@@ -486,8 +515,10 @@ let dirList: any[] = []
 // let completeList: any = {} as any	//.csv files alrey completed to ignore them
 
 
-export const getAllMarkets_clob = async (symbol: string | null = null,
-	date: Date | null = null, clearCache: boolean = false) => {
+export const getAllMarkets_clob = async (
+	symbol: string | null = null,
+	date: Date | null = null,
+	clearCache: boolean = false) => {
 	console.log('getAllMarkets_clob', symbol || '', date || '', '... (clearCache:', clearCache, ')')
 
 	// completeList = await PolymarketApi.store.getItem('completeList') as any || {} as any
@@ -510,15 +541,31 @@ export const getAllMarkets_clob = async (symbol: string | null = null,
 		fileName: entry.name,
 		filePath: entry.path.replaceAll('\\', '/') + '/' + entry.name,
 		slug: entry.name.replace('.csv', ''),
-		timestamp: parseInt(entry.name.replace('.csv', '').split('-')[3]),
+		timestamp: entry.name.endsWith('-et.csv')
+			? getDateStringToTimestamp(entry.name)
+			: parseInt(entry.name.replace('.csv', '').split('-')[3]),
 		date: date,
 		dateString: dateString,
-		symbol: symbol
+		symbol: symbol,
 	}));
 
 	return fileList;
 }
 
+// ---------------------------------------------------------------------------- getCustomDateString
+// convert dateString like june-23-2026-10am to timestamp 1765406700
+const monthNames = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+const getDateStringToTimestamp = (dateString: string): number => {
+	dateString = dateString.replace('.csv', '')
+	dateString = dateString.split('up-or-down-')[1] || dateString.split('-')[0];
+	const [monthStr, dayStr, yearStr, hourStr] = dateString.split('-') as any;
+	let hour = parseInt(hourStr.replace('am', '').replace('pm', ''));
+	if (hour === 12) hour = 0;
+	if (hourStr.includes('pm') && hour < 12) hour += 12;
+	if (!monthStr || !dayStr || !yearStr || isNaN(hour)) return 0;
+	const date = new Date(parseInt(yearStr), monthNames.indexOf(monthStr), parseInt(dayStr), hour, 0, 0, 0);
+	return Math.floor(date.getTime() / 1000);
+}
 
 const tickerDataSources: any = {
 	clob: {
@@ -584,7 +631,8 @@ export const getMarket = async (slug: string, filePath: string | null = null, us
 	let market = useCache ? await PolymarketApi.cache.getItem(slug) as Market | null : null
 
 	if (!market && filePath) {		//market not cached! load and update market from file
-		if (fs.existsSync(filePath) && useCache) {
+		const exists = fs.existsSync(filePath)
+		if (exists) {
 			console.log('reload market from file:', filePath)
 			const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
 			market = JSON.parse(jsonFileContent) as Market
@@ -638,7 +686,7 @@ export const updateAllMarketData_clob = async () => {
 		const {market, updated} = await updateMarketData_clob(slug, null, false)
 		if (updated) stat.updated++
 
-		if (market && market.closed && market.chartData._complete){
+		if (market && market.closed && (market.state === 'failed' || market.chartData._complete)){
 			delete openMarketsLookup[slug]
 			stat.closed++
 		}
@@ -652,6 +700,7 @@ export const updateAllMarketData_clob = async () => {
 	//clear cache if last update is more than 1 hour ago
 	const dataFiles = await getAllMarkets_clob(null, null, now - last > 60 * 60 * 1000)
 	console.log('Updating all market data from clob:', dataFiles.length, 'files ...')
+	console.log('last:', moment(last).format('YYYY-MM-DD HH:mm:ss'), 'now:', moment(now).format('YYYY-MM-DD HH:mm:ss'))
 
 	// get all existing market keys from cache
 	const marketKeys = await PolymarketApi.cache.keys()
@@ -674,7 +723,7 @@ export const updateAllMarketData_clob = async () => {
 		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
 		if (updated) stat.updated++
 
-		if (!market || !market.closed || !market.chartData._complete){
+		if (!market || !market.closed || market.state === 'init' || (market.state !== 'failed' && !market.chartData._complete)){
 			stat.open++
 			openMarketsLookup[file.slug] = true
 		}else{
@@ -714,7 +763,7 @@ export const updateMarketData_clob = async (slug: string, csvPath: string | null
 	}
 	if (market.state === 'failed'){
 		console.log('market failed!', slug)
-		return {market: null, updated: false}
+		return {market: market, updated: false}
 	}
 
 	// if (market.state === 'failed') return {market: null, updated: false}
@@ -753,7 +802,7 @@ export const updateMarketData_clob = async (slug: string, csvPath: string | null
 		updated = updated || await updatePriceData(market)
 		
 		// if (!useCache || !market.chartData?._complete || market.chartData?.version !== chartDataVersion) {
-		if (market.state !== 'failed' && (!market.chartData?._complete || market.chartData?.version !== chartDataVersion)) {
+		if (!useCache || (market.state !== 'init' && market.state !== 'failed') && (!market.chartData?._complete || market.chartData?.version !== chartDataVersion)) {
 			market.chartData = await getClobTickerData(market, csvPath)
 			market.chartData.clob._complete = updateClobDataComplete(market)
 			//market is complete if lastUpdate_logfiles is greater than or equal to market.endTimestamp
@@ -1067,6 +1116,7 @@ export const getMarketChartData = async (filePath: string | null = null,
 
 
 // ---------------------------------------------------------------------------- getChartTickerData
+// get ticker data from 1 day cache or from file
 // const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
 // source: chainlink, binance, polling
 // symbol: btc, xrp, etc.
@@ -1077,6 +1127,8 @@ export const getMarketChartData = async (filePath: string | null = null,
 export const getChartTickerData = async (symbol: string, dateString: string, source: string = 'chainlink'): Promise<any[]> => {
 	const dataString = symbol + '-' + dateString
 	if (tickerDataCache[source + '-' + dataString]) return tickerDataCache[source + '-' + dataString]
+
+	if (!tickerDataSources[source]) return []
 
 	const dirPath = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
 	const filePath = `${dirPath}/${dateString}.csv`
@@ -1425,17 +1477,20 @@ const initData = async () => {
 
 
 // ---------------------------------------------------------------------------- getChartDistributionData
+// from dateString or all ticker data
 export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
 	// const source: string = 'binance'
 	const source: string = 'coinbase'
 	// const source: string = 'chainlink'
 	
 	// e.g. A:/DATA/polymarket/coinbase/btc-usd
+	if (!tickerDataSources[source]?.symbols[symbol]) return null
+
 	const path: string = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
 	console.log('getChartDistributionData:', symbol, dateString, source, '...')
 
-	// const cachedData = null
-	const cachedData = await PolymarketApi.store.getItem('distData-' + source + '-' + symbol)
+// const cachedData = null
+const cachedData = await PolymarketApi.store.getItem('distData-' + source + '-' + symbol)
 	
 	if (cachedData){
 		console.log('chartDistributionData:', cachedData)
@@ -1452,14 +1507,18 @@ export const getChartDistributionData = async (symbol: string, dateString: strin
 		let dirList = await fsPromises.readdir(path, { withFileTypes: true });
 		dirList = dirList.filter((entry) => entry.isFile() && entry.name.endsWith('.csv'))
 		console.log('dirList:', dirList)
-	
+
+const fromDate = new Date('2026-07-11').getTime()
+const toDate = new Date('2026-07-14').getTime()
+
 		for (const entry of dirList) {
 			// const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
 			const dateString = entry.name.split('.')[0]		//yyyy-mm-dd
 
 const date = new Date(dateString)
 // if (date.getTime() < new Date('2026-01-29 16:00:00').getTime()) continue
-if (date.getTime() < new Date('2026-05-01').getTime()) continue
+if (date.getTime() < fromDate) continue
+if (date.getTime() > toDate) break
 
 			const data_ = await getChartTickerData(symbol, dateString, source)
 			console.log(entry.path + '/' + entry.name, data_.length)
@@ -1518,7 +1577,8 @@ if (date.getTime() < new Date('2026-05-01').getTime()) continue
 			count: total,
 		}
 
-		smoothMirrorValues(ranges[t].bars)
+		// smoothValues(ranges[t].bars, 1, false)
+		smoothValues(ranges[t].bars, 7, true)
 
 		let volume = off
 		ranges[t].bars.forEach((item: any) => {
@@ -1535,41 +1595,31 @@ if (date.getTime() < new Date('2026-05-01').getTime()) continue
 
 // ---------------------------------------------------------------------------- smoothRatios
 // Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
-const smoothMirrorValues = (arr: any[], window: number = 5, valueField: string = 'value'): void => {
-	for (let i = 0; i < arr.length / 2; i++) {
+const smoothValues = (arr: any[], window: number = 5, mirror: boolean = true, valueField: string = 'value'): void => {
+	const len = mirror? arr.length / 2 : arr.length
+	for (let i = 0; i < len; i++) {
 		let sum = 0
 		let count = 0
-		// Glättung über das Fenster (z.B. 3er-Mittelwert)
-		for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
-			const idx = i + j
-			if (idx >= 0 && idx < arr.length) {
-				sum += arr[idx][valueField]
-				count++
+		if (window > 1){
+			// Glättung über das Fenster (z.B. 3er-Mittelwert)
+			for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
+				const idx = i + j
+				if (idx >= 0 && idx < arr.length) {
+					sum += arr[idx][valueField]
+					count++
 
-				sum += arr[arr.length-1-idx][valueField]	//add the value of the mirrored index
-				count++
+					if (mirror) {
+						sum += arr[arr.length-1-idx][valueField]	//add the value of the mirrored index
+						count++
+					}
+				}
 			}
+			arr[i][valueField + '_s'] = sum / count
+			if (mirror) arr[arr.length-1-i][valueField + '_s'] = sum / count
+		}else{
+			arr[i][valueField + '_s'] = arr[i][valueField]
+			if (mirror) arr[arr.length-1-i][valueField + '_s'] = arr[arr.length-1-i][valueField]
 		}
-		arr[i][valueField + '_s'] = arr[arr.length-1-i][valueField + '_s'] = sum / count
-	}
-}
-
-
-// ---------------------------------------------------------------------------- smoothRatios
-// Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
-const smoothValues = (arr: any[], window: number = 5, valueField: string = 'value'): void => {
-	for (let i = 0; i < arr.length; i++) {
-		let sum = 0
-		let count = 0
-		// Glättung über das Fenster (z.B. 3er-Mittelwert)
-		for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
-			const idx = i + j
-			if (idx >= 0 && idx < arr.length) {
-				sum += arr[idx][valueField]
-				count++
-			}
-		}
-		arr[i][valueField + '_s'] = sum / count
 	}
 }
 
