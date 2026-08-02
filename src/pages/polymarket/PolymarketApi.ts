@@ -734,21 +734,8 @@ class PolymarketApi {
 	async saveMarket(market: Market, force: boolean = false): Promise<void> {
 		if (!force && !this.get('loggingActive')) return
 
-		let filePath: string = ''
-		if (market.filePath) {
-			filePath = market.filePath
-
-		}else{
-return
-			let symbol = market.symbol.toLowerCase()
-			// console.log('saveMarket:', market.slug, market.openPrice, market.closePrice)
-			const dirPath = this.rootPath + 'markets/' + symbol + '/' + market.dayString
-			if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, {recursive: true})
-			filePath = dirPath + '/' + market.slug + '.json'
-		}
-
+		const filePath = market.filePath || ''
 		await fsPromises?.writeFile(filePath, JSON.stringify(market, null, '\t'))
-// console.log('market saved to:', filePath)
 	}
 
 

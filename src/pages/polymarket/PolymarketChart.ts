@@ -41,9 +41,9 @@ const openMarkets: string[] = []
 		const market = await PolymarketApi.cache.getItem(key)
 
 		// const updated = await update_1(market)
-		const updated = await update_2(market)
+		const marketIsOpen = marketIsOpenCheck(market || null)
 
-		if (updated) {
+		if (marketIsOpen) {
 			count++
 			openMarkets.push(market.slug)
 			// await PolymarketApi.cacheMarket(market)
@@ -64,17 +64,18 @@ await PolymarketApi.store.setItem('openMarkets', openMarkets)
 	isRunning = false
 }
 
-// ---------------------------------------------------------------------------- update_2
-const update_2 = async (market: Market) => {
+// ---------------------------------------------------------------------------- marketIsOpenCheck
+export const marketIsOpenCheck = (market: Market | null) => {
+	if (!market) return false
 	if (market.state === 'failed') return false
 	if (market.state === 'init' || market.state === 'pending') return true
 	if (!market.closed) return true
 	// market is closed
 	if (market.chartData?.version !== chartDataVersion) return true
 	if (!market.chartData._complete) return true
-	if (market.chartData?.ticker?.chainlink && !market.chartData?.ticker?.chainlink?._complete === undefined) return true
-	if (market.chartData?.ticker?.coinbase && !market.chartData?.ticker?.coinbase?._complete === undefined) return true
-	if (market.chartData?.ticker?.binance && !market.chartData?.ticker?.binance?._complete === undefined) return true
+	if (market.chartData?.ticker?.chainlink && market.chartData.ticker.chainlink._complete === undefined) return true
+	if (market.chartData?.ticker?.coinbase && market.chartData.ticker.coinbase._complete === undefined) return true
+	if (market.chartData?.ticker?.binance && market.chartData.ticker.binance._complete === undefined) return true
 
 	return false
 }
@@ -649,6 +650,7 @@ export const getMarket = async (slug: string, filePath: string | null = null, us
 
 
 // ---------------------------------------------------------------------------- updateAllMarketData_clob
+// updateClobData
 export const updateAllMarketData_clob = async () => {
 	if (isRunning){
 		console.log('updateAllMarketData_clob canceled!')
@@ -681,16 +683,33 @@ export const updateAllMarketData_clob = async () => {
 		open: 0,
 	}
 
+	let count = 0
 	for (const slug of openMarkets) {
+		if (!isRunning) break
+
 		// update cached market or create new market
 		const {market, updated} = await updateMarketData_clob(slug, null, false)
 		if (updated) stat.updated++
 
-		if (market && market.closed && (market.state === 'failed' || market.chartData._complete)){
+		const marketIsOpen = marketIsOpenCheck(market || null)
+		if (!marketIsOpen) {
 			delete openMarketsLookup[slug]
 			stat.closed++
 		}
+
+		count++
+		console.log('update open market:', count, '/', openMarkets.length, 'update:', stat.updated, 'closed:', stat.closed)
+		// if (market && market.closed && (market.state === 'failed' || market.chartData._complete)){
+		// 	delete openMarketsLookup[slug]
+		// 	stat.closed++
+		// }
 	}
+
+// update open markets in store
+// openMarkets = Object.keys(openMarketsLookup)
+// console.log('save new openMarkets:', openMarkets.length)
+// await PolymarketApi.store.setItem('openMarkets', openMarkets)
+// return
 
 	const last = await PolymarketApi.store.getItem('lastUpdate_clobData') || 0
 	const now = Date.now()
@@ -710,6 +729,8 @@ export const updateAllMarketData_clob = async () => {
 	}, {})
 
 	for (const file of dataFiles) {
+		if (!isRunning) break
+
 		if (!all && marketLookup[file.slug]) {		//market is cached
 			if (!openMarketsLookup[file.slug]){		//market is not open
 				stat.skipped++
@@ -723,17 +744,27 @@ export const updateAllMarketData_clob = async () => {
 		const {market, updated} = await updateMarketData_clob(file.slug, file.filePath)
 		if (updated) stat.updated++
 
-		if (!market || !market.closed || market.state === 'init' || (market.state !== 'failed' && !market.chartData._complete)){
+		const marketIsOpen = marketIsOpenCheck(market || null)
+		if (marketIsOpen) {
 			stat.open++
 			openMarketsLookup[file.slug] = true
 		}else{
-			delete openMarketsLookup[file.slug]
 			stat.closed++
+			delete openMarketsLookup[file.slug]
 		}
+
+		// if (!market || !market.closed || market.state === 'init' || (market.state !== 'failed' && !market.chartData._complete)){
+		// 	stat.open++
+		// 	openMarketsLookup[file.slug] = true
+		// }else{
+		// 	delete openMarketsLookup[file.slug]
+		// 	stat.closed++
+		// }
 	}
 
 	// update open markets in store
 	openMarkets = Object.keys(openMarketsLookup)
+	console.log('save new openMarkets:', openMarkets.length)
 	await PolymarketApi.store.setItem('openMarkets', openMarkets)
 
 	console.log('complete!', stat)
