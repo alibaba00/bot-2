@@ -537,6 +537,11 @@ export default function ChartPage() {
 						<Button onClick={() => PolymarketChart.getChartDistributionData(asset?.value)}>
 							data test
 						</Button>
+
+						<Button onClick={() => PolymarketApi.createIndexCache()}>
+							create index
+						</Button>
+
 						{/* <Button onClick={() => PolymarketChart.fixingClobData()}>
 							fixing data
 						</Button> */}

@@ -1,6 +1,6 @@
 import { fetchMarketBySlugFromGamma } from '@/lib/polymarket/markets'
 import type { Market, MarketData, MarketState } from '@/lib/polymarket/types'
-import localForage from 'localforage'
+import localForage, { clear, removeItem } from 'localforage'
 import moment from 'moment'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
@@ -77,12 +77,66 @@ class PolymarketApi {
 		)
 	}
 
+	// fileCache: Promise<{
+	// 	keys: Promise<string[]> => {
+	// 		return []
+	// 	},
+	// 	getItem: (key: string) => {
+	// 		return null
+	// 	},
+	// 	setItem: (key: string, value: any) => {
+	// 		return null
+	// 	},
+	// 	removeItem: (key: string) => {
+	// 		return null
+	// 	},
+	// 	clear: () => {
+	// 		return null
+	// 	}
+	// }
+
+
 	// ============================================================================ constructor
 	constructor() {
 		this.cache = cache
 		this.store = store
 		this.init()
 	}
+
+
+	// ---------------------------------------------------------------------------- createIndexCache
+	async createIndexCache(): Promise<void> {
+		console.log('create new indexCache ...')
+		let dirList = await fsPromises.readdir(this.clobPath, { withFileTypes: true, recursive: true });
+		dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
+
+		// let dirList = await this.store.getItem('indexCache') || []
+
+		const indexCache = dirList.map((entry: any) => {
+			const name = entry.name.split('.csv')[0]
+			const parentPath = entry.parentPath.replaceAll('\\', '/')
+			const path = parentPath + '/' + name + '.csv'
+			const dateString = parentPath.split('/').pop()
+			const timestamp = parseInt(name.split('-').pop())
+			const symbol = this.getSymbolFromPath(path)
+			const type = this.getMarketTypeFromPath(path)
+			return {
+				name: name,
+				// parentPath: parentPath,
+				path: path,
+				symbol: symbol,
+				type: type,
+				dateString: dateString,
+				timestamp: timestamp,
+			}
+		})
+
+		console.log('createIndexCache complete!', indexCache.length)
+	
+		await this.store.setItem('indexCache', indexCache)
+		return indexCache
+	}
+
 
 	// ---------------------------------------------------------------------------- loadConfig
 	// load config from config.json and userConfig.json
@@ -129,7 +183,8 @@ class PolymarketApi {
 
 	// ---------------------------------------------------------------------------- getAllKeys
 	// symbol: e.g. btc
-	// fromDate: e.g. 1765406700 from btc-updown-15m-1765406700
+	// fromDate: e.g. 1765406700
+	// key: e.g. btc-updown-15m-1765406700
 	// return: string[]
 	async getAllKeys(symbol: string, fromDate: number = 0, toDate: number = 0): Promise<string[]> {
 		if (fromDate && fromDate > 1e12) fromDate = Math.floor(fromDate / 1000)	//convert milliseconds to seconds
@@ -232,6 +287,16 @@ class PolymarketApi {
 		if (slug.includes('solana')) return 'sol'
 		if (slug.includes('xrp')) return 'xrp'
 		return slug.split('-')[0]
+	}
+
+
+	// ---------------------------------------------------------------------------- getSymbolFromPath
+	getSymbolFromPath(path: string): string {
+		if (path.includes('btc')) return 'btc'
+		if (path.includes('eth')) return 'eth'
+		if (path.includes('sol')) return 'sol'
+		if (path.includes('xrp')) return 'xrp'
+		return path.split('-')[0]
 	}
 
 

@@ -532,7 +532,7 @@ export const getAllMarkets_clob = async (
 	}
 	if (!dirList?.length) return []
 
-	const dateString = (date || new Date()).toISOString().substring(0, 10);
+	const dateString = (date || new Date()).toISOString().substring(0, 10);		//e.g. 2026-04-02
 
 	const fileList: any[] = dirList.filter((entry: any) =>
 		(symbol ? entry.path.includes('\\' + symbol + '-') : true)
