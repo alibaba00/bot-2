@@ -512,7 +512,7 @@ const parseNumber = (num: number) => {
 
 
 // ---------------------------------------------------------------------------- getAllMarkets_clob_2
-let dirList: any[] = []
+let indexList: any[] = []
 // let completeList: any = {} as any	//.csv files alrey completed to ignore them
 
 
@@ -524,30 +524,29 @@ export const getAllMarkets_clob = async (
 
 	// completeList = await PolymarketApi.store.getItem('completeList') as any || {} as any
 
-	dirList = clearCache? [] : await PolymarketApi.store.getItem('dirList') as any[] || []
-	if (!dirList?.length){
-		dirList = await fsPromises.readdir(PolymarketApi.clobPath, { withFileTypes: true, recursive: true });
-		dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
-		await PolymarketApi.store.setItem('dirList', dirList)
+	indexList = clearCache? [] : await PolymarketApi.store.getItem('indexCache') as any[] || []
+
+	if (!indexList?.length){
+		indexList = await PolymarketApi.createIndexCache()
 	}
-	if (!dirList?.length) return []
+	if (!indexList?.length) return []
 
 	const dateString = (date || new Date()).toISOString().substring(0, 10);		//e.g. 2026-04-02
 
-	const fileList: any[] = dirList.filter((entry: any) =>
-		(symbol ? entry.path.includes('\\' + symbol + '-') : true)
-		&& (date ? entry.path.endsWith(dateString) : true)
+	const fileList: any[] = indexList.filter((entry: any) =>
+		(symbol ? entry.symbol === symbol : true)
+		&& (date ? entry.dateString === dateString : true)
 	).map((entry: any) => ({
-		folder: entry.path.replaceAll('\\', '/'),
-		fileName: entry.name,
-		filePath: entry.path.replaceAll('\\', '/') + '/' + entry.name,
-		slug: entry.name.replace('.csv', ''),
-		timestamp: entry.name.endsWith('-et.csv')
-			? getDateStringToTimestamp(entry.name)
-			: parseInt(entry.name.replace('.csv', '').split('-')[3]),
+		// folder: entry.parentPath.replaceAll('\\', '/'),
+		// fileName: entry.name,
+		filePath: entry.path,
+		name: entry.name,
+		slug: entry.name,
+		timestamp: entry.timestamp,
 		date: date,
-		dateString: dateString,
-		symbol: symbol,
+		dateString: entry.dateString,
+		symbol: entry.symbol,
+		type: entry.type,
 	}));
 
 	return fileList;
@@ -705,11 +704,10 @@ export const updateAllMarketData_clob = async () => {
 		// }
 	}
 
-// update open markets in store
-// openMarkets = Object.keys(openMarketsLookup)
-// console.log('save new openMarkets:', openMarkets.length)
-// await PolymarketApi.store.setItem('openMarkets', openMarkets)
-// return
+	// update open markets in store
+	openMarkets = Object.keys(openMarketsLookup)
+	console.log('save new openMarkets:', openMarkets.length)
+	await PolymarketApi.store.setItem('openMarkets', openMarkets)
 
 	const last = await PolymarketApi.store.getItem('lastUpdate_clobData') || 0
 	const now = Date.now()
@@ -1535,9 +1533,9 @@ const cachedData = await PolymarketApi.store.getItem('distData-' + source + '-' 
 
 	} else {		//all ticker dat
 		// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
+console.log('------------------ load ticker data from:', path, '...')
 		let dirList = await fsPromises.readdir(path, { withFileTypes: true });
 		dirList = dirList.filter((entry) => entry.isFile() && entry.name.endsWith('.csv'))
-		console.log('dirList:', dirList)
 
 const fromDate = new Date('2026-07-11').getTime()
 const toDate = new Date('2026-07-14').getTime()

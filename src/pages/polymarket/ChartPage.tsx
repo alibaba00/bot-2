@@ -653,12 +653,12 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 			if (!files) return
 
 			if (filter){
-				files = files.filter((market) => filter[market.slug])
+				files = files.filter((item) => filter[item.name])
 			}else if (marketType !== 'all'){
-				files = files.filter((market) => {
+				files = files.filter((item) => {
 					return marketType === '1h' ?
-					market.slug.includes('up-or-down')
-					: market.slug.includes('-' + marketType)
+					item.name.includes('up-or-down')
+					: item.name.includes('-' + marketType)
 				})
 			}
 			files = files.sort((b, a) => a.timestamp - b.timestamp)
@@ -682,7 +682,7 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 					console.log('selectedMarket:', market)
 					onSelectMarket(market)
 				}}>
-					<MarketItem key={market.slug} market={market} />
+					<MarketItem key={market.name} item={market} />
 				</div>
 			))}
 		</div>
@@ -691,18 +691,16 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 
 
 // ---------------------------------------------------------------------------- MarketItem
-const MarketItem = ({ market }: { market: any }) => {
+const MarketItem = ({ item }: { item: any }) => {
 	const [data, setData] = useState<any>(null)
 
 	useEffect(() => {
-		PolymarketApi.fetchMarketBySlug(market.slug)
-		// fetchMarketBySlugFromGamma(market.slug)
+		PolymarketApi.fetchMarketBySlug(item.name)
 		.then((data) => {
-			// console.log('marketData:', marketData)
-			market.data = data
+			item.data = data
 			setData(data)
 		})
-	}, [market.slug])
+	}, [item.name])
 
 	const timeRange = (startTimestamp: number, endTimestamp: number) => {
 		return startTimestamp && endTimestamp ?
@@ -716,7 +714,7 @@ const MarketItem = ({ market }: { market: any }) => {
 	return (
 		<div className={`flex flex-row items-center justify-between p-2 w-full`}>
 			<div className='flex flex-row items-center justify-between gap-8 w-full'>
-				<div className='text-sm font-medium'>{market.slug}</div>
+				<div className='text-sm font-medium'>{item.name}</div>
 				<div className='text-xs text-muted-foreground'>{data?.marketData?.question}</div>
 				<div className='text-xs text-muted-foreground'>
 					{timeRange(data?.startTimestamp, data?.endTimestamp)}
@@ -729,12 +727,12 @@ const MarketItem = ({ market }: { market: any }) => {
 
 						// PolymarketChart.updateTestData(market.data as any)
 
-						PolymarketChart.updateMarketData_clob(market.slug, market.filePath, false)
+						PolymarketChart.updateMarketData_clob(item.name, item.filePath, false)
 						.then(({market: _market, updated}) => {
 							if (updated) {
 								console.log('updated market:', _market)
 								setData(_market)
-								market.data = _market
+								item.data = _market
 							}
 						})
 					}}>Update</Button>

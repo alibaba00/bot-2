@@ -58,6 +58,7 @@ class PolymarketApi {
 	gammaApiBase: string = GAMMA_API_BASE
 	polymarketApiBase: string = POLYMARKET_API_BASE
 	tickerPrices: Map<string, {timestamp: number, price: number}> = new Map()
+	indexCache: any[] = []
 	
 	set(state: any, value?: any){
 		if (typeof state === 'string') state = { [state]: value }
@@ -105,12 +106,12 @@ class PolymarketApi {
 
 
 	// ---------------------------------------------------------------------------- createIndexCache
-	async createIndexCache(): Promise<void> {
+	async createIndexCache(): Promise<any[]> {
 		console.log('create new indexCache ...')
 		let dirList = await fsPromises.readdir(this.clobPath, { withFileTypes: true, recursive: true });
 		dirList = dirList.filter((entry: any) => entry.isFile() && entry.name.endsWith('.csv'))
 
-		// let dirList = await this.store.getItem('indexCache') || []
+		// this.indexCache = dirList
 
 		const indexCache = dirList.map((entry: any) => {
 			const name = entry.name.split('.csv')[0]
@@ -134,6 +135,7 @@ class PolymarketApi {
 		console.log('createIndexCache complete!', indexCache.length)
 	
 		await this.store.setItem('indexCache', indexCache)
+		this.indexCache = indexCache
 		return indexCache
 	}
 
@@ -176,6 +178,8 @@ class PolymarketApi {
 		console.log('PolymarketApi constructor:', this.rootPath, this.clobPath, this.marketsPath)
 		this.gammaApiBase = GAMMA_API_BASE
 		this.polymarketApiBase = POLYMARKET_API_BASE
+
+		this.indexCache = await this.store.getItem('indexCache') || []
 
 		this.set('isInit', true)
 	}
