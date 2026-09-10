@@ -20,9 +20,9 @@ wss://ws-subscriptions-clob.polymarket.com/ws/user
 {
     "type": "user",
     "auth": {
-        "apiKey": "5c377165-301f-d7cb-81b1-fb1f3baec608",
-        "secret": "ozmyps6D3aq00ce1mZjg9SpbLMCfISQo3Nf5hVJ_td4=",
-        "passphrase": "037cd622a12a702871fc0df909dfc432439f6e5c663b758afb0bc9d6774a6c2f"
+        "apiKey": "<ROTATE — leaked; never commit>",
+        "secret": "<ROTATE — leaked; never commit>",
+        "passphrase": "<ROTATE — leaked; never commit>"
     },
     "markets": []
 }

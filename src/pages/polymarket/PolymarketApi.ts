@@ -18,6 +18,7 @@ const cache = localForage.createInstance({
 	name: 'polymarket',
 	storeName: 'polymarket-cache'
 })
+
 const store = localForage.createInstance({
 	name: 'polymarket',
 	storeName: 'polymarket-store'
@@ -52,13 +53,14 @@ class PolymarketApi {
 	config: any = null
 	cache: any = null
 	store: any = null
+	indexCache: any = {}
+
 	rootPath: string = ''
 	clobPath: string = ''
 	marketsPath: string = ''
 	gammaApiBase: string = GAMMA_API_BASE
 	polymarketApiBase: string = POLYMARKET_API_BASE
 	tickerPrices: Map<string, {timestamp: number, price: number}> = new Map()
-	indexCache: any[] = []
 	
 	set(state: any, value?: any){
 		if (typeof state === 'string') state = { [state]: value }
@@ -78,28 +80,44 @@ class PolymarketApi {
 		)
 	}
 
-	// fileCache: Promise<{
-	// 	keys: Promise<string[]> => {
-	// 		return []
-	// 	},
-	// 	getItem: (key: string) => {
-	// 		return null
-	// 	},
-	// 	setItem: (key: string, value: any) => {
-	// 		return null
-	// 	},
-	// 	removeItem: (key: string) => {
-	// 		return null
-	// 	},
-	// 	clear: () => {
-	// 		return null
-	// 	}
-	// }
+// fileCache: any = {
+// 	keys: async () => {
+// 		return this.indexCache
+// 	},
+// 	getItem: async (key: string) => {
+// 		const ic = this.indexCache[key] || null
+// 		if (!ic) return null
+// 		if (ic._marketData) return ic._marketData
+// 		ic._marketData = await this.loadMarketFromFile(ic.path)
+// 		return ic._marketData
+// 		// return null
+// 	},
+// 	setItem: async (key: string, value: any) => {
+// 		const ic = this.indexCache[key] || null
+// 		if (!ic) return null
+// 		ic._marketData = value
+// 		return ic._marketData
+// 		// return null
+// 	},
+// 	removeItem: (key: string) => {
+// 		return null
+// 	},
+// 	clear: () => {
+// 		return null
+// 	}
+// } as any
+
+
+// // ---------------------------------------------------------------------------- loadMarketFromFile
+// async loadMarketFromFile(path: string): Promise<MarketData | null> {
+// 	const market = await fsPromises.readFile(path, 'utf8')
+// 	if (!market) return null
+// 	return JSON.parse(market)
+// }
 
 
 	// ============================================================================ constructor
 	constructor() {
-		this.cache = cache
 		this.store = store
 		this.init()
 	}
@@ -135,7 +153,8 @@ class PolymarketApi {
 		console.log('createIndexCache complete!', indexCache.length)
 	
 		await this.store.setItem('indexCache', indexCache)
-		this.indexCache = indexCache
+		this.indexCache = {}
+		for (const entry of indexCache) this.indexCache[entry.name] = entry
 		return indexCache
 	}
 
@@ -179,7 +198,12 @@ class PolymarketApi {
 		this.gammaApiBase = GAMMA_API_BASE
 		this.polymarketApiBase = POLYMARKET_API_BASE
 
-		this.indexCache = await this.store.getItem('indexCache') || []
+		const ic = await this.store.getItem('indexCache') || []
+		this.indexCache = {}
+		for (const entry of ic) this.indexCache[entry.name] = entry
+
+this.cache = cache
+// this.cache = this.fileCache as any
 
 		this.set('isInit', true)
 	}
@@ -515,7 +539,7 @@ class PolymarketApi {
 		const url = `${GAMMA_API_BASE}/markets/slug/${slug}`
 		// console.log(`-----> Fetching market by slug from Gamma API: ${url}`)
 
-		const cachedMarket = forceLoading ? null : await cache.getItem<MarketData>(slug)
+		const cachedMarket = forceLoading ? null : await this.cache.getItem(slug) as MarketData | null
 		if (cachedMarket) return cachedMarket
 
 		const response = await fetch(url, {
@@ -585,7 +609,7 @@ class PolymarketApi {
 	// ---------------------------------------------------------------------------- cacheMarket
 	async cacheMarket(market: Market): Promise<void> {
 // console.log('market cached:', market.slug, 'openPrice:', market.openPrice, 'closePrice:', market.closePrice)
-		await cache.setItem(market.slug, market)
+		await this.cache.setItem(market.slug, market)
 	}
 
 
@@ -821,6 +845,33 @@ class PolymarketApi {
 	getUTCTime(date: Date): string {
 		return date.toISOString().substring(11, 19)		//HH:MM:SS
 	}
+
+	// ---------------------------------------------------------------------------- parseChainlinkTwap
+// A:/DATA/polymarket/chainlink-twap/btcusd/2026-09-03.csv
+	parseChainlinkTwap(market: Market) {
+		if (!market) return
+
+		if (market.chartData?.ticker?.['chainlink-twap']) return market.chartData?.ticker?.['chainlink-twap']
+
+		const filePath ='A:/DATA/polymarket/chainlink-twap/' + market.symbol + 'usd/' + market.dayString + '.csv'
+		const csvData = this.parseCsvData(filePath)
+		market.chartData.ticker['chainlink-twap'] = csvData
+		return csvData
+	}
+
+
+	// ---------------------------------------------------------------------------- parseCsvData
+	parseCsvData(filePath: string): [number, number][] {
+		const data = fs.readFileSync(filePath, 'utf8')
+		const lines = data.split('\n')
+		const csvData: [number, number][] = []
+		for (const line of lines) {
+			const [timestamp, price] = line.split(',')
+			csvData.push([parseInt(timestamp), parseFloat(price)])
+		}
+		return csvData
+	}
+
 }
 
 export default new PolymarketApi()

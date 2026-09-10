@@ -5,12 +5,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ReactEcharts from 'echarts-for-react';
 import { useEffect, useRef, useState } from "react";
-import PolymarketApi from "./PolymarketApi";
+import PolymarketApi, { fsPromises } from "./PolymarketApi";
 import * as PolymarketChart from "./PolymarketChart";
 import moment from "moment";
 import { Switch } from "@/components/ui/switch";
 import { lineChartOptions, barChartOptions, distChartOptions, scatterChartOptions, heatmapChartOptions } from "./ChartOptions";
 import { lineStyle } from "./ChartOptions";
+import { Slider } from "@/components/ui/slider";
+import type { dayRangeType } from "./PolymarketChart";
 
 const parseNumber = (num: number) => {
 	return parseFloat(num.toFixed(12))
@@ -77,7 +79,8 @@ export default function ChartPage() {
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 	const [isAutoUpdate, setIsAutoUpdate] = useState(true)
 	// const isLogging = PolymarketApi.use('loggingActive')
-	const [selectedSeries, setSelectedSeries] = useState<string[]>(seriesContent)
+	const [selectedSeries, setSelectedSeries] = useState<string[]>(['up', 'down'])
+	const [dayRange, setDayRange] = useState<dayRangeType>({from:1, length:2, mirror: false, smooth: 3})
 
 	useEffect(() => {
 		chartOptions?.series?.forEach((series: any) => {
@@ -98,6 +101,8 @@ export default function ChartPage() {
 			if (autoUpdateTimer) clearInterval(autoUpdateTimer)
 		}
 	}, [isAutoUpdate])
+
+
 
 
 	// ---------------------------------------------------------------------------- parseLineData
@@ -125,26 +130,29 @@ export default function ChartPage() {
 		let minValue = Infinity
 		let maxValue = -Infinity
 		let value: number
-		const chainlinkData = chartData.ticker?.chainlink?.map((item: any) => {
+		// const chainlinkData = chartData.ticker?.chainlink?.map((item: any) => {
+		// const chainlinkData = PolymarketApi.parseChainlinkTwap(market)?.filter((item: any) => item[0] >= startTime && item[0] <= endTime)
+		// const chainlinkData = chartData.ticker?.['chainlink-twap']
+		const chainlinkData = chartData.ticker?.chainlink
+			.map((item: any) => {
 			value = ((item[1] / openPrice) - 1 ) * 100
 			minValue = Math.min(minValue, value)
 			maxValue = Math.max(maxValue, value)
 			return [item[0], value] as any
 		})
+
 		const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(2)) + 0.02)
 
 		const series: any[] = []
 
+		// const targetPrice = chartData.dist || calcDistData()
+		// if (!targetPrice) return
 
-		const targetPrice = chartData.dist || calcDistData()
-		if (!targetPrice) return
-
-		if (selectedSeries.includes('dist')) series.push({
-			...lineChartOptions.series[0],
-			data: targetPrice.dist,
-			lineStyle: lineStyle.dist,
-		})
-
+		// if (selectedSeries.includes('dist')) series.push({
+		// 	...lineChartOptions.series[0],
+		// 	data: targetPrice.dist,
+		// 	lineStyle: lineStyle.dist,
+		// })
 
 		if (selectedSeries.includes('up')) series.push({
 			...lineChartOptions.series[0],
@@ -259,7 +267,8 @@ export default function ChartPage() {
 		// console.log('calcDistData:', market.symbol, '...')
 
 		const distData = chartDistributionData[market.symbol]
-		if (!distData) return null
+		if (!distData?.length) return null
+
 		const endTimestamp = market.endTimestamp
 		if (!endTimestamp) return null
 
@@ -362,7 +371,7 @@ export default function ChartPage() {
 	// ---------------------------------------------------------------------------- useEffect selectedSeries
 	useEffect(() => {
 		updateChart()
-	}, [selectedSeries])
+	}, [selectedSeries, dayRange])
 
 
 	// ---------------------------------------------------------------------------- updateChart
@@ -371,35 +380,27 @@ export default function ChartPage() {
 		// console.log('updateChart:', chartType, symbol, selectedMarket?.slug || '')
 		if (!symbol) return
 
-		// if (!chartDistributionData[symbol]){
+		let ranges = chartDistributionData[symbol]
+
+		if (!ranges?.[0]){
 			chartDistributionData[symbol] = 'loading...'
-			chartDistributionData[symbol] = await PolymarketChart.getChartDistributionData(symbol)
-		// }
+			ranges = await PolymarketChart.parseChartDistributionData(symbol, dayRange)
+			if (ranges?.[0]) chartDistributionData[symbol] = ranges
+		}
 
 		if (chartType === 'bar'){
 			console.log('updateChart:', symbol, chartType)
-			
-			// const heatmap = await PolymarketApi.store.getItem('heatmap')
-			// const chartDistributionData = await PolymarketApi.store.getItem(symbol + '-chartDistributionData')
-			// if (!chartDistributionData) return setChartOptions({})
+			if (!ranges) return setChartOptions({})
 
-			setChartOptions({
+			return setChartOptions({
 				...barChartOptions,
 				series: [{
 					...barChartOptions.series[0],
-					// data: data.map((item) => [item.value, item.count])
-					// data: data.map((item) => [item.index, item.value])
-					data: chartDistributionData[symbol]?.[14]?.bars?.length ?
-						chartDistributionData[symbol][14].bars.map((item) => [item.index, item.value_s])  : []
-					// data: data.map((item) => [item.index, item.ratio])
-				},
-				// {
-				// 	...barChartOptions.series[0],
-				// 	data: chartDistributionData[0].bars.map((item) => [item.index, item.value_s])
-				// }
-			],
+					data: ranges[14]?.bars?.length ?
+						ranges[14].bars.map((item) => [item.index, item.value_s])  : []
+					},
+				],
 			})
-			return
 		}
 
 		if (chartType === 'dist'){
@@ -443,21 +444,6 @@ export default function ChartPage() {
 		switch (chartType) {
 		case 'line':
 			parseLineData(chartData)		//symbol is in selectedMarket.symbol
-			break
-
-		case 'heatmap':
-			// if (!chartData.heatmap){
-			// 	const data2 = await PolymarketChart.heatmapData()
-			// 	console.log('data:', data2)
-			// 	chartData.heatmap = data2
-			// }
-			// setChartOptions({
-			// 	...heatmapChartOptions,
-			// 	series: [{
-			// 		...heatmapChartOptions.series[0],
-			// 		data: chartData.heatmap[asset.value][side].map((item) => [item.col, item.row, item.value]),
-			// 	}],
-			// })
 			break
 
 		case 'scatter':
@@ -510,10 +496,6 @@ export default function ChartPage() {
 							Update clob data
 						</Button>
 
-						<Button onClick={() => PolymarketChart.updateAllMarketData_clob(true)}>
-							Update all clob data
-						</Button>
-
 						<Button onClick={() => PolymarketChart.fixingClobData()}>
 							Fixing clob data
 						</Button>
@@ -534,8 +516,14 @@ export default function ChartPage() {
 							<ToggleGroupItem value='down' variant='outline'>Down</ToggleGroupItem>
 						</ToggleGroup>
 
-						<Button onClick={() => PolymarketChart.getChartDistributionData(asset?.value)}>
-							data test
+						<Button onClick={async () => {
+							const rangeData = await PolymarketChart.parseChartData(asset?.value as string)
+							if (rangeData){
+								chartDistributionData[asset?.value] = rangeData.ranges
+								updateChart()
+							}
+							}}>
+							parse chart data
 						</Button>
 
 						<Button onClick={() => PolymarketApi.createIndexCache()}>
@@ -552,7 +540,7 @@ export default function ChartPage() {
 							className='ml-0'
 						/>
 					</div>
-					<div className="flex flex-row items-center gap-2">
+					<div className="flex flex-row flex-wrap items-center gap-2">
 						<Label className="text-sm font-medium select-none mr-2">show chart:</Label>
 						<ToggleGroup
 							type="multiple"
@@ -566,6 +554,49 @@ export default function ChartPage() {
 								<ToggleGroupItem key={series} value={series} variant="outline">{series}</ToggleGroupItem>
 							))}
 						</ToggleGroup>
+
+						<Label className="text-sm font-medium select-none ml-2">from</Label>
+						<Slider
+							className='w-60'
+							min={1}
+							max={30}
+							value={[dayRange.from]}
+							onValueChange={(value: number[]) => {
+								console.log('setDayRange:', value)
+								setDayRange({...dayRange, from: value[0]})
+							}}
+						/>
+
+						<Label className="text-sm font-medium select-none ml-2">length</Label>
+						<Slider
+							className='w-60'
+							min={1}
+							max={10}
+							value={[dayRange.length]}
+							onValueChange={(value: number[]) => {
+								console.log('setDayRange:', value)
+								setDayRange({...dayRange, length: value[0]})
+							}}
+						/>
+
+						<Label className="text-sm font-medium select-none ml-2">smooth</Label>
+						<Slider
+							className='w-20'
+							min={0}
+							max={5}
+							value={[dayRange.smooth]}
+							onValueChange={(value: number[]) => {
+								console.log('setDayRange:', value)
+								setDayRange({...dayRange, smooth: value[0]})
+							}}
+						/>
+
+						<Label className="text-sm font-medium select-none ml-2">mirror</Label>
+						<Switch
+							checked={dayRange.mirror}
+							onCheckedChange={() => setDayRange({...dayRange, mirror: !dayRange.mirror})}
+							className='ml-0'
+						/>
 					</div>
 					<ReactEcharts
 						// option={chartOptions}

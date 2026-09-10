@@ -582,6 +582,16 @@ const tickerDataSources: any = {
 			xrp: 'xrpusd',
 		}
 	},
+	'chainlink-twap': {
+		importPath: 'H:/DEV/PY/polymarket/chainlink_twap_ticker/logs/chainlink',
+		exportPath: 'A:/DATA/polymarket/chainlink-twap/',
+		symbols: {
+			btc: 'btcusd',
+			eth: 'ethusd',
+			sol: 'solusd',
+			xrp: 'xrpusd',
+		}
+	},
 	binance: {
 		importPath: 'H:/DEV/PY/polymarket/binance_price_ticker/logs/binance',
 		exportPath: 'A:/DATA/polymarket/binance/',
@@ -1144,6 +1154,7 @@ export const getMarketChartData = async (filePath: string | null = null,
 }
 
 
+
 // ---------------------------------------------------------------------------- getChartTickerData
 // get ticker data from 1 day cache or from file
 // const filePath = 'A:/DATA/polymarket/tickers/xrp/xrp-2025-12-11.log'
@@ -1175,54 +1186,6 @@ export const getChartTickerData = async (symbol: string, dateString: string, sou
 	tickerDataCache[source + '-' + dataString] = data
 
 	return data
-}
-
-
-// ---------------------------------------------------------------------------- getChartMinuteData
-// aggregate data by minute with average price.
-export const getChartMinuteData = async (data: { timestamp: number, price: number }[]):
-	Promise<{ timestamp: number, price: number }[]> => {
-	const min = 60000
-	const currentMinute = Math.floor(data[0].timestamp / min) * min
-	let nextMinute = currentMinute + min
-	let candle = {
-		timestamp: currentMinute,
-		price: 0,
-		count: 0,
-	}
-	const chart = [candle]
-	let lastTimestamp = data[0].timestamp
-
-	data.forEach((item) => {
-		const diff = item.timestamp - lastTimestamp
-		if (diff > 30000) {		//there is a gap of more than 30 seconds
-			console.log('gap:',
-				chart.length - 1,
-				moment(lastTimestamp).format('YYYY-MM-DD HH:mm:ss'),
-				'to',
-				moment(item.timestamp).format('YYYY-MM-DD HH:mm:ss'),
-				(diff / min).toFixed(2), 'minutes')
-		}
-		lastTimestamp = item.timestamp
-
-		if (item.timestamp < nextMinute) {
-			candle.price += item.price
-			candle.count ++
-		} else {
-			candle.price /= candle.count
-			nextMinute = Math.floor(item.timestamp / min) * min
-			candle = {
-				timestamp: nextMinute,
-				price: item.price,
-				count: 1,
-			}
-			chart.push(candle)
-			nextMinute += min
-		}
-	})
-	candle.price /= candle.count
-
-	return chart
 }
 
 
@@ -1507,10 +1470,11 @@ const initData = async () => {
 
 // ---------------------------------------------------------------------------- getChartDistributionData
 // from dateString or all ticker data
+/*
 export const getChartDistributionData = async (symbol: string, dateString: string | null = null) => {
 	// const source: string = 'binance'
-	const source: string = 'coinbase'
-	// const source: string = 'chainlink'
+	// const source: string = 'coinbase'
+	const source: string = 'chainlink-twap'		//'chainlink'
 	
 	// e.g. A:/DATA/polymarket/coinbase/btc-usd
 	if (!tickerDataSources[source]?.symbols[symbol]) return null
@@ -1533,12 +1497,12 @@ const cachedData = await PolymarketApi.store.getItem('distData-' + source + '-' 
 
 	} else {		//all ticker dat
 		// const dirList = await fsPromises.readdir(PolymarketApi.rootPath + 'tickers/' + symbol, { withFileTypes: true });
-console.log('------------------ load ticker data from:', path, '...')
+console.log('------------------ load ticker data from:', path, '...')	//e.g. A:/DATA/polymarket/coinbase/btc-usd
 		let dirList = await fsPromises.readdir(path, { withFileTypes: true });
 		dirList = dirList.filter((entry) => entry.isFile() && entry.name.endsWith('.csv'))
 
-const fromDate = new Date('2026-07-11').getTime()
-const toDate = new Date('2026-07-14').getTime()
+const fromDate = new Date('2026-08-08').getTime()
+const toDate = new Date('2026-08-10').getTime()
 
 		for (const entry of dirList) {
 			// const dateString = entry.name.substring(symbol.length + 1, entry.name.length - 4)		//yyyy-mm-dd
@@ -1568,26 +1532,136 @@ if (date.getTime() > toDate) break
 	}
 
 	if (!data.length) return [] as any
-	const minuteData = await getChartMinuteData(data)
-	const normalizedData = normalizeData(minuteData)
+	const {ranges, chart} = await parseRangeData(data)
 
-	const ranges: any = {bars: [], count: 0, values: []} as any
+	await PolymarketApi.store.setItem('distData-' + source + '-' + symbol, ranges)
+	console.log('chartDistributionData:', ranges)
+	return ranges
+}
+*/
+
+
+export type dayRangeType = {
+	from: number,
+	length: number,
+	mirror: boolean,
+	smooth: number,
+}
+
+// ---------------------------------------------------------------------------- parseChartDistributionData
+export const parseChartDistributionData = async (symbol: string, dayRange: dayRangeType): Promise<any> => {
+	console.log('parseChartDistributionData:', symbol, dayRange, '...')
+
+	const source: string = 'chainlink-twap'		//'chainlink'
+	const dirPath = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
+	let ranges: any = null
+
+	for (let i = 0; i < dayRange.length; i++) {
+		const dayString = moment().subtract(dayRange.length + dayRange.from - i - 1, 'day').format("YYYY-MM-DD")
+		const jsonFile = `${dirPath}/${dayString}.json`;
+		if (fs.existsSync(jsonFile)){
+			const data = JSON.parse(await fsPromises.readFile(jsonFile, 'utf8'))
+			if (!ranges) ranges = data.ranges
+			else mergeRanges(ranges, data.ranges, 0.2)
+		}
+	}
+
+	if (ranges){
+		for (let r = 0; r < 15; r++) {
+			smoothValues(ranges[r].bars, dayRange.smooth, dayRange.mirror, 'value')
+		}
+	}
+
+	return ranges
+}
+
+
+// ---------------------------------------------------------------------------- mergeRanges
+const mergeRanges = (ranges: any[], data: any[], power: number = 0.5) => {
+	if (!ranges || !data) return
+
+	const p0 = 1 - power
+	for (let r = 0; r < 15; r++) {
+		for (let b = 0; b < 100; b++) {
+			ranges[r].bars[b].value = ranges[r].bars[b].value * p0 + data[r].bars[b].value * power
+		}
+	}
+}
+
+
+
+// ---------------------------------------------------------------------------- parseChartData
+// update all missing chart data json files for a given symbol
+export const parseChartData = async (symbol: string): Promise<any> => {
+	if (!symbol) return
+
+	const source: string = 'chainlink-twap'		//'chainlink'
+	console.log('parseChartData:', symbol, '...')
+
+	const dirPath = tickerDataSources[source].exportPath + tickerDataSources[source].symbols[symbol]
+	const dirFiles = fs.readdirSync(dirPath);
+
+	const csvFiles = dirFiles
+		.filter(name => name.endsWith('.csv'))
+		.sort(); // sortiert alphanumerisch (aufsteigend, z.B. nach Datum, falls im Dateinamen YYYY-MM-DD)
+
+	let dayString: string = ''
+	for (const fileName of csvFiles) {
+		dayString = fileName.replace(/\.csv$/, '');
+		const jsonFile: string = `${dirPath}/${dayString}.json`;
+		if (!fs.existsSync(jsonFile)) break; // das älteste fehlende .json gefunden
+	}
+
+	// Schleife pro Tag vom ältesten dayString bis gestern (yesterday)
+	let loopDate = moment(dayString, "YYYY-MM-DD");
+	const yesterdayDate = moment().subtract(1, 'day').utc().startOf('day');
+
+	while (loopDate.isSameOrBefore(yesterdayDate)) {
+		const dayString = loopDate.format("YYYY-MM-DD")
+		const jsonFile = `${dirPath}/${dayString}.json`;	//e.g. A:/DATA/polymarket/chainlink/btc-usd/2026-08-28.json
+		const csvFile = `${dirPath}/${dayString}.csv`;
+		if (fs.existsSync(csvFile) && !fs.existsSync(jsonFile)) {
+			const tickerData: any[] = await getChartTickerData(symbol, dayString, source);
+			const rangeData = await parseRangeData(tickerData as any, 1, false);
+			if (rangeData){
+				console.log('rangeData:', dayString, rangeData);
+				await fsPromises.writeFile(jsonFile, JSON.stringify(rangeData, null, '\t'));
+			}
+		}
+		loopDate.add(1, "day"); // nächsten Tag iterieren
+	}
+
+	console.log('parseChartData complete!')
+	return null
+}
+
+
+// ---------------------------------------------------------------------------- parseRangeData
+// parse data by range
+const parseRangeData = async (tickerData: { timestamp: number, price: number }[], smooth: number = 7, mirror: boolean = true) => {
+
+	const unit = 6000 //10 seconds
+	const chart = await getChartFrameData(tickerData as any, unit) as { timestamp: number, price: number, count: number }[]
+	// const normalizedData = normalizeData(minuteData)
+
+	const ranges: any = {} as any
 	const steps = 100
 	const frame = 15
 	const range = 0.01	//price range in percent (0.01 = +/-0.5%)
 
-	for (let t = 0; t < frame; t++) {
+	for (let f = 0; f < frame; f++) {
 		// only ranges with valid start and end data are considered
 		const r = Array(steps).fill(0) as any
 		let total = 0
 		let off = 0
+		const width = Math.round((f + 1) * 60000 / unit)
 		// for (let v = 0; v < steps; v++) r[v] = 0
 
-		for (let i = 0; i < normalizedData.length - (1 + t); i++) {
-			if (!normalizedData[i].valid || !normalizedData[i + 1 + t].valid) continue
+		for (let i = 0; i < chart.length - width; i++) {
+			if (!chart[i].count || !chart[i + width].count) continue
 			
-			const firstPrice = normalizedData[i].price		//first valid price of the range
-			const lastPrice = normalizedData[i + 1 + t].price	//last valid price of the range
+			const firstPrice = chart[i].price		//first valid price of the range
+			const lastPrice = chart[i + width].price	//last valid price of the range
 			const priceRatio = ((lastPrice / firstPrice) - 1) * 100 / range //price change ratio in percent per range
 			const value = Math.floor(priceRatio) + steps / 2				//round to the nearest integer (-20 - 19)
 
@@ -1599,60 +1673,105 @@ if (date.getTime() > toDate) break
 		}
 
 		const max = Math.max(...r)
-		ranges[t] = {
+		ranges[f] = {
 			bars: r.map((count: number, index: number) => (
 				{index: index - steps / 2, count: count, value: count / max})
 			),
 			count: total,
 		}
 
-		// smoothValues(ranges[t].bars, 1, false)
-		smoothValues(ranges[t].bars, 7, true)
+		// smoothValues(ranges[f].bars, smooth, mirror)
 
 		let volume = off
-		ranges[t].bars.forEach((item: any) => {
+		ranges[f].bars.forEach((item: any) => {
 			item.ratio = (volume + item.count / 2) / total
 			volume += item.count
 		})
 	}
+	return {ranges, chart}
+}
 
-	await PolymarketApi.store.setItem('distData-' + source + '-' + symbol, ranges)
-	console.log('chartDistributionData:', ranges)
-	return ranges
+
+// ---------------------------------------------------------------------------- getChartMinuteData
+// aggregate daily data by minute with average price.
+// if normalized is true, the data is normalized to the same time frame (every time frame is set)
+export const getChartFrameData = async (data: { timestamp: number, price: number, count: number }[], timeFrame: number = 6000, normalized: boolean = true):
+	Promise<{ timestamp: number, price: number, count: number }[]> => {
+
+	const currentFrame = Math.floor(data[0].timestamp / 86400000) * 86400000		//start of the utc day in milliseconds
+	const endOfDay = currentFrame + 86400000 - 1	//last millisecond of the utc day
+	let nextFrame = currentFrame + timeFrame		//start of the next frame in milliseconds
+	let candle = {
+		timestamp: currentFrame,
+		price: 0,
+		count: 0,
+	}
+	const chart = [candle]
+	let next: number
+
+	for (const item of data) {
+		if (item.timestamp < currentFrame) continue
+		if (item.timestamp > endOfDay) break
+
+		if (item.timestamp < nextFrame) {
+			candle.price += item.price
+			candle.count ++
+		} else {
+			if (candle.count) candle.price /= candle.count
+			next = Math.floor(item.timestamp / timeFrame) * timeFrame
+			if (normalized) {
+				while (next > nextFrame) {
+					chart.push({
+						timestamp: nextFrame,
+						price: candle.price,	//last valid price
+						count: 0,
+					})
+					nextFrame += timeFrame
+				}
+			}
+			nextFrame = next
+			candle = {
+				timestamp: nextFrame,
+				price: item.price,
+				count: 1,
+			}
+			chart.push(candle)
+			nextFrame += timeFrame
+		}
+	}
+	candle.price /= candle.count
+
+	return chart
 }
 
 
 // ---------------------------------------------------------------------------- smoothRatios
 // Funktion zur Glättung (Begradigung) der ratio-Werte in ranges[t]
-const smoothValues = (arr: any[], window: number = 5, mirror: boolean = true, valueField: string = 'value'): void => {
+const smoothValues = (arr: any[], smooth: number = 5, mirror: boolean = true, valueField: string = 'value'): void => {
 	const len = mirror? arr.length / 2 : arr.length
 	for (let i = 0; i < len; i++) {
 		let sum = 0
 		let count = 0
-		if (window > 1){
-			// Glättung über das Fenster (z.B. 3er-Mittelwert)
-			for (let j = -Math.floor(window / 2); j <= Math.floor(window / 2); j++) {
-				const idx = i + j
-				if (idx >= 0 && idx < arr.length) {
-					sum += arr[idx][valueField]
-					count++
+		// Glättung über das Fenster (z.B. 3er-Mittelwert)
+		for (let j = -smooth; j <= smooth; j++) {
+			const idx = i + j
+			if (idx >= 0 && idx < arr.length) {
+				sum += arr[idx][valueField]
+				count++
 
-					if (mirror) {
-						sum += arr[arr.length-1-idx][valueField]	//add the value of the mirrored index
-						count++
-					}
+				if (mirror) {
+					sum += arr[arr.length-1-idx][valueField]	//add the value of the mirrored index
+					count++
 				}
 			}
-			arr[i][valueField + '_s'] = sum / count
-			if (mirror) arr[arr.length-1-i][valueField + '_s'] = sum / count
-		}else{
-			arr[i][valueField + '_s'] = arr[i][valueField]
-			if (mirror) arr[arr.length-1-i][valueField + '_s'] = arr[arr.length-1-i][valueField]
 		}
+		arr[i][valueField + '_s'] = sum / count
+		if (mirror) arr[arr.length-1-i][valueField + '_s'] = sum / count
 	}
 }
 
 
+/*
 // ---------------------------------------------------------------------------- normalizeData
 // normalize data to the same time frame
 // fill gaps with the last valid price and set valid to false
@@ -1672,3 +1791,4 @@ export const normalizeData = (data: { timestamp: number, price: number }[], time
 
 	return newData
 }
+*/
