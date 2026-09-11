@@ -121,15 +121,15 @@ export default function TradingBotPage() {
 		symbol: 'btc',
 		timeFrame: 5,
 		marketType: 'updown-5m',
-		openTimeLimit: 60,	//open limit time in seconds before market ended
+		openTimeLimit: 280,	//open limit time in seconds before market ended
 		// endTimeLimit: 30,	//seconds
 		up : {
 			enabled: true,
 		},
 		down : {
-			enabled: false,
+			enabled: true,
 		},
-		orderSize: 20,
+		orderSize: 10,
 		// sizeFactor: 5.0,		//size factor to multiply the trade size
 		liveTrading: false as boolean,
 		isConnected: false as boolean,

@@ -64,6 +64,41 @@ await PolymarketApi.store.setItem('openMarkets', openMarkets)
 	isRunning = false
 }
 
+
+// ---------------------------------------------------------------------------- fixingMarketData
+export const fixingMarketData = async () => {
+	console.log('\n--- fixing market data...')
+
+	// 10.09.2026 first: 1788998400, last: 1789084500
+	const list = indexList.filter((item: any) => item.symbol === 'sol' && item.type === 'updown-5m' && item.timestamp >= 1788998400 && item.timestamp <= 1789084500)
+
+	console.log('update markets:', list.length, '...')
+
+	for (const item of list) {	
+		const market = await PolymarketApi.cache.getItem(item.name)
+		if (market && market.closed) {
+			const eventMetadata = market.marketData?.sourceData?.events[0]?.eventMetadata
+			const outcome = eventMetadata?.finalPrice >= eventMetadata?.priceToBeat ? 'up' : 'down'
+
+			if (!eventMetadata || !eventMetadata.priceToBeat || !eventMetadata.finalPrice) {
+				console.log('update market:', market.slug)
+				market.openPrice = null
+				market.closePrice = null
+			}else if (market.openPrice !== eventMetadata.priceToBeat || market.closePrice !== eventMetadata.finalPrice || market.outcome !== outcome){
+				console.log('update market:', market.slug)
+				market.openPrice = eventMetadata.priceToBeat
+				market.closePrice = eventMetadata.finalPrice
+				market.outcome = outcome
+			}else continue
+
+			await updateMarketData_clob(item.name, item.filePath, false)
+		}
+	}
+
+	console.log('fixing market data complete!')
+}
+
+
 // ---------------------------------------------------------------------------- marketIsOpenCheck
 export const marketIsOpenCheck = (market: Market | null) => {
 	if (!market) return false
@@ -115,11 +150,10 @@ const update_1 = async (market: Market) => {
 		updated = true
 	}
 
-	//--- fixing openPrice
-	const priceToBeat = market.marketData?.sourceData?.events?.[0]?.eventMetadata?.priceToBeat
-	// if (priceToBeat && priceToBeat !== market.openPrice) {
+	//--- fixing openPrice from Gamma eventMetadata (authoritative after TWAP switch)
+	const settlement = PolymarketApi.getGammaSettlement(market.marketData)
+	const priceToBeat = settlement.priceToBeat
 	if (priceToBeat && market.openPrice && (priceToBeat / market.openPrice > 1.0001 || market.openPrice / priceToBeat > 1.0001)) {
-		// console.log('update openPrice:', market.slug, priceToBeat, 'market.openPrice:', market.openPrice)
 		market.openPrice = null
 		const upd = await updatePriceData(market)
 		if (upd) {
@@ -642,15 +676,16 @@ export const getMarket = async (slug: string, filePath: string | null = null, us
 
 	if (!market && filePath) {		//market not cached! load and update market from file
 		const exists = fs.existsSync(filePath)
-		if (exists) {
+		if (exists && useCache) {
 			console.log('reload market from file:', filePath)
 			const jsonFileContent = await fsPromises.readFile(filePath, 'utf8')
 			market = JSON.parse(jsonFileContent) as Market
 			await PolymarketApi.cacheMarket(market)		//reload market cache
 	
 		}else{
-			console.log('market file not found:', filePath)
-			market = await PolymarketApi.createMarketFromSlug(slug, filePath)
+			if (!exists) console.log('market file not found:', filePath)
+			// Caller (updateMarketData_clob) persists once after chart/price updates
+			market = await PolymarketApi.createMarketFromSlug(slug, filePath, false)
 		}
 	}
 
@@ -802,6 +837,8 @@ export const updateMarketData_clob = async (slug: string, csvPath: string | null
 	}
 	if (market.state === 'failed'){
 		console.log('market failed!', slug)
+		await PolymarketApi.cacheMarket(market)
+		await PolymarketApi.saveMarket(market, true)
 		return {market: market, updated: false}
 	}
 
@@ -865,45 +902,54 @@ export const updateMarketData_clob = async (slug: string, csvPath: string | null
 const updatePriceData = async (market: Market) => {
 	let updated: boolean = false
 
+// console.log('updatePriceData:', market.slug, market.openPrice, market.closePrice)
+
 	if (market.openPrice === null || market.closePrice === null) {
-		const priceData = await PolymarketApi.getCryptoPrice(market)
-		if (!priceData) return false
-		console.log('update priceData:', market.slug, priceData)
+		// Prefer Gamma eventMetadata / outcomePrices; crypto-price+TWAP only as fallback
+		await PolymarketApi.refreshGammaSettlement(market)
 
-		if (priceData?.failed){		//price not available
-			market.openPrice = 0
-			market.closePrice = 0
-			updated = true
-			return updated		//price data failed
-		}
+		if (market.openPrice === null || market.closePrice === null) {
+			const priceData = await PolymarketApi.getCryptoPrice(market)
+			if (!priceData) return false
+			console.log('update priceData:', market.slug, priceData)
 
-		if (priceData?.openPrice) {
-			market.openPrice = priceData.openPrice
-			market.openPriceTimestamp = priceData.timestamp || null
+			if (priceData?.failed) {
+				market.openPrice = 0
+				market.closePrice = 0
+				updated = true
+				return updated
+			}
+
+			PolymarketApi.applyCryptoPriceResponse(market, priceData)
+			updated = true
+			await new Promise(resolve => setTimeout(resolve, 200))
+		} else {
+			console.log('update priceData (gamma):', market.slug, {
+				openPrice: market.openPrice,
+				closePrice: market.closePrice,
+				outcome: market.outcome
+			})
 			updated = true
 		}
-		if (priceData?.closePrice) {	// market is now closed!
-			market.closePrice = priceData.closePrice
-			market.closePriceTimestamp = priceData.timestamp || null
-			updated = true
-		}
-		await new Promise(resolve => setTimeout(resolve, 200))
 	}
 
 	if (market.openPrice && market.closePrice) {
-		if (!market.closed || market.state !== 'closed'){
+		if (!market.closed || market.state !== 'closed') {
 			console.log('update market closed:', market.slug)
 			market.closed = true
 			market.state = 'closed'
 			updated = true
 		}
-		const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
+		const settlement = PolymarketApi.getGammaSettlement(market.marketData)
+		const outcome =
+			settlement.outcome ||
+			(market.closePrice >= market.openPrice ? 'up' : 'down')
 		if (outcome !== market.outcome) {
 			console.log('update outcome:', outcome)
 			market.outcome = outcome
 			updated = true
 		}
-	}else if (market.closed){		//fixing wrong market state
+	} else if (market.closed) {
 		market.closed = false
 		market.state = 'running'
 		updated = true

@@ -105,189 +105,34 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	}, [])
 
 
-	// ---------------------------------------------------------------------------- checkTradeCancel
-	// const checkTradeCancel = (side: TradeSide, time: number = 0): boolean => {
-	// 	if ((side.state === 'pending' || side.state === 'active') && time > 0 && time <= side.timeLimit){
-	// 		cancelTradeSide(side)
-	// 		return true
-	// 	}
-	// 	return false
-	// }
-
-	
 	// ---------------------------------------------------------------------------- onUpdate
 	const onUpdate = (type: string, value?: any) => {
 		// console.log('---TradeItem onUpdate:', type, value)
-
 		if (type === 'expired'){		//market is expired
 			console.log('---TradeItem expired:', value)
 			setState('closed')
 			return
 
-		// }else if (type === 'time'){
-			// console.log('---TradeItem onUpdate time:', value)	// 300 -> 0
-			// setTime(value)
-			// const changedUp = checkTradeCancel(trade.up, value)
-			// const changedDown = checkTradeCancel(trade.down, value)
-			// if (changedUp || changedDown){
-			// 	saveTrade(trade, 2)
-			// 	render()
-			// 	beep(20, 300)
-			// }
-		// }else if (type === 'log'){
-			// console.log('---TradeItem onUpdate log:', value)
-			// trade.logs.push(value)
-			// saveTrade(trade, 3)
-
-		// }else if (type === 'tickerPrice'){
-			// setTickerPrice(value.timestamp, value.price)
-
-		// }else if (type === 'marketPrice'){
-			// console.log('---TradeItem onUpdate marketPrice:', value)
-			// setMarketPrice(value.timestamp, value.outcome, value.price)
-
-		// }else if (type === 'tradeUpdate'){
-		// 	console.log('---TradeItem onUpdate tradeUpdate:', value)
-
-		// }else if (type === 'orderUpdate'){
-		// 	console.log('---TradeItem onUpdate orderUpdate:', value)
-
 		}else if (type === 'connected'){
 			trade.isConnected = value
 			render()
-
-		// }else if (type === 'state'){
-			// setState(value)
 		}
 	}
 
-	// ---------------------------------------------------------------------------- setTickerPrice
-	// const setTickerPrice = (timestamp: number, price: number) => {
-	// 	// trade.tickerPrice = price
-	// 	// checkTrade(trade.up)
-	// 	// checkTrade(trade.down)
-	// }
-
 
 	// ---------------------------------------------------------------------------- setMarketPrice
-	// const setMarketPrice = (lastTrade: LastTrade) => {
-	// 	// console.log(trade, time)
-	// 	if (trade.state === 'closed' || trade.state === 'cancelled') return
-
-	// 	if (lastTrade.outcome_title === 'up'){
-	// 		updatePrice(trade.up, lastTrade.price)
-	// 	}else if (lastTrade.outcome_title === 'down'){
-	// 		updatePrice(trade.down, lastTrade.price)
-	// 	}
-	// 	// console.log('--- setMarketPrice:', trade.up.price, trade.down.price)
-	// 	render()
-	// }
 	const setMarketPrice = (value: any) => {
 		// console.log('--- setMarketPrice:', value)
 		if (trade.state === 'closed' || trade.state === 'cancelled') return
 
 		if (value.outcome === 'up'){
-			updatePrice(trade.up, value.price, value.ask, value.bid)
+			// updatePrice(trade.up, value.price, value.ask, value.bid)
 		}else if (value.outcome === 'down'){
-			updatePrice(trade.down, value.price, value.ask, value.bid)
+			// updatePrice(trade.down, value.price, value.ask, value.bid)
 		}
 		// console.log('--- setMarketPrice:', trade.up.price, trade.down.price)
 		render()
 	}
-
-
-	// ---------------------------------------------------------------------------- buyTrade
-	const updatePrice = (side: TradeSide, price: number, ask: number, bid: number) => {
-		// side.price = price
-		if (!side.enabled) return false
-
-		if (side.state === 'pending' && ask <= 0.02){
-			console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--BUY Trade:', side.outcome, ask)
-			side.state = 'active'
-
-			// Disable the opposite side when a trade is bought
-			const oppositeSide = side.outcome === 'up' ? trade.down : trade.up
-			oppositeSide.enabled = false
-			render()
-
-			setOrder(setup, trade, {
-				type		:'BUY',
-				outcome		:side.outcome,
-				price		:0.01,
-				timestamp	:Date.now(),
-				size		:setup.orderSize,
-			})		//-> active
-			.then(() => {
-				// if (trade.isLive) checkTradeSize(trade)
-			})
-
-		}else if (side.state === 'active'){
-			if (ask <= 0.01){
-				side.state = 'buying'
-				checkPositionSize(trade)		//-> positioned
-			}
-			// if (ask <= 0.01){
-			// 	side.state = 'selling'
-			// 	setOrder(setup, trade, {
-			// 		type		:'SELL',
-			// 		outcome		:side.outcome,
-			// 		price		:0.02,
-			// 		timestamp	:Date.now(),
-			// 		size		:setup.orderSize,
-
-			// 	}, 20, 2000)		//-> active
-			// }
-
-		}else if (side.state === 'positioned'){
-			// if (bid >= 0.98){
-			// 	side.state = 'selling'
-			// 	setOrder(setup, trade, {
-			// 		type		:'SELL',
-			// 		outcome		:side.outcome,
-			// 		price		:0.98,
-			// 		timestamp	:Date.now(),
-			// 		size		:side.positionSize,
-			// 	}, 10, 2000)		//-> active
-			// }
-			// if (bid >= 0.02){
-				side.state = 'selling'
-				setOrder(setup, trade, {
-					type		:'SELL',
-					outcome		:side.outcome,
-					// price		:0.47,
-					price		:0.05,		//market price
-					timestamp	:Date.now(),
-					size		:side.positionSize,
-				}, 10, 2000)		//-> active
-			// }
-		}
-	}
-
-
-	// // ---------------------------------------------------------------------------- checkTradeSize
-	// const checkTradeSize = async (trade: Trade) => {
-	// 	console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!--checkTradeSize:', trade.conditionId)
-	// 	let sizes = { up: 0, down: 0 }
-	// 	do {
-	// 		await new Promise(resolve => setTimeout(resolve, 2000))
-	// 		sizes = await getActiveMarketPositionSizes({
-	// 			conditionId: trade.conditionId || '',
-	// 			upTokenId: trade.up.tokenId || '',
-	// 			downTokenId: trade.down.tokenId || '',
-	// 		})
-	// 		// console.log('sizes:', sizes)
-
-	// 		trade.up.size = sizes.up
-	// 		trade.down.size = sizes.down
-	
-	// 		if (sizes.up > 0 && trade.up.state === 'active') trade.up.state = 'positioned'
-	// 		if (sizes.down > 0 && trade.down.state === 'active') trade.down.state = 'positioned'
-	
-	// 	} while (trade.state !== 'closed' && trade.state !== 'completed' && trade.state !== 'cancelled')
-	
-	// 	saveTrade(trade, 6)
-	// 	render()
-	// }
 
 
 	// ---------------------------------------------------------------------------- setState
@@ -301,7 +146,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				setup._updateTrade = onUpdate
 				break
 			case 'closed':		//market is closed from TradeList market update
-				cancelOpenBuyOrders(setup, trade)
+				// cancelOpenBuyOrders(setup, trade)
 				delete setup._updateTrade
 				if (setup.trade === trade) setup.trade = null
 				closeTrade(trade)
@@ -325,6 +170,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 
 
 	// ---------------------------------------------------------------------------- onTime
+	// 5m = 300s
 	const onMarketTime = (restSeconds: number) => {
 		if (trade.state === 'open') {
 			if (setup.currentMarket?.endTimestamp && Date.now() + 60000 > setup.currentMarket.endTimestamp) {
@@ -333,44 +179,36 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			if (restSeconds <= -10){
 				setState('closed')
 			}
-			if (restSeconds <= setup.openTimeLimit){
-				if (trade.up.state === 'pending') trade.up.state = 'cancelled'
-				if (trade.down.state === 'pending') trade.down.state = 'cancelled'
+			if (restSeconds <= setup.openTimeLimit && trade.up.state === 'pending'){
+				openTradeOrders(setup, trade)
 			}
 		}
 	}
 
-
-	// ---------------------------------------------------------------------------- checkPositionSize
-	const checkPositionSize = async (trade: Trade, retryDelay: number = 2000) => {
-		if (!trade.isLive || trade.state !== 'open' || (trade.up.state !== 'buying' && trade.down.state !== 'buying')) return
-
-		const sizes = await getActiveMarketPositionSizes({
-			conditionId: trade.conditionId || '',
-			upTokenId: trade.up.tokenId || '',
-			downTokenId: trade.down.tokenId || '',
-		})
-
-	console.log('!!!! sizes:', trade.slug, sizes)
-		if (sizes){
-			trade.up.positionSize = sizes.up
-			trade.down.positionSize = sizes.down
-
-			if (trade.up.positionSize > trade.up.orderSize * 0.5) trade.up.state = 'positioned'
-			if (trade.down.positionSize > trade.down.orderSize * 0.5) trade.down.state = 'positioned'
-
-			if (trade.up.state === 'positioned' || trade.down.state === 'positioned'){
-				setup._log('< set position size:', sizes)
-			}
-			render()
-
+	// ---------------------------------------------------------------------------- openTradeOrders
+	const openTradeOrders = async (setup: any, trade: Trade) => {
+		console.log('!!!!!!!!!!!!!!!!!!!!!--- openTradeOrders:', trade)
+		if (trade.up.state === 'pending'){
+			trade.up.state = 'active'
+			setOrder(setup, trade, {
+				type		:'BUY',
+				outcome		:'up',
+				price		:0.01,
+				timestamp	:Date.now(),
+				size		:setup.orderSize,
+			})		//-> active
 		}
-		if (trade.up.state === 'buying' || trade.down.state === 'buying'){
-			await new Promise(resolve => setTimeout(resolve, retryDelay))
-			checkPositionSize(trade)
+		if (trade.down.state === 'pending'){
+			trade.down.state = 'active'
+			setOrder(setup, trade, {
+				type		:'BUY',
+				outcome		:'down',
+				price		:0.01,
+				timestamp	:Date.now(),
+				size		:setup.orderSize,
+			})		//-> active
 		}
 	}
-
 
 	return (
 		<div className='relative w-full p-2 bg-gray-100 dark:bg-gray-900 rounded-md text-xs border-l-4'
@@ -603,140 +441,3 @@ const closeTrade = (trade: Trade, newBasePrice: number = 0) => {
 	trade.down.price = 0
 	saveTrade(trade, 9)
 }
-
-
-/*
-place BUY oder:
-
--> Trade Update (UserChannel)
-status: MATCHED
-or
-status: LIVE (type: PLACEMENT)
-
--> order result:
-{
-    "orderId": "0x49a30330e41ea69e7ef06bc9b14227073b779f15c314a7586ba8d2649f0ecb3f",
-    "status": "PENDING",
-    "message": "Order placed successfully"
-}
-
--> Trade Update (UserChannel)
-price: 0.58
-status: MINED
-
--> Trade Update (UserChannel)
-status: CONFIRMED
-
-
-
-
----set trade order data:
-{
-    "marketId": "0x183f74553e351c37c766cc67eba59b4c15134b42dfb89eb1faa390c8f754097f",
-    "price": 0.1,
-    "quantity": 10,
-    "side": "BUY",
-    "outcome": "Down",
-    "outcomeId": "28080882265774312658727310358320379811945669903442421488324987253068169424193"
-}
----set trade order result:
-{
-    "orderId": "0xc560fb8e5c25571a07f416cb14051a24df0a3d7f3d16330abb68f4c8c8fa1eb2",
-    "status": "PENDING",
-    "message": "Order placed successfully"
-}
-
----order update:
-1. order places
-{
-    "type": "orderUpdate",
-    "value": {
-        "id": "0xc560fb8e5c25571a07f416cb14051a24df0a3d7f3d16330abb68f4c8c8fa1eb2",
-        "owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
-        "market": "0x183f74553e351c37c766cc67eba59b4c15134b42dfb89eb1faa390c8f754097f",
-        "asset_id": "28080882265774312658727310358320379811945669903442421488324987253068169424193",
-        "side": "BUY",
-        "order_owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
-        "original_size": "10",
-        "size_matched": "0",
-        "price": "0.1",
-        "associate_trades": [],
-        "outcome": "Down",
-        "type": "PLACEMENT",
-        "created_at": "1771681753",
-        "expiration": "0",
-        "order_type": "GTC",
-        "status": "LIVE",
-        "maker_address": "0xC41997C65144683AB62051EDd1f80B034756E588",
-        "timestamp": "1771681753498",
-        "event_type": "order"
-    }
-}
-{
-    "type": "orderUpdate",
-    "value": {
-        "id": "0xc560fb8e5c25571a07f416cb14051a24df0a3d7f3d16330abb68f4c8c8fa1eb2",
-        "owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
-        "market": "0x183f74553e351c37c766cc67eba59b4c15134b42dfb89eb1faa390c8f754097f",
-        "asset_id": "28080882265774312658727310358320379811945669903442421488324987253068169424193",
-        "side": "BUY",
-        "order_owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
-        "original_size": "10",
-        "size_matched": "0",
-        "price": "0.1",
-        "associate_trades": [],
-        "outcome": "Down",
-        "type": "PLACEMENT",
-        "created_at": "1771681753",
-        "expiration": "0",
-        "order_type": "GTC",
-        "status": "LIVE",
-        "maker_address": "0xC41997C65144683AB62051EDd1f80B034756E588",
-        "timestamp": "1771681753498",
-        "event_type": "order"
-    }
-}
-*/
-
-
-// ---------------------------------------------------------------------------- setOrder
-// outcome: 'up' | 'down'
-// price: number (price per share)
-// size: number (number of shares)
-/*
-const setOrder = async (trade: Trade, outcome: 'up' | 'down', price: number, size: number) => {
-	if (!trade?.slug) return null
-
-	console.log('--- setOrder:', trade)
-	// Market + YES token from Gamma
-	const conditionId = trade.conditionId;
-	const yesTokenId = outcome === 'up' ? trade.up.tokenId : trade.down.tokenId;
-	// const side = Side.BUY;
-
-	const order = await placeOrder({
-		marketId: conditionId,
-		price: price,
-		quantity: size,
-		side: 'BUY',
-		outcome: outcome === 'up' ? 'Up' : 'Down',
-		outcomeId: yesTokenId
-	});
-	console.log(order);
-}
-*/
-
-/*
-const _cancelOrder = async () => {
-	const orderId = "0x9b7c28cfbec00b2fd8047a1e8ccfd4966b314e630a3a53c58b699eb5b6bc3e7a"
-	console.log('--- cancelOrder:')
-	const order = await cancelOrder(orderId)
-	console.log(order);
-}
-
-
-const _getOpenOrders = async () => {
-	console.log('--- getOpenOrders:')
-	const orders = await getOpenOrders()
-	console.log(orders);
-}
-*/

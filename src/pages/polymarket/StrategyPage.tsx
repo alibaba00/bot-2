@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Strategy3 } from "./Strategy";
 import { Strategy4 } from "./Strategy_4";
+import { Strategy5 } from "./Strategy_5";
 import ReactEcharts from 'echarts-for-react';
 import { Label } from "@/components/ui/label";
 
@@ -100,8 +101,8 @@ const lineChartOptions = {
 
 export default function StrategyPage() {
 	// const [strategies, setStrategies] = useState<Strategy[]>([]);
-	const [selectedFromDate, setSelectedFromDate] = useState(new Date('2026-04-29'))
-	const [selectedToDate, setSelectedToDate] = useState(new Date('2026-04-30'))
+	const [selectedFromDate, setSelectedFromDate] = useState(new Date())
+	const [selectedToDate, setSelectedToDate] = useState(new Date())
 	const [chartOptions, setChartOptions] = useState(lineChartOptions)
 
 
@@ -160,6 +161,17 @@ export default function StrategyPage() {
 		console.log('handleStrategy4 complete!', Strategy4.setup)
 	}
 
+	const handleStrategy5 = async () => {
+		console.log('handleStrategy5 ...')
+		await Strategy5.run()
+		console.log('handleStrategy5 complete!', Strategy5.setup)
+	}
+
+	const handleFindSitchedMarkets = async () => {
+		console.log('handleFindSitchedMarkets ...')
+		await Strategy5.test()
+	}
+
 	return (
 		<div className="flex flex-col gap-4 p-4 h-full w-full justify-start items-start">
 			<h2>Strategies:</h2>
@@ -167,6 +179,8 @@ export default function StrategyPage() {
 				<Button variant='default' onClick={handleStrategy3}>Strategy 3</Button>
 				<Button variant='default' onClick={handleStrategy3Multi}>Strategy 3 Multi</Button>
 				<Button variant='default' onClick={handleStrategy4}>Strategy 4</Button>
+				<Button variant='default' onClick={handleStrategy5}>Strategy 5</Button>
+				<Button variant='default' onClick={handleFindSitchedMarkets}>find all sitched markets</Button>
 			</div>
 
 			<div className="flex gap-2 flex-wrap">

@@ -79,7 +79,7 @@ export default function ChartPage() {
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 	const [isAutoUpdate, setIsAutoUpdate] = useState(true)
 	// const isLogging = PolymarketApi.use('loggingActive')
-	const [selectedSeries, setSelectedSeries] = useState<string[]>(['up', 'down'])
+	const [selectedSeries, setSelectedSeries] = useState<string[]>(['up', 'down', 'chainline'])
 	const [dayRange, setDayRange] = useState<dayRangeType>({from:1, length:2, mirror: false, smooth: 3})
 
 	useEffect(() => {
@@ -500,6 +500,11 @@ export default function ChartPage() {
 							Fixing clob data
 						</Button>
 
+						<Button onClick={() => PolymarketChart.fixingMarketData()}>
+							Fixing market data
+						</Button>
+
+
 						<ToggleGroup type='single' defaultValue='line' value={chartType}
 							onValueChange={(value: string) => {if (value) setChartType(value)}}
 							>
@@ -530,9 +535,6 @@ export default function ChartPage() {
 							create index
 						</Button>
 
-						{/* <Button onClick={() => PolymarketChart.fixingClobData()}>
-							fixing data
-						</Button> */}
 						<Label className="text-sm font-medium select-none ml-4">auto update</Label>
 						<Switch
 							checked={isAutoUpdate}
@@ -612,7 +614,7 @@ export default function ChartPage() {
 				<div className='flex h-full p-4 flex-col gap-4 w-full'>
 					<div className='flex flex-row items-center justify-center gap-4 w-full'>
 
-					<ToggleGroup type='single' size='sm' defaultValue='all' onValueChange={(e: string) => setMarketType(e)}>
+					<ToggleGroup type='single' size='sm' defaultValue='5m' onValueChange={(e: string) => setMarketType(e)}>
 						<ToggleGroupItem value='5m' variant='outline' size='sm'>5m</ToggleGroupItem>
 						<ToggleGroupItem value='15m' variant='outline' size='sm'>15m</ToggleGroupItem>
 						<ToggleGroupItem value='1h' variant='outline' size='sm'>1h</ToggleGroupItem>
@@ -668,11 +670,12 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 	const [markets, setMarkets] = useState<any[]>([])
 	
 	const getMarkets = async () => {
-		// console.log('symbol:', symbol, 'marketType:', marketType, 'selectedDate:', selectedDate)
+		console.log('symbol:', symbol, 'marketType:', marketType, 'selectedDate:', selectedDate)
 
 		let filter: any = null
 		if (symbol === 'filtered'){
 			filter = await PolymarketApi.store.getItem('marketFilter') as any
+console.log('filter:', filter)
 			if (filter){
 				symbol = null as any
 				selectedDate = null as any
@@ -709,10 +712,10 @@ const MarketList = ({ symbol, marketType, selectedDate, selectedMarket, onSelect
 		<div className='flex flex-col h-full overflow-y-auto w-full'>
 			{markets?.map((market) => (
 				<div key={market.slug} className={`flex flex-row items-center justify-between border-b border-gray-700 cursor-pointer ${selectedMarket?.slug === market.slug ? 'bg-accent' : ''}`}
-				 onClick={() => {
-					console.log('selectedMarket:', market)
-					onSelectMarket(market)
-				}}>
+					onClick={() => {
+						console.log('selectedMarket:', market)
+						onSelectMarket(market)
+					}}>
 					<MarketItem key={market.name} item={market} />
 				</div>
 			))}

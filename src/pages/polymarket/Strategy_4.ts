@@ -1,7 +1,6 @@
-import type { Market } from '@/lib/polymarket/types'
-import PolymarketApi, { fsPromises, fs } from './PolymarketApi'
 import moment from 'moment';
-import { loadMarketData } from './StrategyApi'
+import PolymarketApi from './PolymarketApi';
+import { loadMarketData } from './StrategyApi';
 
 export interface Strategy {
 	id: number;

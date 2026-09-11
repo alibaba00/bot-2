@@ -34,6 +34,22 @@ interface CryptoPriceResponse {
 	failed?: boolean
 }
 
+interface CryptoMarketConfig {
+	id?: string
+	asset?: string
+	duration?: string
+	twapEnabled?: boolean
+	twapLookbackSeconds?: number
+}
+
+interface GammaSettlement {
+	priceToBeat: number | null
+	finalPrice: number | null
+	outcome: 'up' | 'down' | null
+	twapEnabled: boolean
+	twapLookbackSeconds: number | null
+}
+
 
 // ---------------------------------------------------------------------------- useStore
 export const useStore = create(() => ({
@@ -53,6 +69,7 @@ class PolymarketApi {
 	config: any = null
 	cache: any = null
 	store: any = null
+	indexList: any = []
 	indexCache: any = {}
 
 	rootPath: string = ''
@@ -131,7 +148,7 @@ class PolymarketApi {
 
 		// this.indexCache = dirList
 
-		const indexCache = dirList.map((entry: any) => {
+		this.indexList = dirList.map((entry: any) => {
 			const name = entry.name.split('.csv')[0]
 			const parentPath = entry.parentPath.replaceAll('\\', '/')
 			const path = parentPath + '/' + name + '.csv'
@@ -150,12 +167,12 @@ class PolymarketApi {
 			}
 		})
 
-		console.log('createIndexCache complete!', indexCache.length)
+		console.log('createIndexCache complete!', this.indexList.length)
 	
-		await this.store.setItem('indexCache', indexCache)
+		await this.store.setItem('indexCache', this.indexList)
 		this.indexCache = {}
-		for (const entry of indexCache) this.indexCache[entry.name] = entry
-		return indexCache
+		for (const entry of this.indexList) this.indexCache[entry.name] = entry
+		return this.indexList
 	}
 
 
@@ -198,9 +215,9 @@ class PolymarketApi {
 		this.gammaApiBase = GAMMA_API_BASE
 		this.polymarketApiBase = POLYMARKET_API_BASE
 
-		const ic = await this.store.getItem('indexCache') || []
+		this.indexList = await this.store.getItem('indexCache') || []
 		this.indexCache = {}
-		for (const entry of ic) this.indexCache[entry.name] = entry
+		for (const entry of this.indexList) this.indexCache[entry.name] = entry
 
 this.cache = cache
 // this.cache = this.fileCache as any
@@ -331,13 +348,13 @@ this.cache = cache
 	// ---------------------------------------------------------------------------- createMarketFromSlug
 	// slug: e.g. btc-updown-15m-1765584900
 	// return: Market
-	async createMarketFromSlug(slug: string, filePath: string = ''): Promise<Market | null> {
+	async createMarketFromSlug(slug: string, filePath: string = '', persist: boolean = true): Promise<Market | null> {
 		const symbol = this.getSymbolFromSlug(slug)
-		const marketType = this.getMarketTypeFromPath(filePath)
+		const marketType = this.getMarketTypeFromPath(filePath || slug)
 		if (!marketType) return null
 
 		console.log('createMarketFromSlug:', symbol, marketType, slug, filePath)
-		return await this.createMarket(symbol, marketType, slug, filePath)
+		return await this.createMarket(symbol, marketType, slug, filePath, persist)
 	}
 
 	
@@ -346,9 +363,10 @@ this.cache = cache
 	// marketName: e.g. btc-updown-15m
 	// timestamp: e.g. 1765584900
 	// marketSlug: e.g. btc-updown-15m-1765584900
+	// persist: if false, caller is responsible for cacheMarket/saveMarket (avoids double writes)
 	// return: Market
 	//
-	async createMarket(symbol: string, marketType: string, marketSlug: string, filePath: string = ''): Promise<Market | null> {
+	async createMarket(symbol: string, marketType: string, marketSlug: string, filePath: string = '', persist: boolean = true): Promise<Market | null> {
 		const duration = this.getMarketDurationFromType(marketType)
 		if (!duration) return null
 
@@ -388,31 +406,23 @@ this.cache = cache
 
 		if (market.marketData?.closed) {
 			market.closed = true
-			const priceData = await this.getCryptoPrice(market)
-
-			if (priceData?.failed){
-				console.log('priceData failed!')
-				market.state = 'failed'
-
-			}else if (priceData){
-				console.log('priceData:', priceData)
-				if (priceData?.openPrice) {
-					market.openPrice = priceData.openPrice
-					market.openPriceTimestamp = priceData.timestamp || null
-				}
-				if (priceData?.closePrice) {
-					market.closePrice = priceData.closePrice
-					market.closePriceTimestamp = priceData.timestamp || null
-				}
-				const outcome = market.closePrice && market.openPrice ? (market.closePrice > market.openPrice ? 'up' : 'down') : null
-				if (outcome !== market.outcome) {
-					market.outcome = outcome
+			const applied = this.applyGammaSettlement(market)
+			if (!applied) {
+				// Closed markets should already have eventMetadata; fall back to crypto-price+TWAP
+				const priceData = await this.getCryptoPrice(market)
+				if (priceData?.failed) {
+					console.log('priceData failed!')
+					market.state = 'failed'
+				} else if (priceData) {
+					this.applyCryptoPriceResponse(market, priceData)
 				}
 			}
 		}
 
-		await this.cacheMarket(market)
-		await this.saveMarket(market)
+		if (persist) {
+			await this.cacheMarket(market)
+			await this.saveMarket(market)
+		}
 
 		console.log('--------> market created:', market.slug, market)
 		return market
@@ -470,13 +480,128 @@ this.cache = cache
 	}
 
 
+	// ---------------------------------------------------------------------------- getGammaSettlement
+	// Prefer Gamma eventMetadata (priceToBeat/finalPrice) + outcomePrices for the winner.
+	// Outcome is NOT a dedicated field: resolved markets set outcomePrices to ["1","0"] or ["0","1"].
+	getGammaSettlement(marketData: MarketData | null | undefined): GammaSettlement {
+		const empty: GammaSettlement = {
+			priceToBeat: null,
+			finalPrice: null,
+			outcome: null,
+			twapEnabled: false,
+			twapLookbackSeconds: null
+		}
+		if (!marketData) return empty
+
+		const raw = marketData.sourceData ?? marketData
+		const eventMeta =
+			raw?.events?.[0]?.eventMetadata ||
+			raw?.eventMetadata ||
+			null
+		const cryptoConfig = (raw?.cryptoMarketConfig || null) as CryptoMarketConfig | null
+
+		const priceToBeat = typeof eventMeta?.priceToBeat === 'number' ? eventMeta.priceToBeat : null
+		const finalPrice = typeof eventMeta?.finalPrice === 'number' ? eventMeta.finalPrice : null
+
+		// Winner = outcome whose price is ~1 after resolution (e.g. ["0","1"] => Down)
+		let outcome: 'up' | 'down' | null = null
+		const outcomes = marketData.outcomes || []
+		if (marketData.closed && outcomes.length) {
+			const winner = outcomes.find((o) => (o.price ?? 0) >= 0.99)
+			const title = winner?.title?.toLowerCase()
+			if (title === 'up' || title === 'down') outcome = title
+		}
+		if (!outcome && priceToBeat != null && finalPrice != null) {
+			// Polymarket rule: Up if final >= priceToBeat
+			outcome = finalPrice >= priceToBeat ? 'up' : 'down'
+		}
+
+		return {
+			priceToBeat,
+			finalPrice,
+			outcome,
+			twapEnabled: cryptoConfig?.twapEnabled === true,
+			twapLookbackSeconds:
+				typeof cryptoConfig?.twapLookbackSeconds === 'number'
+					? cryptoConfig.twapLookbackSeconds
+					: null
+		}
+	}
+
+
+	// ---------------------------------------------------------------------------- applyGammaSettlement
+	applyGammaSettlement(market: Market): boolean {
+		const settlement = this.getGammaSettlement(market.marketData)
+		let applied = false
+
+		if (settlement.priceToBeat != null) {
+			market.openPrice = settlement.priceToBeat
+			applied = true
+		}
+		if (settlement.finalPrice != null) {
+			market.closePrice = settlement.finalPrice
+			applied = true
+		}
+		if (settlement.outcome) {
+			market.outcome = settlement.outcome
+			applied = true
+		}
+		if (settlement.finalPrice != null && settlement.priceToBeat != null) {
+			market.closed = true
+			market.state = 'closed'
+			if (!market.closeMarketTimestamp) market.closeMarketTimestamp = Date.now()
+		}
+
+		if (applied) {
+			console.log('applyGammaSettlement:', market.slug, {
+				priceToBeat: settlement.priceToBeat,
+				finalPrice: settlement.finalPrice,
+				outcome: settlement.outcome
+			})
+		}
+		return applied && settlement.priceToBeat != null && settlement.finalPrice != null
+	}
+
+
+	// ---------------------------------------------------------------------------- applyCryptoPriceResponse
+	applyCryptoPriceResponse(market: Market, priceData: CryptoPriceResponse): void {
+		if (priceData.openPrice) {
+			market.openPrice = priceData.openPrice
+			market.openPriceTimestamp = priceData.timestamp || null
+		}
+		if (priceData.closePrice) {
+			market.closePrice = priceData.closePrice
+			market.closePriceTimestamp = priceData.timestamp || null
+		}
+		if (market.openPrice != null && market.closePrice != null) {
+			market.outcome = market.closePrice >= market.openPrice ? 'up' : 'down'
+			market.closed = true
+			market.state = 'closed'
+			if (!market.closeMarketTimestamp) market.closeMarketTimestamp = Date.now()
+		}
+	}
+
+
+	// ---------------------------------------------------------------------------- refreshGammaSettlement
+	// Re-fetch market from Gamma and apply eventMetadata / outcomePrices when present.
+	async refreshGammaSettlement(market: Market): Promise<GammaSettlement> {
+		const marketData = await fetchMarketBySlugFromGamma(market.slug)
+		if (marketData) {
+			market.marketData = marketData
+			if (marketData.closed) market.closed = true
+		}
+		this.applyGammaSettlement(market)
+		return this.getGammaSettlement(market.marketData)
+	}
+
+
 	// ---------------------------------------------------------------------------- getCryptoPrice
-	// Get price to beat for a given symbol, event start time, and end date
+	// Fallback for live windows before Gamma writes eventMetadata.
+	// TWAP markets require twapEnabled + twapLookbackSeconds or prices won't match the UI.
 	async getCryptoPrice(market: Market): Promise<CryptoPriceResponse | null> {
 		console.log('getCryptoPrice:', market.slug, moment(market.startTimestamp).format('YYYY-MM-DD HH:mm'), '->', moment(market.endTimestamp).format('HH:mm'))
 		const symbol = market.symbol
-		
-		// Format dates without milliseconds (API expects format: 2025-12-12T08:45:00Z)
+
 		const formatDateWithoutMs = (timestamp: number): string => {
 			const date = new Date(timestamp)
 			const hours = String(date.getUTCHours()).padStart(2, '0')
@@ -485,9 +610,10 @@ this.cache = cache
 			const dayString = this.getUTCDateFormat(date)
 			return `${dayString}T${hours}:${minutes}:${seconds}Z`
 		}
-		
+
 		const eventStartTime = formatDateWithoutMs(market.startTimestamp)
 		const endDate = formatDateWithoutMs(market.endTimestamp)
+		const settlement = this.getGammaSettlement(market.marketData)
 
 		const url = `${this.polymarketApiBase}/crypto/crypto-price`
 		const variant = this.getCryptoPriceVariant(market)
@@ -498,8 +624,22 @@ this.cache = cache
 			endDate
 		})
 
+		// Default lookback by market type if Gamma config not loaded yet
+		const defaultLookback =
+			market.marketType === 'updown-5m' ? 60 :
+			market.marketType === 'updown-15m' ? 60 :
+			market.marketType === 'updown-4h' ? 60 : 60
+
+		if (settlement.twapEnabled || market.marketType?.startsWith('updown-')) {
+			params.set('twapEnabled', 'true')
+			params.set(
+				'twapLookbackSeconds',
+				String(settlement.twapLookbackSeconds ?? defaultLookback)
+			)
+		}
+
 		const fullUrl = `${url}?${params.toString()}`
-		
+
 		try {
 			const response = await fetch(fullUrl, {
 				method: 'GET',
@@ -508,7 +648,7 @@ this.cache = cache
 					'Accept-Language': 'en-US,en;q=0.9',
 					'Cache-Control': 'no-cache'
 				},
-				credentials: 'omit' // Don't send cookies, but match browser behavior
+				credentials: 'omit'
 			})
 
 			if (!response.ok) {
@@ -518,12 +658,11 @@ this.cache = cache
 					`URL: ${fullUrl}`,
 					errorText
 				)
-				// console.log('❌ getCryptoPrice failed:', market)
 				await new Promise(resolve => setTimeout(resolve, 1000))
 				if (response.status === 400) return {failed: true} as CryptoPriceResponse
 				return null
 			}
-			
+
 			const data = await response.json() as CryptoPriceResponse
 			return data
 
@@ -608,7 +747,7 @@ this.cache = cache
 
 	// ---------------------------------------------------------------------------- cacheMarket
 	async cacheMarket(market: Market): Promise<void> {
-// console.log('market cached:', market.slug, 'openPrice:', market.openPrice, 'closePrice:', market.closePrice)
+		// console.log('market cached:', market.slug, 'openPrice:', market.openPrice, 'closePrice:', market.closePrice)
 		await this.cache.setItem(market.slug, market)
 	}
 
@@ -617,13 +756,28 @@ this.cache = cache
 	async openMarket(market: Market): Promise<CryptoPriceResponse | null> {
 		if (!this.get('marketActive')) return null
 
+		const hadOpenPrice = market.openPrice != null
+
+		// Gamma may already have priceToBeat; otherwise fall back to crypto-price+TWAP (live window)
+		const settlement = await this.refreshGammaSettlement(market)
+		if (settlement.priceToBeat != null) {
+			if (!hadOpenPrice) {
+				await this.cacheMarket(market)
+				await this.saveMarket(market)
+			}
+			return {
+				openPrice: settlement.priceToBeat,
+				closePrice: settlement.finalPrice ?? undefined
+			}
+		}
+
 		const result = await this.getCryptoPrice(market)
 		if (result?.openPrice) {
-			market.openPrice = result.openPrice
-			market.openPriceTimestamp = result.timestamp || null
-
-			await this.cacheMarket(market)	//update market cache
-			await this.saveMarket(market)	//save market to file
+			this.applyCryptoPriceResponse(market, result)
+			if (!hadOpenPrice) {
+				await this.cacheMarket(market)
+				await this.saveMarket(market)
+			}
 		}
 		return result
 	}
@@ -637,24 +791,31 @@ this.cache = cache
 
 			async function _pollingOpenPrice() {
 				if (!api.get('marketActive')) return reject('Market is not active')
-				// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, '...')
+
+				const settlement = await api.refreshGammaSettlement(market)
+				if (settlement.priceToBeat != null) {
+					await api.cacheMarket(market)
+					await api.saveMarket(market)
+					resolve({
+						openPrice: settlement.priceToBeat,
+						closePrice: settlement.finalPrice ?? undefined
+					})
+					return
+				}
 
 				const result = await api.getCryptoPrice(market)
 				if (result?.openPrice) {
-					market.openPrice = result.openPrice
-					market.openPriceTimestamp = result.timestamp || null
-
-					await api.cacheMarket(market)	//update market cache
-					await api.saveMarket(market)	//save market to file
+					api.applyCryptoPriceResponse(market, result)
+					await api.cacheMarket(market)
+					await api.saveMarket(market)
 					resolve(result)
-
-				}else{
+				} else {
 					await new Promise(resolve => setTimeout(resolve, 5000))
 					_pollingOpenPrice()
 				}
 			}
 
-			await new Promise(resolve => setTimeout(resolve, 5000))	//wait 5 seconds before polling
+			await new Promise(resolve => setTimeout(resolve, 5000))
 			_pollingOpenPrice()
 		})
 	}
@@ -664,26 +825,24 @@ this.cache = cache
 	async closeMarket(market: Market): Promise<void> {
 		if (!this.get('marketActive')) return
 
+		const settlement = await this.refreshGammaSettlement(market)
+		if (settlement.priceToBeat != null && settlement.finalPrice != null) {
+			console.log('market closed (gamma):', market.slug, settlement.outcome)
+			await this.cacheMarket(market)
+			await this.saveMarket(market)
+			return
+		}
+
 		const result = await this.getCryptoPrice(market)
-		if (result?.openPrice){
-			market.openPrice = result.openPrice 	//update missing openPrice
-			market.openPriceTimestamp = result.timestamp || null
+		if (result?.openPrice || result?.closePrice) {
+			this.applyCryptoPriceResponse(market, result)
 		}
-		if (result?.closePrice) {
-			market.closePrice = result.closePrice
-			market.closePriceTimestamp = result.timestamp || null
-			// return _pollingClosedMarket()	//not needed
-
-			market.closeMarketTimestamp = Date.now()
-			market.state = 'closed'
-			market.closed = true
-			console.log('market closed:', market.slug)
-			
-		}else{
+		if (!result?.closePrice) {
 			market.state = 'completed'
-
+		} else {
+			console.log('market closed:', market.slug)
 		}
-		await this.cacheMarket(market)	//update market cache
+		await this.cacheMarket(market)
 		await this.saveMarket(market)
 	}
 
@@ -692,35 +851,33 @@ this.cache = cache
 	async pollingClosePrice(market: Market){
 		const api = this
 		if (!api.get('marketActive')) return
-	
+
 		async function _pollingClosePrice() {
 			if (!api.get('marketActive')) return
 
-			// console.log('pollingMarketPrice:', type, market.slug, market.openPrice, market.closePrice, '...')
+			const settlement = await api.refreshGammaSettlement(market)
+			if (settlement.priceToBeat != null && settlement.finalPrice != null) {
+				await api.cacheMarket(market)
+				await api.saveMarket(market)
+				console.log('market closed (gamma):', market.slug, settlement.outcome)
+				return
+			}
+
 			const result = await api.getCryptoPrice(market)
-			if (result && !market.openPrice && result.openPrice){
-				market.openPrice = result.openPrice 	//update missing openPrice
+			if (result && !market.openPrice && result.openPrice) {
+				market.openPrice = result.openPrice
 				market.openPriceTimestamp = result.timestamp || null
 			}
 			if (result?.closePrice) {
-				market.closePrice = result.closePrice
-				market.closePriceTimestamp = result.timestamp || null
-				// return _pollingClosedMarket()	//not needed
-
-				market.closeMarketTimestamp = Date.now()
-				market.state = 'closed'
-				market.closed = true
-
-				await api.cacheMarket(market)	//update market cache
+				api.applyCryptoPriceResponse(market, result)
+				await api.cacheMarket(market)
 				await api.saveMarket(market)
 				console.log('market closed:', market.slug)
 				return
-
-			}else{
-				await new Promise(resolve => setTimeout(resolve, 15000))
-				_pollingClosePrice()
-				return
 			}
+
+			await new Promise(resolve => setTimeout(resolve, 15000))
+			_pollingClosePrice()
 		}
 
 		// Function is called recursively but initial call is commented out
@@ -731,16 +888,17 @@ this.cache = cache
 			const marketData = await fetchMarketBySlugFromGamma(market.slug || '')
 			if (marketData?.closed){
 				market.marketData = marketData
+				api.applyGammaSettlement(market)
 				market.closeMarketTimestamp = Date.now()
 				market.state = 'closed'
 
-				await api.cacheMarket(market)	//update market cache
+				await api.cacheMarket(market)
 				await api.saveMarket(market)
 				console.log('market closed:', market.slug)
 				return
 
 			}else{
-				await new Promise(resolve => setTimeout(resolve, 15000))	//wait 15 seconds before polling again
+				await new Promise(resolve => setTimeout(resolve, 15000))
 				_pollingClosedMarket()
 				return
 			}
@@ -829,6 +987,7 @@ this.cache = cache
 
 		const filePath = market.filePath || ''
 		await fsPromises?.writeFile(filePath, JSON.stringify(market, null, '\t'))
+		// console.log('market saved:', market.slug, 'filePath:', market.filePath)
 	}
 
 
