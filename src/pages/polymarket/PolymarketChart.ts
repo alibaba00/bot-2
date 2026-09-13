@@ -67,14 +67,26 @@ await PolymarketApi.store.setItem('openMarkets', openMarkets)
 
 // ---------------------------------------------------------------------------- fixingMarketData
 export const fixingMarketData = async () => {
+	if (isRunning){
+		console.log('fixingMarketData canceled!')
+		isRunning = false
+		return
+	}
+	isRunning = true
+
 	console.log('\n--- fixing market data...')
 
 	// 10.09.2026 first: 1788998400, last: 1789084500
-	const list = indexList.filter((item: any) => item.symbol === 'sol' && item.type === 'updown-5m' && item.timestamp >= 1788998400 && item.timestamp <= 1789084500)
+	// const list = indexList.filter((item: any) => item.symbol === 'sol' && item.type === 'updown-5m' && item.timestamp >= 1788998400 && item.timestamp <= 1789084500)
+	const list = indexList.filter((item: any) => item.type === 'updown-5m' && item.timestamp >= 1788220800)
 
 	console.log('update markets:', list.length, '...')
+	let count = 0
 
-	for (const item of list) {	
+	for (const item of list) {
+		if (!isRunning) break
+
+		count ++
 		const market = await PolymarketApi.cache.getItem(item.name)
 		if (market && market.closed) {
 			const eventMetadata = market.marketData?.sourceData?.events[0]?.eventMetadata
@@ -91,11 +103,14 @@ export const fixingMarketData = async () => {
 				market.outcome = outcome
 			}else continue
 
+			console.log('fixing market:', list.length, count, item.name)
+
 			await updateMarketData_clob(item.name, item.filePath, false)
 		}
 	}
 
 	console.log('fixing market data complete!')
+	isRunning = false
 }
 
 
