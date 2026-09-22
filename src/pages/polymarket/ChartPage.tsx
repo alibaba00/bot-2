@@ -57,14 +57,33 @@ const assetContent = [
 	},
 ] as any
 
+const marketTypeContent = ['5m', '15m', '1h', '4h', '1d', 'all']
 
+const chartTypeContent = [
+	{label: 'Line', value: 'line'}, 
+	{label: 'Bar', value: 'bar'}, 
+	{label: 'Dist', value: 'dist'},
+	{label: 'Heatmap', value: 'heatmap'},
+	{label: 'Scatter', value: 'scatter'},
+] as any
 
 // const chartData = {} as any
-const seriesContent = ['up', 'down', 'chainline', 'coinbase', 'kraken', 'dist', 'binance', 'polling']
+const seriesContent = ['up', 'down', 'chainlink', 'chainlinkTwap', 'coinbase', 'kraken', 'dist', 'binance', 'polling']
 const chartDistributionData: any = {} as any
 const autpUpdateInterval = 1000 * 60 * 60 // 1 hour
 let autoUpdateTimer: any = null
 
+// ---------------------------------------------------------------------------- useCachedState
+const useCachedState = (key: string, defaultValue: any) => {
+	const [value, setValue] = useState(() => {
+		const cached = localStorage.getItem(key)
+		return cached ? JSON.parse(cached) : defaultValue
+	})
+	useEffect(() => {
+		localStorage.setItem(key, JSON.stringify(value))
+	}, [value])
+	return [value, setValue] as [any, (value: any) => void]
+}
 
 export default function ChartPage() {
 	const [asset, setAsset] = useState(assetContent[0])
@@ -73,13 +92,13 @@ export default function ChartPage() {
 	const [chartOptions, setChartOptions] = useState<any>({})
 	const [limitedChartOptions, setLimitedChartOptions] = useState<any>({})
 
-	const [chartType, setChartType] = useState('line')
-	const [marketType, setMarketType] = useState('all')
+	const [chartType, setChartType] = useCachedState('chartType', 'line')
+	const [marketType, setMarketType] = useCachedState('marketType', 'all')
 	const [side, setSide] = useState('up')
 	const [selectedMarket, setSelectedMarket] = useState<any>(null)
 	const [isAutoUpdate, setIsAutoUpdate] = useState(true)
 	// const isLogging = PolymarketApi.use('loggingActive')
-	const [selectedSeries, setSelectedSeries] = useState<string[]>(['up', 'down', 'chainline'])
+	const [selectedSeries, setSelectedSeries] = useCachedState('selectedSeries', ['up', 'down', 'chainlink'])
 	const [dayRange, setDayRange] = useState<dayRangeType>({from:1, length:2, mirror: false, smooth: 3})
 
 	useEffect(() => {
@@ -130,9 +149,6 @@ export default function ChartPage() {
 		let minValue = Infinity
 		let maxValue = -Infinity
 		let value: number
-		// const chainlinkData = chartData.ticker?.chainlink?.map((item: any) => {
-		// const chainlinkData = PolymarketApi.parseChainlinkTwap(market)?.filter((item: any) => item[0] >= startTime && item[0] <= endTime)
-		// const chainlinkData = chartData.ticker?.['chainlink-twap']
 		const chainlinkData = chartData.ticker?.chainlink
 			.map((item: any) => {
 			value = ((item[1] / openPrice) - 1 ) * 100
@@ -140,19 +156,17 @@ export default function ChartPage() {
 			maxValue = Math.max(maxValue, value)
 			return [item[0], value] as any
 		})
+		const scale = parseNumber(parseFloat((Math.max(Math.abs(minValue), Math.abs(maxValue)) * 1.05).toFixed(2)))
 
-		const scale = parseNumber(parseFloat(Math.max(Math.abs(minValue), Math.abs(maxValue)).toFixed(2)) + 0.02)
+		const chainlinkTwapData = chartData.ticker?.['chainlink-twap']
+			.map((item: any) => {
+			value = ((item[1] / openPrice) - 1 ) * 100
+			minValue = Math.min(minValue, value)
+			maxValue = Math.max(maxValue, value)
+			return [item[0], value] as any
+		})
 
 		const series: any[] = []
-
-		// const targetPrice = chartData.dist || calcDistData()
-		// if (!targetPrice) return
-
-		// if (selectedSeries.includes('dist')) series.push({
-		// 	...lineChartOptions.series[0],
-		// 	data: targetPrice.dist,
-		// 	lineStyle: lineStyle.dist,
-		// })
 
 		if (selectedSeries.includes('up')) series.push({
 			...lineChartOptions.series[0],
@@ -164,10 +178,15 @@ export default function ChartPage() {
 			lineStyle: lineStyle.down,
 			data: clobData.down?.map(([timestamp, value]) => [timestamp, 1 - value])	//invert down data (red)
 		})
-		if (selectedSeries.includes('chainline')) series.push({
+		if (selectedSeries.includes('chainlink')) series.push({
 			...lineChartOptions.series[1],
-			lineStyle: lineStyle.chainline,
+			lineStyle: lineStyle.chainlink,
 			data: chainlinkData					//chainlink data (blue)
+		})
+		if (selectedSeries.includes('chainlinkTwap')) series.push({
+			...lineChartOptions.series[1],
+			lineStyle: lineStyle.chainlinkTwap,
+			data: chainlinkTwapData					//chainlinkTwap data (purple)
 		})
 		if (selectedSeries.includes('polling')){
 			const firstPrice = chartData.ticker?.polling?.find((item: any) => item[0] >= market.startTimestamp)?.[1]
@@ -389,7 +408,7 @@ export default function ChartPage() {
 		}
 
 		if (chartType === 'bar'){
-			console.log('updateChart:', symbol, chartType)
+			console.log('updateChart:', symbol, chartType, dayRange, ranges)
 			if (!ranges) return setChartOptions({})
 
 			return setChartOptions({
@@ -508,11 +527,9 @@ export default function ChartPage() {
 						<ToggleGroup type='single' defaultValue='line' value={chartType}
 							onValueChange={(value: string) => {if (value) setChartType(value)}}
 							>
-							<ToggleGroupItem value='line' variant='outline'>Line</ToggleGroupItem>
-							<ToggleGroupItem value='bar' variant='outline'>Bar</ToggleGroupItem>
-							<ToggleGroupItem value='dist' variant='outline'>Dist</ToggleGroupItem>
-							<ToggleGroupItem value='heatmap' variant='outline'>Heatmap</ToggleGroupItem>
-							<ToggleGroupItem value='scatter' variant='outline'>Scatter</ToggleGroupItem>
+							{chartTypeContent.map((item) => (
+								<ToggleGroupItem key={item.value} value={item.value} variant='outline'>{item.label}</ToggleGroupItem>
+							))}
 						</ToggleGroup>
 
 						<ToggleGroup type='single' defaultValue='up' value={side}
@@ -614,13 +631,21 @@ export default function ChartPage() {
 				<div className='flex h-full p-4 flex-col gap-4 w-full'>
 					<div className='flex flex-row items-center justify-center gap-4 w-full'>
 
-					<ToggleGroup type='single' size='sm' defaultValue='5m' onValueChange={(e: string) => setMarketType(e)}>
-						<ToggleGroupItem value='5m' variant='outline' size='sm'>5m</ToggleGroupItem>
-						<ToggleGroupItem value='15m' variant='outline' size='sm'>15m</ToggleGroupItem>
-						<ToggleGroupItem value='1h' variant='outline' size='sm'>1h</ToggleGroupItem>
-						<ToggleGroupItem value='4h' variant='outline' size='sm'>4h</ToggleGroupItem>
-						<ToggleGroupItem value='1d' variant='outline' size='sm'>1d</ToggleGroupItem>
-						<ToggleGroupItem value='all' variant='outline' size='sm'>all</ToggleGroupItem>
+					<ToggleGroup
+						type='single'
+						size='sm'
+						defaultValue={marketType}
+						value={marketType}
+						onValueChange={(e: string | null) => {
+							// Prevent unselect/null: only update if e is not null
+							if (e) setMarketType(e);
+						}}
+					>
+						{marketTypeContent.map((item) => (
+							<ToggleGroupItem key={item} value={item} variant='outline' size='sm'>
+								{item}
+							</ToggleGroupItem>
+						))}
 					</ToggleGroup>
 
 					<Tabs

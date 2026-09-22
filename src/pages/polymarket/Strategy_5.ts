@@ -11,6 +11,8 @@ export interface ITrade {
 	openPrice: number;
 	openTime: number;
 	closePrice: number;
+	size: number;
+	cost: number;
 	pnl: number;
 }
 
@@ -20,6 +22,8 @@ export interface IResult {
 	fromDate: number,
 	toDate: number,
 	pnl: number,
+	winrate: number,
+	winrateAbs: number,
 	won: number,
 	lost: number,
 	traded: number,
@@ -61,12 +65,15 @@ class _Strategy5 {
 		toDate: new Date('2026-09-12T23:55:00Z').getTime() / 1000,
 		// fromDate: 1778148600000, // new Date('2026-05-06 10:00:00').getTime(),
 		// toDate: 1778217000000, // new Date('2026-05-07 00:00:00').getTime(),
-		timeMinOffset: 270,	//time offset in seconds
+		timeMinOffset: 180,	//time offset in seconds
 		timeMaxOffset: 30,	//time offset in seconds
-		priceLimit: 0.9999, //1.0000,
+		maxOpenPrice: 0.5,	//maximum open price in USD
+		priceLimit: 1.0000, //1.0000,
 		// priceLimit: 1.0002,//1.0000,
 		startDelay: 3,	//order delay in seconds
 		fees: 0.1,	//0.1 = 10% fees on the trade
+		// size: 1,
+		cost: 1,
 		isRunning: false,
 		result: null as any,
 		filteredMarkets: [] as any[],
@@ -110,17 +117,16 @@ class _Strategy5 {
 		// await PolymarketApi.store.setItem('marketFilter', filter)
 
 		// const result = await this.calcOrders(markets)
-		const result = await this.calcOrders_1(markets)
-		console.log('pnl:', result.pnl, 'won:', result.won, 'lost:', result.lost, 'traded:', result.traded, 'skipped:', result.skipped, 'total:', result.total)
+		const result = await this.calcOrders(markets)
+		console.log('--------------------------------')
+		console.log('winrate', Number(result.winrate.toFixed(3)), '/', Number(result.winrateAbs.toFixed(3)), 'pnl:', Number(result.pnl.toFixed(3)), 'won:', result.won, 'lost:', result.lost, 'traded:', result.traded, 'skipped:', result.skipped, 'total:', result.total)
 		console.log('result:', result)
-		// console.table(result.trades)
+		console.table(result.trades)
 	}
 
 
-
-
-	// ---------------------------------------------------------------------------- calcOrders_1
-	async calcOrders_1(markets: any[]): Promise<IResult> {
+	// ---------------------------------------------------------------------------- calcOrders
+	async calcOrders(markets: any[]): Promise<IResult> {
 		console.log('calcOrders_1:', markets.length, '...')
 		const s = this.setup
 
@@ -130,6 +136,8 @@ class _Strategy5 {
 			fromDate: s.fromDate,
 			toDate: s.toDate,
 			pnl: 0,
+			winrate: 0,
+			winrateAbs: 0,
 			won: 0,
 			lost: 0,
 			traded: 0,
@@ -179,124 +187,45 @@ class _Strategy5 {
 
 			trade = {slug: market.slug, outcome: market.outcome,
 				side: side, timestamp: time, tickerPrice: price,
-				openPrice: 0, openTime: Math.floor((time - market.startTimestamp) / 1000),
-				closePrice: 0,
-				pnl: 0} as ITrade
+				openTime: Math.floor((time - market.startTimestamp) / 1000),
+				openPrice: 0, closePrice: 0,
+				size: 0, cost: 0, pnl: 0} as ITrade
+
+			const clob = market.chartData.clob[trade.side]
+			const startTime = trade.timestamp + s.startDelay * 1000
+
+			const item = clob.find((item: any) => item[0] >= startTime && item[1] <= s.maxOpenPrice)
+			if (!item) {
+				result.skipped ++
+				continue
+			}
 
 			result.trades.push(trade)
 
-			const clob = market.chartData.clob[trade.side]
-			for (const item of clob) {
-				const time = item[0]
-				if (time < trade.timestamp) continue
-				// if (time > timeMax) break
+			trade.openPrice = item[1]
+			trade.closePrice = side === market.outcome? 1 : 0
 
-				const price = item[1]
-				if (!trade.openPrice){
-					trade.openPrice = trade.closePrice = price
-				} else if (price > trade.closePrice) {
-					trade.closePrice = price
-				}
-			}
+			// trade.size = s.size
+			// trade.cost = trade.size * trade.openPrice
+
+			trade.cost = s.cost
+			trade.size = trade.cost / trade.openPrice
 
 			if (trade.closePrice === 1) {
-				trade.pnl = 1/trade.openPrice
+				trade.pnl = trade.size - trade.cost
 				result.won ++
 			} else {
-				trade.pnl = -1
+				trade.pnl = -trade.cost
 				result.lost ++
 			}
 			result.traded ++
 			result.pnl = parseNumber(result.pnl + trade.pnl)
+			result.winrate = parseNumber(1 + result.pnl / result.traded)
+			result.winrateAbs = parseNumber(1 + result.pnl / result.total)
 		}
 
 		return result
 	}
-
-	
-	// ---------------------------------------------------------------------------- calcOrders
-	async calcOrders(markets: any[]): Promise<any> {
-		console.log('calcOrders:', markets.length, '...')
-		const s = this.setup
-
-		const result = {
-			symbol: s.symbol,
-			marketType: s.marketType,
-			fromDate: s.fromDate,
-			toDate: s.toDate,
-			pnl: 0,
-			won: 0,
-			lost: 0,
-			total: 0,
-			trades: [] as any[],
-		}
-
-		for (const market of markets) {
-			const chainlink = market.chartData?.ticker?.chainlink
-			if (!chainlink) continue
-
-			const trade: any = {
-				slug: market.slug,
-				pnl: 0,
-				won: 0,
-				lost: 0,
-				total: 0,
-				orders: [] as any[],
-			}
-			result.trades.push(trade)
-
-			trade.orders = [
-				{side: 'up', limit: 0.05, filled: 0, pnl: 0},
-				{side: 'up', limit: 0.02, filled: 0, pnl: 0},
-				{side: 'up', limit: 0.01, filled: 0, pnl: 0},
-				{side: 'down', limit: 0.05, filled: 0, pnl: 0},
-				{side: 'down', limit: 0.02, filled: 0, pnl: 0},
-				{side: 'down', limit: 0.01, filled: 0, pnl: 0},
-			] as any[]
-	
-			const timeMin = market.endTimestamp - s.timeMinOffset
-			const timeMax = market.endTimestamp - s.timeMaxOffset
-
-			const up = market.chartData.clob.up
-			const down = market.chartData.clob.down
-
-			for (const item of up) {
-				const time = item[0]
-				if (time < timeMin || time > timeMax) continue
-				const price = item[1]
-				for (const order of trade.orders) {
-					if (order.filled === 1) continue
-					if (order.side === 'up' && price <= order.limit) {
-						order.filled = 1
-						order.pnl = market.outcome === 'up' ? parseNumber(1/order.limit * 0.9) : -1
-						trade.pnl += order.pnl
-					}
-				}
-			}
-			for (const item of down) {
-				const time = item[0]
-				if (time < timeMin || time > timeMax) continue
-				const price = item[1]
-				for (const order of trade.orders) {
-					if (order.filled === 1) continue
-					if (order.side === 'down' && price <= order.limit) {
-						order.filled = 1
-						order.pnl = market.outcome === 'down' ? parseNumber(1/order.limit * 0.9) : -1
-						trade.pnl += order.pnl
-					}
-				}
-			}
-
-			// console.log('trade:', trade.pnl, trade)
-			result.pnl += trade.pnl
-			if (trade.pnl > 0) result.won ++
-			else result.lost ++
-			result.total ++
-		}
-
-		return result
-	}
-
 }
 
 export const Strategy5 = new _Strategy5()

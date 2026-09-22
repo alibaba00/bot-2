@@ -1,35 +1,39 @@
 export const lineStyle: any = {
 	dist: {
 		color: '#0fc6',
-		width: 1,
+		width: 0.5,
 	},
 	up: {
 		color: '#3f0c',
-		width: 1,
+		width: 0.5,
 	},
 	down: {
-		color: '#f30c',
-		width: 1,
+		color: '#f30f',
+		width: 0.5,
 	},
-	chainline: {
-		color: '#09fc',
-		width: 1,
+	chainlink: {
+		color: '#09ff',
+		width: 0.5,
+	},
+	chainlinkTwap: {
+		color: '#0ccf',
+		width: 0.5,
 	},
 	polling: {
-		color: '#93fc',
-		width: 1,
+		color: '#93ff',
+		width: 0.5,
 	},
 	coinbase: {
-		color: '#ff06',
-		width: 1,
+		color: '#ff0c',
+		width: 0.5,
 	},
 	grid: {
 		color: 'green',
-		width: 1,
+		width: 0.5,
 	},
 	binance: {
-		color: '#f0fc',
-		width: 1,
+		color: '#f0cf',
+		width: 0.5,
 	},
 } as any
 
@@ -332,7 +336,7 @@ export const lineChartOptions = {
 				show: true,
 				lineStyle: {
 					color: '#fff3',
-					width: 0.5
+					width: 0.5,
 				}
 			}
 		},
@@ -343,11 +347,7 @@ export const lineChartOptions = {
 			max: +2,
 			data: [] as any[],
 			splitLine: {
-				show: true,
-				lineStyle: {
-					color: (value: number) => value === 0 ? '#FF6600' : '#fff3',
-					width: (value: number) => value === 0 ? 2 : 0.5,
-				}
+				show: false
 			},
 		}
 	],
@@ -368,6 +368,18 @@ export const lineChartOptions = {
 			step: 'end',
 			tooltip: {
 				show: true,
+			},
+			markLine: {
+				silent: true,
+				symbol: 'none',
+				animation: false,
+				label: { show: false },
+				data: [{ yAxis: 0.5 }],
+				lineStyle: {
+					color: '#fff4',
+					width: 0.5,
+					type: 'dashed',
+				},
 			},
 		},
 		{
