@@ -122,3 +122,11 @@ timestamp:1769698800
 	-> update balance
 	-> update trades
 
+-----------------------------
+GIT
+-----------------------------
+https://github.com/alibaba00/bot-2
+
+git config --local user.email "development@cid.co.at"
+
+git remote add origin https://github.com/alibaba00/bot-2.git
