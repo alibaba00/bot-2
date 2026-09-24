@@ -321,16 +321,6 @@ useEffect(() => {
 					: lastTrade?.price ?? mp?.price ?? outcome.price;
 			const priceChangeEvent = priceChangeEventPrices[outcome.id];
 
-			if (price !== lastOutcomePricesRef.current[outcome.id]) {
-				lastOutcomePricesRef.current[outcome.id] = price;
-				onUpdate?.({
-					outcome: outcome.title?.toLowerCase(),
-					price: price,
-					ask: priceChangeEvent?.best_ask,
-					bid: priceChangeEvent?.best_bid,
-				});
-			}
-
 			return {
 				id: outcome.id,
 				title: outcome.title,
@@ -340,7 +330,23 @@ useEffect(() => {
 				priceChangeEventTimestamp: priceChangeEvent?.timestamp ?? null
 			};
 		});
-	}, [lastTradePrices, market, marketPrices, priceChangeEventPrices]);
+	}, [lastTradePrices, market, marketPrices, normalizedOutcomes, priceChangeEventPrices]);
+
+	const onUpdateRef = useRef(onUpdate);
+	onUpdateRef.current = onUpdate;
+
+	useEffect(() => {
+		for (const outcome of formattedOutcomes) {
+			if (outcome.price === lastOutcomePricesRef.current[outcome.id]) continue;
+			lastOutcomePricesRef.current[outcome.id] = outcome.price;
+			onUpdateRef.current?.({
+				outcome: outcome.title?.toLowerCase(),
+				price: outcome.price,
+				ask: outcome.bestAsk,
+				bid: outcome.bestBid,
+			});
+		}
+	}, [formattedOutcomes]);
 
 	if (!market) {
 		return (

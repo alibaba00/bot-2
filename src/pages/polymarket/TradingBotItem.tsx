@@ -416,7 +416,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 							: '#999' // Tailwind gray-500 hex
 				}}></div>
 				<TradeState trade={trade} side='up' />
-				<div>{trade.up.orderSize.toFixed(2) + ' | ' + trade.up.positionSize.toFixed(2)}</div>
+				<div>{(trade.up.orderSize ?? 0).toFixed(2) + ' | ' + (trade.up.positionSize ?? 0).toFixed(2)}</div>
 				{/* <div style={{
 					cursor: 'pointer',
 					color: trade.down.state === 'active'
@@ -428,7 +428,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				>
 				</div> */}
 				<TradeState trade={trade} side='down' />
-				<div>{trade.down.orderSize.toFixed(2) + ' | ' + trade.down.positionSize.toFixed(2)}</div>
+				<div>{(trade.down.orderSize ?? 0).toFixed(2) + ' | ' + (trade.down.positionSize ?? 0).toFixed(2)}</div>
 				<div></div>
 			</div>
 			<div className={`absolute top-0 right-0 text-xs text-gray-500 ${trade.isLive ? 'text-green-500' : 'text-red-500'}`}>{trade.isLive ? 'live' : 'not live'}</div>
