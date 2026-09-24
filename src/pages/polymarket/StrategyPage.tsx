@@ -163,8 +163,18 @@ export default function StrategyPage() {
 
 	const handleStrategy5 = async () => {
 		console.log('handleStrategy5 ...')
-		await Strategy5.run()
-		console.log('handleStrategy5 complete!', Strategy5.setup)
+		const result = await Strategy5.run()
+		// console.log('handleStrategy5 complete!', Strategy5.setup)
+
+		let pnl = 0
+		const chart = result.trades.map((trade: any) => {
+			pnl += trade.pnl
+			return [trade.openTime, pnl]
+		})
+		setChartOptions({
+			...lineChartOptions,
+			series: [{...lineChartOptions.series[0], data: chart}],
+		})
 	}
 
 	const handleFindSitchedMarkets = async () => {

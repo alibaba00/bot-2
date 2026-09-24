@@ -143,16 +143,9 @@ export class UserChannelWebSocket {
 				this.isConnected = true
 				this.reconnectAttempts = 0
 
-				// Subscribe to user channel with authentication
+				// Subscribe immediately — server may close an unsubscribed connection
 				if (this.ws && this.apiCredentials) {
-					setTimeout(() => {
-						if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-							console.warn('⚠️ User Channel: WebSocket not ready for subscription')
-							return
-						}
-
-						this.subscribe()
-					}, 1000)
+					this.subscribe()
 				}
 
 				// Start ping interval
@@ -275,17 +268,15 @@ export class UserChannelWebSocket {
 			return
 		}
 
-		// Subscribe to user channel with authentication
-		// According to docs: {"type": "user", "auth": {...}, "markets": [...]}
-		// Auth format: apiKey, secret, passphrase (not apikey!)
-		const subscription = {
+		// Subscribe to user channel with authentication.
+		// Omit `markets` to receive events for all markets (empty [] can filter to none).
+		const subscription: Record<string, unknown> = {
 			type: 'user',
 			auth: {
 				apiKey: this.apiCredentials.key,
 				secret: this.apiCredentials.secret,
 				passphrase: this.apiCredentials.passphrase
-			},
-			markets: [] // Empty array means all markets, or specify market IDs
+			}
 		}
 
 		const subscriptionMessage = JSON.stringify(subscription)

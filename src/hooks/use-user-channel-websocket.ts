@@ -54,7 +54,7 @@ export interface UseUserChannelWebSocketReturn {
 
 /**
  * React Hook for User Channel WebSocket
- * 
+ *
  * @example
  * ```tsx
  * const { status, connect, disconnect, ws } = useUserChannelWebSocket({
@@ -72,59 +72,72 @@ export function useUserChannelWebSocket(
 ): UseUserChannelWebSocketReturn {
 	const { autoConnect = false, ...callbacks } = options
 	const wsRef = useRef<UserChannelWebSocket | null>(null)
+	const callbacksRef = useRef(callbacks)
+	callbacksRef.current = callbacks
+
 	const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected')
 	const [error, setError] = useState<Error | null>(null)
 
-	// Initialize WebSocket
-	useEffect(() => {
-		const apiCredentials = getApiCredentials()
-		
-		if (!apiCredentials) {
-			const err = new Error('API credentials not found. Please connect to Polymarket first.')
-			setError(err)
-			callbacks.onError?.(err)
-			return
-		}
-
-		// Create WebSocket instance
-		wsRef.current = new UserChannelWebSocket(apiCredentials, {
-			...callbacks,
+	const createWebSocket = (apiCredentials: ApiCredentials) => {
+		return new UserChannelWebSocket(apiCredentials, {
+			onTradeUpdate: (trade) => callbacksRef.current.onTradeUpdate?.(trade),
+			onOrderUpdate: (order) => callbacksRef.current.onOrderUpdate?.(order),
 			onConnect: () => {
 				setStatus('connected')
 				setError(null)
-				callbacks.onConnect?.()
+				callbacksRef.current.onConnect?.()
 			},
 			onDisconnect: () => {
 				setStatus('disconnected')
-				callbacks.onDisconnect?.()
+				callbacksRef.current.onDisconnect?.()
 			},
 			onError: (err) => {
 				setError(err)
 				setStatus('disconnected')
-				callbacks.onError?.(err)
+				callbacksRef.current.onError?.(err)
 			}
 		})
+	}
 
-		// Auto-connect if enabled
+	const ensureWebSocket = (): UserChannelWebSocket | null => {
+		if (wsRef.current) return wsRef.current
+
+		const apiCredentials = getApiCredentials()
+		if (!apiCredentials) {
+			const err = new Error('API credentials not found. Please connect to Polymarket first.')
+			setError(err)
+			callbacksRef.current.onError?.(err)
+			return null
+		}
+
+		wsRef.current = createWebSocket(apiCredentials)
+		return wsRef.current
+	}
+
+	// Initialize WebSocket (and optionally connect)
+	useEffect(() => {
+		const ws = ensureWebSocket()
+		if (!ws) return
+
 		if (autoConnect) {
-			wsRef.current.connect()
+			ws.connect()
 			setStatus('connecting')
 		}
 
-		// Cleanup on unmount
 		return () => {
 			if (wsRef.current) {
 				wsRef.current.disconnect()
 				wsRef.current = null
 			}
 		}
-	}, [autoConnect]) // Only re-run if autoConnect changes
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- only recreate when autoConnect changes
+	}, [autoConnect])
 
 	const connect = () => {
-		if (wsRef.current) {
-			wsRef.current.connect()
-			setStatus('connecting')
-		}
+		const ws = ensureWebSocket()
+		if (!ws) return
+		ws.connect()
+		setStatus('connecting')
 	}
 
 	const disconnect = () => {

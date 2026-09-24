@@ -1,4 +1,4 @@
-import type { MarketData } from "@/lib/polymarket/types"
+import type { MarketData, PlaceOrderResponse } from "@/lib/polymarket/types"
 import type { Trade } from "./TradingBotItem"
 
 
@@ -62,6 +62,7 @@ export const createTrade = (market: MarketData, setup: any): Trade => {
 		isLive: setup.liveTrading,
 		isConnected: setup.isConnected,
 		logs: [],
+		orders: {},
 	}
 
 	if (trade.up.tokenId) setup.assets[trade.up.tokenId] = trade.up

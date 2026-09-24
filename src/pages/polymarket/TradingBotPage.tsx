@@ -30,6 +30,7 @@ export default function TradingBotPage() {
 	const { logView, addLog } = useLog()
 
 	const { view } = useUserChannel({
+		autoConnect: true,
 		onTradeUpdate: (trade: TradeMessage) => {
 			console.log('---Trade Update (UserChannel)', trade.type, trade.status, trade)
 			log('Trade Update (UserChannel)', {
@@ -43,7 +44,7 @@ export default function TradingBotPage() {
 				outcome: trade.outcome,
 				timestamp: trade.timestamp,
 			})
-			// setup.current._updateTrade?.('tradeUpdate', trade)
+			setup.current._updateTrade?.('tradeUpdate', trade)
 		},
 		onOrderUpdate: (order: OrderMessage) => {
 			console.log('---Order Update (UserChannel)', order.type, order)
@@ -59,17 +60,17 @@ export default function TradingBotPage() {
 				outcome: order.outcome,
 				timestamp: order.timestamp,
 			})
-			// setup.current._updateTrade?.('orderUpdate', order)
+			setup.current._updateTrade?.('orderUpdate', order)
 		},
 		onError: (error) => {
 			console.error('---Error (UserChannel)', error)
 			setup.current.isConnected = false
-			// setup.current._updateTrade?.('connected', false)
+			setup.current._updateTrade?.('connected', false)
 		},
 		onConnect: () => {
 			console.log('---Connect (UserChannel)')
 			setup.current.isConnected = true
-			// setup.current._updateTrade?.('connected', true)
+			setup.current._updateTrade?.('connected', true)
 			log('Connect (UserChannel)', 'connected')
 
 		},
@@ -81,11 +82,13 @@ export default function TradingBotPage() {
 		},
 	})
 
+
+	// ---------------------------------------------------------------------------- log
 	const log = (action: string, data: any) => {
 		if (data.asset_id && setup.current.assets[data.asset_id]) {
 			setup.current.assets[data.asset_id].eventLog.push({action: action, data: data, timestamp: Date.now()})
 		}
-		// setup.current._updateTrade?.('log', {action: action, data: data, timestamp: Date.now()})
+		setup.current._updateTrade?.('log', {action: action, data: data, timestamp: Date.now()})
 		addLog(action, data)
 	}
 
@@ -118,18 +121,27 @@ export default function TradingBotPage() {
 
 	// ---------------------------------------------------------------------------- setup
 	const setup = useRef({
-		symbol: 'btc',
+		symbol: 'xrp',
 		timeFrame: 5,
 		marketType: 'updown-5m',
-		openTimeLimit: 280,	//open limit time in seconds before market ended
+		// openTimeLimit: 240,	//open limit time in seconds before market ended
 		// endTimeLimit: 30,	//seconds
+
+		startTime: 320,		//20 sec before market start
+		endTime: 290,		//5 min before market end
+
 		up : {
 			enabled: true,
+			openPrice: 0.35,
+			closePrice: 0.75,
 		},
 		down : {
 			enabled: true,
+			openPrice: 0.35,
+			closePrice: 0.75,
 		},
 		orderSize: 10,
+
 		// sizeFactor: 5.0,		//size factor to multiply the trade size
 		liveTrading: false as boolean,
 		isConnected: false as boolean,

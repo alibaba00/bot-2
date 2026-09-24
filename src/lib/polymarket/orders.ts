@@ -192,10 +192,16 @@ export async function cancelOrder(orderId: string): Promise<any> {
 			console.warn(`Order not found in local DB, cancelling by id: ${orderId}`)
 		}
 
-		// Cancel using CLOB client
-		// Note: The actual implementation depends on how orders are stored
-		// For now, we'll use cancelOrder with order payload
-		const response = await client.cancelOrder(orderId)
+		// CLOB client expects OrderPayload: { orderID: string }
+		const response = await client.cancelOrder({ orderID: orderId })
+
+		if (response?.error || response?.status >= 400) {
+			const message =
+				response?.error ||
+				response?.data?.error ||
+				`Cancel rejected with status ${response?.status ?? 'unknown'}`
+			throw new Error(message)
+		}
 
 		// Update order status in database if it exists
 		if (orderRecord) {

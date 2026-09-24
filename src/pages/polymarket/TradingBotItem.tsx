@@ -68,6 +68,7 @@ export type Trade = {
 	isLive: boolean
 	isConnected: boolean
 	logs: any[]
+	orders: {}		//order lookup by orderId
 }
 
 
@@ -105,21 +106,6 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	}, [])
 
 
-	// ---------------------------------------------------------------------------- onUpdate
-	const onUpdate = (type: string, value?: any) => {
-		// console.log('---TradeItem onUpdate:', type, value)
-		if (type === 'expired'){		//market is expired
-			console.log('---TradeItem expired:', value)
-			setState('closed')
-			return
-
-		}else if (type === 'connected'){
-			trade.isConnected = value
-			render()
-		}
-	}
-
-
 	// ---------------------------------------------------------------------------- setMarketPrice
 	const setMarketPrice = (value: any) => {
 		// console.log('--- setMarketPrice:', value)
@@ -146,7 +132,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 				setup._updateTrade = onUpdate
 				break
 			case 'closed':		//market is closed from TradeList market update
-				// cancelOpenBuyOrders(setup, trade)
+				cancelOpenBuyOrders(trade)
 				delete setup._updateTrade
 				if (setup.trade === trade) setup.trade = null
 				closeTrade(trade)
@@ -169,21 +155,207 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 	}
 
 
-	// ---------------------------------------------------------------------------- onTime
+	// ---------------------------------------------------------------------------- onUpdate
+	const onUpdate = (type: string, value?: any) => {
+		console.log('---TradeItem onUpdate:', type, value)
+		if (type === 'expired'){		//market is expired
+			console.log('---TradeItem expired:', value)
+			setState('closed')
+			return
+
+		}else if (type === 'connected'){
+			trade.isConnected = value
+			render()
+			
+		}else if (type === 'orderUpdate'){
+			orderUpdate(value)
+
+		// }else if (type === 'tradeUpdate'){
+		// 	tradeUpdate(value)
+		}
+	}
+	
+
+	// ---------------------------------------------------------------------------- orderUpdate
+/* example order update:
+{
+    "id": "0xba3c15de8c86feea63e43485059cfe7537cd512d730c10bc4836743f1885b294",
+    "owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
+    "market": "0xf91cac18426735921d224fc08e41159ddeca076c9ff82ea3fbbb0e8a3e157037",
+    "asset_id": "80237582226519275624474863496229885237878232853867079564332905601361584833421",
+    "side": "BUY",
+    "order_owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
+    "original_size": "5",
+    "size_matched": "0",
+    "price": "0.35",
+    "associate_trades": [],
+    "outcome": "Down",
+    "type": "PLACEMENT",
+    "created_at": "1790159090",
+    "expiration": "0",
+    "order_type": "GTC",
+    "status": "LIVE",
+    "maker_address": "0xC41997C65144683AB62051EDd1f80B034756E588",
+    "timestamp": "1790159090215",
+    "event_type": "order"
+}
+{
+    "id": "0x33d93615805104801e0620ee5e833ffff223f5d0ce7934c144a6f9ba5996ae07",
+    "owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
+    "market": "0xf91cac18426735921d224fc08e41159ddeca076c9ff82ea3fbbb0e8a3e157037",
+    "asset_id": "38804663978458348916822540827139742232441664019828453815115111325876249578806",
+    "side": "BUY",
+    "order_owner": "5c377165-301f-d7cb-81b1-fb1f3baec608",
+    "original_size": "5",
+    "size_matched": "5",
+    "price": "0.35",
+    "associate_trades": [
+        "dd3eafc7-fbfd-4202-af2f-00aa72d040da"
+    ],
+    "outcome": "Up",
+    "type": "UPDATE",
+    "created_at": "1790159090",
+    "expiration": "0",
+    "order_type": "GTC",
+    "status": "MATCHED",
+    "maker_address": "0xC41997C65144683AB62051EDd1f80B034756E588",
+    "timestamp": "1790159119406",
+    "event_type": "order"
+}
+*/
+	const orderUpdate = async (value: any) => {
+		// console.log('!!!!! orderUpdate:', value)
+
+		if (value.type === 'CANCELLATION'){		//status: CANCELED
+			// if (side.state === 'active'){
+			// 	cancelTradeSide(side)
+			// 	saveTrade(trade, 4)
+			// 	render()
+			// }
+		}else if (value.type === 'PLACEMENT'){		//order placed
+			if (trade.up.tokenId === value.asset_id){		//upside order updated
+				// trade.up.state = 'buying'
+			}else if (trade.down.tokenId === value.asset_id){		//downside order updated
+				// trade.down.state = 'buying'
+			}
+
+		}else if (value.type === 'UPDATE' && value.status === 'MATCHED'){		//order updated
+			// Only place sell after a BUY fill. CLOB balance for outcome tokens
+			// can lag briefly behind the MATCHED event → retries in setOrder.
+			if (value.side !== 'BUY') return
+
+			if (trade.up.tokenId === value.asset_id){		//upside order updated
+				trade.up.positionSize = parseFloat(value.size_matched)
+				trade.up.state = 'positioned'
+				if (trade.down.state === 'active') await cancelOpenBuyOrder(trade.down)
+
+				await new Promise(resolve => setTimeout(resolve, 3000))
+				await setOrder(setup, trade, {
+					type		:'SELL',
+					outcome		:'up',
+					price		:setup.up.closePrice,
+					timestamp	:Date.now(),
+					size		:trade.up.positionSize,
+				}, 10, 2000)
+
+			}else if (trade.down.tokenId === value.asset_id){		//downside order updated
+				trade.down.positionSize = parseFloat(value.size_matched)
+				trade.down.state = 'positioned'
+				if (trade.up.state === 'active') await cancelOpenBuyOrder(trade.up)
+
+				await new Promise(resolve => setTimeout(resolve, 3000))
+				await setOrder(setup, trade, {
+					type		:'SELL',
+					outcome		:'down',
+					price		:setup.down.closePrice,
+					timestamp	:Date.now(),
+					size		:trade.down.positionSize,
+				}, 10, 2000)
+			}
+		}
+
+	}
+
+
+	// ---------------------------------------------------------------------------- tradeUpdate
+	const tradeUpdate = async (value: any) => {
+		console.log('!!!!! tradeUpdate:', value)
+		// if (value.type === 'UPDATE'){		//trade updated
+		// 	if (trade.up.tokenId === value.asset_id){		//upside trade updated
+		// 		// updatePrice(trade.up, value.price, value.ask, value.bid)
+		// 	}else if (trade.down.tokenId === value.asset_id){		//downside trade updated
+		// 		// updatePrice(trade.down, value.price, value.ask, value.bid)
+		// 	}
+		// }
+	}
+
+
+	// ---------------------------------------------------------------------------- onMarketTime
 	// 5m = 300s
 	const onMarketTime = (restSeconds: number) => {
+// console.log('--- onMarketTime:', trade.state, restSeconds, setup)
 		if (trade.state === 'open') {
 			if (setup.currentMarket?.endTimestamp && Date.now() + 60000 > setup.currentMarket.endTimestamp) {
 				setup._createMarket?.(70000)	//create next valid market from now + 70 seconds
 			}
-			if (restSeconds <= -10){
-				setState('closed')
-			}
-			if (restSeconds <= setup.openTimeLimit && trade.up.state === 'pending'){
+			if (restSeconds <= setup.startTime && trade.up.state === 'pending'){
 				openTradeOrders(setup, trade)
+			}
+			if (restSeconds <= setup.endTime && (trade.up.state === 'active' || trade.down.state === 'active')){
+				cancelOpenBuyOrders(trade)
+				// setState('closed')
 			}
 		}
 	}
+
+
+	// ---------------------------------------------------------------------------- cancelOpenBuyOrders
+	const cancelOpenBuyOrder = async (side: TradeSide) => {
+		console.log('--- cancelOpenBuyOrders:', side.state)
+
+		if (side.state !== 'active') return
+		const orderId = side.buyOrder?.orderId
+		if (!orderId) return
+		try {
+			setup._log('< cancel order:', orderId)
+			const result = await cancelOrder(orderId)
+			console.log('--- cancelOrder result:', result)
+			setup._log('< cancel order result:', result)
+		} catch (error) {
+			console.error('--- cancelOrder failed:', orderId, error)
+			setup._log('< cancel order failed:', error)
+		}
+		side.state = 'cancelled'
+		render()
+	}
+
+
+	// ---------------------------------------------------------------------------- cancelOpenBuyOrders
+	const cancelOpenBuyOrders = async (trade: Trade) => {
+		console.log('--- cancelOpenBuyOrders:', trade.up.state, trade.down.state)
+		const cancelSide = async (side: Trade['up']) => {
+			if (side.state !== 'active') return
+			const orderId = side.buyOrder?.orderId
+			if (orderId) {
+				try {
+					setup._log('< cancel order:', orderId)
+					const result = await cancelOrder(orderId)
+					console.log('--- cancelOrder result:', result)
+					setup._log('< cancel order result:', result)
+					side.state = 'cancelled'
+				} catch (error) {
+					console.error('--- cancelOrder failed:', orderId, error)
+					setup._log('< cancel order failed:', error)
+				}
+			} else {
+				side.state = 'cancelled'
+			}
+		}
+		await cancelSide(trade.up)
+		await cancelSide(trade.down)
+		render()
+	}
+
 
 	// ---------------------------------------------------------------------------- openTradeOrders
 	const openTradeOrders = async (setup: any, trade: Trade) => {
@@ -193,7 +365,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:'up',
-				price		:0.01,
+				price		:setup.up.openPrice,
 				timestamp	:Date.now(),
 				size		:setup.orderSize,
 			})		//-> active
@@ -203,7 +375,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 			setOrder(setup, trade, {
 				type		:'BUY',
 				outcome		:'down',
-				price		:0.01,
+				price		:setup.down.openPrice,
 				timestamp	:Date.now(),
 				size		:setup.orderSize,
 			})		//-> active
@@ -242,9 +414,7 @@ export default function TradingBotItem({trade, setup}: {trade: Trade, setup: any
 						: trade.up.state === 'completed' || trade.up.state === 'cancelled'
 							? '#3c3' // Tailwind green-400 hex
 							: '#999' // Tailwind gray-500 hex
-				}}
-				>
-				</div>
+				}}></div>
 				<TradeState trade={trade} side='up' />
 				<div>{trade.up.orderSize.toFixed(2) + ' | ' + trade.up.positionSize.toFixed(2)}</div>
 				{/* <div style={{
@@ -303,31 +473,6 @@ const saveTrade = async (trade: Trade, id: number = 1) => {
 }
 
 
-// ---------------------------------------------------------------------------- cancelOpenBuyOrders
-const cancelOpenBuyOrders = async (setup: any, trade: Trade) => {
-	if (trade.up.state === 'active' && trade.up.buyOrder?.orderId){
-		const side = trade.up
-		const orderId = side.buyOrder?.orderId
-		if (orderId){
-			setup._log('< cancel order:', orderId)
-			const result = await cancelOrder(orderId)
-			console.log('--- cancelOrder result:', result)
-			setup._log('< cancel order result:', result)
-		}
-	}
-	if (trade.down.state === 'active' && trade.down.buyOrder?.orderId){
-		const side = trade.down
-		const orderId = side.buyOrder?.orderId
-		if (orderId){
-			setup._log('< cancel order:', orderId)
-			const result = await cancelOrder(orderId)
-			console.log('--- cancelOrder result:', result)
-			setup._log('< cancel order result:', result)
-		}
-	}
-}
-
-
 // ---------------------------------------------------------------------------- openTrade
 // buy | sell
 const setOrder = async (setup: any, trade: Trade, action: TradeAction,
@@ -338,26 +483,10 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 	side.trades.push(action)
 	// side.state = action.type === 'BUY' ? 'active' : action.type === 'SELL' ? 'completed' : 'cancelled'
 
-	const effectivePrice =
-		action.price != null
-			? action.price
-			: action.type === 'BUY' ? 1 : 0
-
-	if (!action.size){
-		await setPositionSize(trade)	//make a final size update before placing order
-		if (!side.positionSize){
-			console.error('Error getting order size:', trade.conditionId)
-			return
-		}
-		action.size = side.positionSize
-	}else{
-		side.orderSize = action.size
-	}
-
 	const orderData: PlaceOrderParams = {
 		marketId: trade.conditionId,
-		price: effectivePrice,
-		quantity: action.size,
+		price: action.price || 0,
+		quantity: action.size || 0,
 		side: action.type,
 		outcome: action.outcome === 'up' ? 'Up' : 'Down',
 		outcomeId: action.outcome === 'up' ? trade.up.tokenId : trade.down.tokenId
@@ -407,6 +536,10 @@ const setOrder = async (setup: any, trade: Trade, action: TradeAction,
 
 			const orderData = await getOrder(order.orderId);
 			console.log('!!!!!!!!!!!!! orderData:', orderData)
+
+			// if (orderData?.id) {
+			// 	trade.orders[orderData.id] = orderData
+			// }
 		}
 	}
 }
